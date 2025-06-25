@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -59,7 +58,14 @@ export default function Students() {
     }
 
     if (editingStudent) {
-      LocalStorage.update(STORAGE_KEYS.STUDENTS, editingStudent.id, formData);
+      const updates: Partial<Student> = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        remaining_sessions: formData.remaining_sessions,
+        assigned_branch_id: formData.assigned_branch_id
+      };
+      LocalStorage.update(STORAGE_KEYS.STUDENTS, editingStudent.id, updates);
       toast({
         title: "Success",
         description: "Student updated successfully"
