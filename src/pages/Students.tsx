@@ -115,62 +115,72 @@ export default function Students() {
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Students</h1>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Students</h1>
+          <p className="text-gray-600">Manage your basketball players and their training sessions</p>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>Add Student</Button>
+            <Button onClick={resetForm} className="basketball-button">
+              Add Student
+            </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-xl font-bold text-gray-900">
                 {editingStudent ? 'Edit Student' : 'Add New Student'}
               </DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <Label htmlFor="name">Name *</Label>
+                <Label htmlFor="name" className="font-semibold text-gray-700">Name *</Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="basketball-input mt-1"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="email">Email *</Label>
+                <Label htmlFor="email" className="font-semibold text-gray-700">Email *</Label>
                 <Input
                   id="email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="basketball-input mt-1"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="phone">Phone</Label>
+                <Label htmlFor="phone" className="font-semibold text-gray-700">Phone</Label>
                 <Input
                   id="phone"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="basketball-input mt-1"
                 />
               </div>
               <div>
-                <Label htmlFor="remaining_sessions">Remaining Sessions</Label>
+                <Label htmlFor="remaining_sessions" className="font-semibold text-gray-700">Remaining Sessions</Label>
                 <Input
                   id="remaining_sessions"
                   type="number"
                   min="0"
                   value={formData.remaining_sessions}
                   onChange={(e) => setFormData({ ...formData, remaining_sessions: parseInt(e.target.value) || 0 })}
+                  className="basketball-input mt-1"
                 />
               </div>
               <div>
-                <Label htmlFor="branch">Branch *</Label>
+                <Label htmlFor="branch" className="font-semibold text-gray-700">Branch *</Label>
                 <select
                   id="branch"
-                  className="w-full p-2 border border-input rounded-md"
+                  className="w-full basketball-input mt-1"
                   value={formData.assigned_branch_id}
                   onChange={(e) => setFormData({ ...formData, assigned_branch_id: e.target.value })}
                   required
@@ -183,14 +193,15 @@ export default function Students() {
                   ))}
                 </select>
               </div>
-              <div className="flex gap-2">
-                <Button type="submit" className="flex-1">
+              <div className="flex gap-3 pt-4">
+                <Button type="submit" className="basketball-button flex-1">
                   {editingStudent ? 'Update' : 'Create'}
                 </Button>
                 <Button 
                   type="button" 
                   variant="outline" 
                   onClick={() => setIsDialogOpen(false)}
+                  className="flex-1 border-2 border-gray-300 hover:bg-gray-50"
                 >
                   Cancel
                 </Button>
@@ -200,34 +211,62 @@ export default function Students() {
         </Dialog>
       </div>
 
-      <div className="grid gap-4">
+      {/* Students Grid */}
+      <div className="grid gap-6">
         {students.length === 0 ? (
-          <Card className="p-8 text-center">
-            <p className="text-gray-500">No students found. Add your first student to get started.</p>
+          <Card className="basketball-card p-12 text-center">
+            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Users className="w-8 h-8 text-orange-500" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No students found</h3>
+            <p className="text-gray-600">Add your first student to get started with training management.</p>
           </Card>
         ) : (
           students.map((student) => (
-            <Card key={student.id} className="p-4">
+            <Card key={student.id} className="basketball-card p-6">
               <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{student.name}</h3>
-                  <p className="text-gray-600">{student.email}</p>
-                  <p className="text-gray-600">{student.phone}</p>
-                  <p className="text-sm text-gray-500 mt-2">
-                    Branch: {getBranchName(student.assigned_branch_id)}
-                  </p>
-                  <p className="text-sm font-medium mt-1">
-                    Remaining Sessions: 
-                    <span className={`ml-1 ${student.remaining_sessions <= 5 ? 'text-red-600' : 'text-green-600'}`}>
-                      {student.remaining_sessions}
-                    </span>
-                  </p>
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">{student.name}</h3>
+                      <p className="text-gray-600">{student.email}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm text-gray-500 font-medium">Phone</p>
+                      <p className="text-gray-900">{student.phone || 'Not provided'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm text-gray-500 font-medium">Branch</p>
+                      <p className="text-gray-900">{getBranchName(student.assigned_branch_id)}</p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm text-gray-500 font-medium">Sessions Left</p>
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-lg font-bold ${student.remaining_sessions <= 5 ? 'text-red-600' : 'text-green-600'}`}>
+                          {student.remaining_sessions}
+                        </span>
+                        {student.remaining_sessions <= 5 && (
+                          <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
+                            Low
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex gap-2">
+                
+                <div className="flex gap-2 ml-4">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleEdit(student)}
+                    className="border-orange-200 hover:bg-orange-50 hover:border-orange-300"
                   >
                     Edit
                   </Button>
