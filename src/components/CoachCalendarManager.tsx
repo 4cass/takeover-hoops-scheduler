@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { CalendarDays, Clock, MapPin, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { format, isSameDay, parseISO, startOfMonth, endOfMonth, addMonths, subMonths } from "date-fns";
+import { format, isSameDay, parseISO, startOfMonth, endOfMonth, addMonths, subMonths, isAfter, isBefore, startOfDay } from "date-fns";
 import { useNavigate } from "react-router-dom";
 
 interface TrainingSession {
@@ -43,6 +43,8 @@ export function CoachCalendarManager() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedSession, setSelectedSession] = useState<TrainingSession | null>(null);
   const [showSessionsModal, setShowSessionsModal] = useState(false);
+  const [showUpcomingModal, setShowUpcomingModal] = useState(false);
+  const [showPastModal, setShowPastModal] = useState(false);
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -93,6 +95,36 @@ export function CoachCalendarManager() {
     enabled: !!coachId,
   });
 
+  const { data: allSessions } = useQuery<TrainingSession[]>({
+    queryKey: ["coach-all-sessions", coachId],
+    queryFn: async () => {
+      if (!coachId) return [];
+      
+      const { data, error } = await supabase
+        .from("training_sessions")
+        .select("id, date, start_time, end_time, status, package_type, branches (name), coaches (name)")
+        .eq("coach_id", coachId)
+        .order("date", { ascending: true })
+        .order("start_time", { ascending: true });
+      
+      if (error) {
+        console.error("Error fetching all sessions:", error);
+        throw error;
+      }
+      
+      return data || [];
+    },
+    enabled: !!coachId,
+  });
+
+  const today = startOfDay(new Date());
+  const upcomingSessions = allSessions?.filter((session) => 
+    isAfter(parseISO(session.date), today) || isSameDay(parseISO(session.date), today)
+  ) || [];
+  const pastSessions = allSessions?.filter((session) => 
+    isBefore(parseISO(session.date), today)
+  ) || [];
+
   const sessionsOnSelectedDate = sessions?.filter((session) =>
     selectedDate && isSameDay(parseISO(session.date), selectedDate)
   ) || [];
@@ -141,6 +173,32 @@ export function CoachCalendarManager() {
           <p className="text-base sm:text-lg text-gray-700 font-medium">
             View and manage your training sessions
           </p>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
+          <Button
+            onClick={() => setShowUpcomingModal(true)}
+            variant="outline"
+            className="border-[#ff6b35] text-[#ff6b35] hover:bg-[#ff6b35] hover:text-white font-bold p-3 sm:p-4 h-auto"
+          >
+            <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+            <div className="text-left">
+              <div className="text-sm sm:text-base">Upcoming Sessions</div>
+              <div className="text-xs opacity-75">{upcomingSessions.length} sessions</div>
+            </div>
+          </Button>
+          <Button
+            onClick={() => setShowPastModal(true)}
+            variant="outline"
+            className="border-[#181A18] text-[#181A18] hover:bg-[#181A18] hover:text-white font-bold p-3 sm:p-4 h-auto"
+          >
+            <Clock className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+            <div className="text-left">
+              <div className="text-sm sm:text-base">Past Sessions</div>
+              <div className="text-xs opacity-75">{pastSessions.length} sessions</div>
+            </div>
+          </Button>
         </div>
 
         {/* Calendar Section */}
@@ -265,7 +323,7 @@ export function CoachCalendarManager() {
           </CardContent>
         </Card>
 
-        {/* Sessions Modal */}
+        {/* Sessions Modal for Selected Date */}
         <Dialog open={showSessionsModal} onOpenChange={setShowSessionsModal}>
           <DialogContent className="max-w-[95vw] sm:max-w-3xl border-2 border-[#181A18] bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -273,7 +331,7 @@ export function CoachCalendarManager() {
                 <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
                 Sessions for {selectedDate ? format(selectedDate, 'MMM dd, yyyy') : 'Selected Date'}
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-sm sm:text-base font-medium">
+              <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
                 {sessionsOnSelectedDate.length} session{sessionsOnSelectedDate.length === 1 ? '' : 's'} scheduled
               </DialogDescription>
             </DialogHeader>
@@ -324,6 +382,128 @@ export function CoachCalendarManager() {
           </DialogContent>
         </Dialog>
 
+        {/* Upcoming Sessions Modal */}
+        <Dialog open={showUpcomingModal} onOpenChange={setShowUpcomingModal}>
+          <DialogContent className="max-w-[95vw] sm:max-w-4xl border-2 border-[#181A18] bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-xl sm:text-2xl font-bold text-[#181A18] flex items-center">
+                <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
+                Upcoming Sessions
+              </DialogTitle>
+              <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
+                {upcomingSessions.length} upcoming session{upcomingSessions.length === 1 ? '' : 's'}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-3 sm:space-y-4">
+              {upcomingSessions.map((session) => (
+                <Card
+                  key={session.id}
+                  className="border-2 border-[#ff6b35]/20 bg-white hover:border-[#ff6b35]/50 transition-all duration-300 hover:shadow-md"
+                >
+                  <CardContent className="p-3 sm:p-4 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2">
+                        <CalendarDays className="w-4 h-4 text-[#ff6b35]" />
+                        <span className="font-bold text-[#181A18] text-sm sm:text-base">
+                          {format(parseISO(session.date), 'MMM dd, yyyy')}
+                        </span>
+                      </div>
+                      <Badge className={`${getStatusBadgeColor(session.status)} border text-xs px-2 py-1 w-fit`}>
+                        {session.status.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-4 h-4 text-[#ff6b35] flex-shrink-0" />
+                        <span className="text-gray-700 font-bold">
+                          {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4 text-[#ff6b35] flex-shrink-0" />
+                        <span className="text-gray-700 font-bold">{session.branches.name}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 sm:col-span-2">
+                        <Users className="w-4 h-4 text-[#ff6b35] flex-shrink-0" />
+                        <span className="text-gray-700 font-bold">{session.package_type || 'N/A'}</span>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => handleManageAttendance(session.id)}
+                      className="w-full bg-[#ff6b35] hover:bg-[#ff6b35]/90 text-white font-bold transition-all duration-300 text-sm"
+                      size="sm"
+                    >
+                      Manage Attendance
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Past Sessions Modal */}
+        <Dialog open={showPastModal} onOpenChange={setShowPastModal}>
+          <DialogContent className="max-w-[95vw] sm:max-w-4xl border-2 border-[#181A18] bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-xl sm:text-2xl font-bold text-[#181A18] flex items-center">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
+                Past Sessions
+              </DialogTitle>
+              <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
+                {pastSessions.length} past session{pastSessions.length === 1 ? '' : 's'}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-3 sm:space-y-4">
+              {pastSessions.map((session) => (
+                <Card
+                  key={session.id}
+                  className="border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 hover:shadow-md"
+                >
+                  <CardContent className="p-3 sm:p-4 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2">
+                        <CalendarDays className="w-4 h-4 text-gray-500" />
+                        <span className="font-bold text-[#181A18] text-sm sm:text-base">
+                          {format(parseISO(session.date), 'MMM dd, yyyy')}
+                        </span>
+                      </div>
+                      <Badge className={`${getStatusBadgeColor(session.status)} border text-xs px-2 py-1 w-fit`}>
+                        {session.status.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                        <span className="text-gray-700 font-bold">
+                          {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                        <span className="text-gray-700 font-bold">{session.branches.name}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 sm:col-span-2">
+                        <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                        <span className="text-gray-700 font-bold">{session.package_type || 'N/A'}</span>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => handleManageAttendance(session.id)}
+                      className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold transition-all duration-300 text-sm"
+                      size="sm"
+                    >
+                      View Attendance
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Session Details Modal */}
         <Dialog open={!!selectedSession} onOpenChange={() => setSelectedSession(null)}>
           <DialogContent className="max-w-[95vw] sm:max-w-2xl border-2 border-[#181A18] bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg">
@@ -332,7 +512,7 @@ export function CoachCalendarManager() {
                 <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
                 Session Details
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-sm sm:text-base font-medium">
+              <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
                 {selectedSession ? format(parseISO(selectedSession.date), 'EEEE, MMMM dd, yyyy') : ''}
               </DialogDescription>
             </DialogHeader>
