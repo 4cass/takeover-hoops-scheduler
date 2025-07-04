@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -72,77 +71,78 @@ export default function Login() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-gray-400">
+    <div className="relative min-h-screen flex items-center justify-center" style={{ backgroundColor: '#181a18' }}>
       {/* 🔹 Background Overlay */}
-      <div className="absolute inset-0 bg-gray-400 z-0" />
+      <div className="absolute inset-0" style={{ backgroundColor: '#181a18' }} />
 
       {/* 🔹 Login Card */}
-      <div className="relative z-10 w-full max-w-sm sm:max-w-md p-4">
-        <Card className="shadow-xl border-2 border-gray-600 bg-black/90 backdrop-blur-md">
+      <div className="relative z-10 w-full max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg p-2 sm:p-4 md:p-6">
+        <Card className="shadow-2xl border-2" style={{ borderColor: '#c2ab75', backgroundColor: '#181a18' }}>
           <CardHeader className="text-center">
-            {/* Logo - Made Much Bigger */}
-            <div className="flex justify-center mb-6">
+            {/* Logo - Responsive size */}
+            <div className="flex justify-center mb-1">
               <img
                 src="/lovable-uploads/599e456c-7d01-4d0c-a68c-b753300de7de.png"
                 alt="Coach Logo"
-                className="w-64 h-64 object-contain"
+                className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 lg:w-64 lg:h-64 object-contain"
               />
             </div>
-            <CardTitle className="text-white text-lg font-semibold">
+            <CardTitle className="text-2xl sm:text-3xl font-bold" style={{ color: 'white' }}>
               {isSignUp ? "Create Account" : "Welcome Back"}
             </CardTitle>
-            <p className="text-gray-300 mt-2 text-sm">
+            <p className="mt-1 text-sm sm:text-base" style={{ color: 'white' }}>
               {isSignUp ? "Join our coaching platform" : "Sign in to your account"}
             </p>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5 md:space-y-6">
               {isSignUp && (
                 <>
                   <div>
-                    <Label className="text-white">Name</Label>
+                    <Label className="font-medium" style={{ color: 'white' }}>Name</Label>
                     <Input
                       type="text"
                       value={name}
                       required
                       onChange={(e) => setName(e.target.value)}
-                      className="mt-1 bg-gray-800 border-gray-600 text-white placeholder:text-gray-400"
+                      className="mt-1 border w-full" style={{ backgroundColor: '#181a18', borderColor: '#c2ab75', color: 'white' }}
                     />
                   </div>
                   <div>
-                    <Label className="text-white">Phone</Label>
+                    <Label className="font-medium" style={{ color: 'white' }}>Phone</Label>
                     <Input
                       type="text"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className="mt-1 bg-gray-800 border-gray-600 text-white placeholder:text-gray-400"
+                      className="mt-1 border w-full" style={{ backgroundColor: '#181a18', borderColor: '#c2ab75', color: 'white' }}
                     />
                   </div>
                 </>
               )}
               <div>
-                <Label className="text-white">Email</Label>
+                <Label className="font-medium" style={{ color: 'white' }}>Email</Label>
                 <Input
                   type="email"
                   value={email}
                   required
                   onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1 bg-gray-800 border-gray-600 text-white placeholder:text-gray-400"
+                  className="mt-1 border w-full" style={{ backgroundColor: '#181a18', borderColor: '#c2ab75', color: 'white' }}
                 />
               </div>
               <div>
-                <Label className="text-white">Password</Label>
+                <Label className="font-medium" style={{ color: 'white' }}>Password</Label>
                 <Input
                   type="password"
                   value={password}
                   required
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 bg-gray-800 border-gray-600 text-white placeholder:text-gray-400"
+                  className="mt-1 border w-full" style={{ backgroundColor: '#181a18', borderColor: '#c2ab75', color: 'white' }}
                 />
               </div>
               <Button
                 type="submit"
-                className="w-full bg-white hover:bg-gray-100 text-black mt-6 font-semibold"
+                className="w-full mt-4 sm:mt-6 font-semibold py-2 sm:py-2.5 rounded-lg"
+                style={{ backgroundColor: '#c2ab75', color: '#181a18' }}
                 disabled={loading}
               >
                 {loading
@@ -155,10 +155,11 @@ export default function Login() {
               </Button>
 
               {!isSignUp && (
-                <div className="text-center text-sm mt-4">
+                <div className="text-center text-xs sm:text-sm mt-3 sm:mt-4">
                   <button
                     type="button"
-                    className="text-gray-300 hover:text-white hover:underline"
+                    className="hover:underline"
+                    style={{ color: 'white' }}
                     onClick={() => navigate("/forgot-password")}
                   >
                     Forgot your password?
@@ -166,10 +167,11 @@ export default function Login() {
                 </div>
               )}
 
-              <div className="text-center text-sm mt-4 pt-4 border-t border-gray-600">
+              <div className="text-center text-xs sm:text-sm mt-3 sm:mt-4 pt-3 sm:pt-4 border-t" style={{ borderColor: '#c2ab75' }}>
                 <button
                   type="button"
-                  className="text-gray-300 hover:text-white hover:underline"
+                  className="hover:underline"
+                  style={{ color: 'white' }}
                   onClick={() => setIsSignUp(!isSignUp)}
                 >
                   {isSignUp
