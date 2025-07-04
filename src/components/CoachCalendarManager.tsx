@@ -1,52 +1,50 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar } from "@/components/ui/calendar";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { CalendarDays, Clock, MapPin, Users, ChevronLeft, ChevronRight } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/context/AuthContext";
-import { format, isSameDay, parseISO, startOfMonth, endOfMonth, addMonths, subMonths, isAfter, isBefore, startOfDay } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Calendar as CalendarIcon, Users, Clock, MapPin, ChevronLeft, ChevronRight, Filter, Eye } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths, isAfter, parseISO } from "date-fns";
+import type { Database } from "@/integrations/supabase/types";
+import { useAuth } from "@/context/AuthContext";
 
-interface TrainingSession {
+type SessionStatus = Database['public']['Enums']['session_status'];
+
+type TrainingSession = {
   id: string;
   date: string;
   start_time: string;
   end_time: string;
-  status: string;
-  package_type: string;
+  branch_id: string;
+  coach_id: string;
+  status: SessionStatus;
+  package_type: "Camp Training" | "Personal Training" | null;
   branches: { name: string };
   coaches: { name: string };
-}
-
-const formatTime12Hour = (timeString: string) => {
-  const [hours, minutes] = timeString.split(":").map(Number);
-  const period = hours >= 12 ? "PM" : "AM";
-  const displayHours = hours % 12 || 12;
-  return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
+  session_participants: Array<{ students: { name: string } }>;
 };
 
-const getStatusBadgeColor = (status: string) => {
-  switch (status) {
-    case "scheduled": return "bg-blue-100 text-blue-800 border-blue-200 font-bold";
-    case "completed": return "bg-green-100 text-green-800 border-green-200 font-bold";
-    case "cancelled": return "bg-red-100 text-red-800 border-red-200 font-bold";
-    default: return "bg-gray-100 text-gray-800 border-gray-200 font-bold";
-  }
+const formatTime12Hour = (timeString: string) => {
+  const [hours, minutes] = timeString.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
 };
 
 export function CoachCalendarManager() {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [selectedSession, setSelectedSession] = useState<TrainingSession | null>(null);
-  const [showSessionsModal, setShowSessionsModal] = useState(false);
-  const [showUpcomingModal, setShowUpcomingModal] = useState(false);
-  const [showPastModal, setShowPastModal] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const { user } = useAuth();
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState<string>("all");
+  const [filterPackageType, setFilterPackageType] = useState<"All" | "Camp Training" | "Personal Training">("All");
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [showUpcomingSessions, setShowUpcomingSessions] = useState(false);
+  const [showPastSessions, setShowPastSessions] = useState(false);
   const navigate = useNavigate();
 
   const { data: coachId } = useQuery({
@@ -68,506 +66,499 @@ export function CoachCalendarManager() {
     enabled: !!user?.id,
   });
 
-  const { data: sessions } = useQuery<TrainingSession[]>({
-    queryKey: ["coach-sessions", coachId, currentMonth],
+  const { data: sessions, isLoading } = useQuery({
+    queryKey: ['coach-training-sessions', coachId, selectedBranch, filterPackageType, currentMonth],
     queryFn: async () => {
       if (!coachId) return [];
-      
-      const startDate = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
-      const endDate = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
-      
-      const { data, error } = await supabase
-        .from("training_sessions")
-        .select("id, date, start_time, end_time, status, package_type, branches (name), coaches (name)")
-        .eq("coach_id", coachId)
-        .gte("date", startDate)
-        .lte("date", endDate)
-        .order("date", { ascending: true })
-        .order("start_time", { ascending: true });
-      
-      if (error) {
-        console.error("Error fetching sessions:", error);
-        throw error;
+      let query = supabase
+        .from('training_sessions')
+        .select(`
+          id, date, start_time, end_time, branch_id, coach_id, status, package_type,
+          branches (name),
+          coaches (name),
+          session_participants (
+            students (name)
+          )
+        `)
+        .eq('coach_id', coachId)
+        .gte('date', format(startOfMonth(currentMonth), 'yyyy-MM-dd'))
+        .lte('date', format(endOfMonth(currentMonth), 'yyyy-MM-dd'));
+
+      if (selectedBranch !== "all") {
+        query = query.eq('branch_id', selectedBranch);
       }
-      
-      return data || [];
+
+      const { data, error } = await query.order('date', { ascending: true });
+      if (error) throw error;
+      return data as TrainingSession[];
     },
-    enabled: !!coachId,
+    enabled: !!coachId
   });
 
-  const { data: allSessions } = useQuery<TrainingSession[]>({
-    queryKey: ["coach-all-sessions", coachId],
+  const { data: branches } = useQuery({
+    queryKey: ['branches-select'],
     queryFn: async () => {
-      if (!coachId) return [];
-      
       const { data, error } = await supabase
-        .from("training_sessions")
-        .select("id, date, start_time, end_time, status, package_type, branches (name), coaches (name)")
-        .eq("coach_id", coachId)
-        .order("date", { ascending: true })
-        .order("start_time", { ascending: true });
-      
-      if (error) {
-        console.error("Error fetching all sessions:", error);
-        throw error;
-      }
-      
-      return data || [];
-    },
-    enabled: !!coachId,
+        .from('branches')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      return data;
+    }
   });
 
-  const today = startOfDay(new Date());
-  const upcomingSessions = allSessions?.filter((session) => 
-    isAfter(parseISO(session.date), today) || isSameDay(parseISO(session.date), today)
-  ) || [];
-  const pastSessions = allSessions?.filter((session) => 
-    isBefore(parseISO(session.date), today)
-  ) || [];
+  const filteredSessions = sessions
+    ?.filter((session) =>
+      filterPackageType === "All" || session.package_type === filterPackageType
+    ) || [];
 
-  const sessionsOnSelectedDate = sessions?.filter((session) =>
-    selectedDate && isSameDay(parseISO(session.date), selectedDate)
-  ) || [];
+  const daysInMonth = eachDayOfInterval({
+    start: startOfMonth(currentMonth),
+    end: endOfMonth(currentMonth),
+  });
 
-  const datesWithSessions = sessions?.map(session => parseISO(session.date)) || [];
-  
-  // Create a map of dates to session counts
-  const sessionCounts = sessions?.reduce((acc, session) => {
-    const dateKey = session.date;
-    acc[dateKey] = (acc[dateKey] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>) || {};
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'scheduled': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'completed': return 'bg-green-100 text-green-800 border-green-200';
+      case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
 
-  const handleManageAttendance = (sessionId: string) => {
+  const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
+  const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+
+  const selectedDateSessions = selectedDate
+    ? filteredSessions.filter(session => {
+        const sessionDate = parseISO(session.date);
+        return isSameDay(sessionDate, selectedDate);
+      }) || []
+    : [];
+
+  const today = new Date();
+  const todayDateOnly = new Date(format(today, "yyyy-MM-dd") + "T00:00:00");
+
+  const upcomingSessions = filteredSessions.filter(session => {
+    const sessionDate = parseISO(session.date);
+    return (isAfter(sessionDate, todayDateOnly) || isSameDay(sessionDate, todayDateOnly)) &&
+           session.status !== 'cancelled' && session.status !== 'completed';
+  }) || [];
+
+  const pastSessions = filteredSessions.filter(session => {
+    const sessionDate = parseISO(session.date);
+    return session.status === 'completed' || isBefore(sessionDate, todayDateOnly);
+  }) || [];
+
+  const handleAttendanceRedirect = (sessionId: string) => {
     navigate(`/dashboard/attendance/${sessionId}`);
   };
 
-  const handlePreviousMonth = () => {
-    setCurrentMonth(prev => subMonths(prev, 1));
-  };
-
-  const handleNextMonth = () => {
-    setCurrentMonth(prev => addMonths(prev, 1));
-  };
-
-  const handleDateSelect = (date: Date | undefined) => {
-    setSelectedDate(date);
-    if (date) {
-      const sessionsForDate = sessions?.filter(session => 
-        isSameDay(parseISO(session.date), date)
-      ) || [];
-      if (sessionsForDate.length > 0) {
-        setShowSessionsModal(true);
-      }
+  const handleDateClick = (day: Date) => {
+    const daySessions = filteredSessions.filter(session => isSameDay(parseISO(session.date), day));
+    if (daySessions.length > 0) {
+      setSelectedDate(day);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-6">
-      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-8">
+    <div className="min-h-screen bg-background pt-4 p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        
         {/* Header */}
-        <div className="mb-4 sm:mb-8">
-          <h1 className="text-2xl sm:text-4xl font-bold text-[#181A18] mb-2 tracking-tight">
-            Training Calendar
+        <div className="mb-6">
+          <h1 className="text-3xl sm:text-4xl font-bold text-[#181A18] mb-2 tracking-tight">
+            My Calendar
           </h1>
-          <p className="text-base sm:text-lg text-gray-700 font-medium">
-            View and manage your training sessions
+          <p className="text-base sm:text-lg text-gray-700 font-semibold">
+            View and manage your basketball training sessions
           </p>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
-          <Button
-            onClick={() => setShowUpcomingModal(true)}
-            variant="outline"
-            className="border-[#ff6b35] text-[#ff6b35] hover:bg-[#ff6b35] hover:text-white font-bold p-3 sm:p-4 h-auto"
-          >
-            <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-            <div className="text-left">
-              <div className="text-sm sm:text-base">Upcoming Sessions</div>
-              <div className="text-xs opacity-75">{upcomingSessions.length} sessions</div>
+        {/* Main Calendar Card */}
+        <Card className="border-2 border-[#181A18] bg-white shadow-xl">
+          <CardHeader className="border-b border-[#181A18] bg-[#181A18]">
+            <CardTitle className="text-xl sm:text-2xl font-bold text-[#efeff1] flex items-center">
+              <CalendarIcon className="h-5 sm:h-6 w-5 sm:w-6 mr-3 text-[#8e7a3f]" />
+              Monthly Overview
+            </CardTitle>
+            <CardDescription className="text-gray-400 text-sm sm:text-base font-semibold">
+              View your training sessions for {format(currentMonth, 'MMMM yyyy')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6">
+            
+            {/* Filters */}
+            <div className="mb-6">
+              <div className="flex items-center mb-4">
+                <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-[#8e7a3f] mr-2" />
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">Filter Sessions</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-2">
+                  <label className="text-sm font-bold text-gray-700">Branch</label>
+                  <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                    <SelectTrigger className="border-2 border-[#8e7a3f] focus:border-[#8e7a3f] focus:ring-[#8e7a3f]/20 rounded-lg text-sm py-2 w-full">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Branches</SelectItem>
+                      {branches?.map(branch => (
+                        <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col space-y-2">
+                  <label className="text-sm font-bold text-gray-700">Package Type</label>
+                  <Select
+                    value={filterPackageType}
+                    onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setFilterPackageType(value)}
+                  >
+                    <SelectTrigger className="border-2 border-[#8e7a3f] focus:border-[#8e7a3f] focus:ring-[#8e7a3f]/20 rounded-lg text-sm py-2 w-full">
+                      <SelectValue placeholder="Select package type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Sessions</SelectItem>
+                      <SelectItem value="Camp Training">Camp Training</SelectItem>
+                      <SelectItem value="Personal Training">Personal Training</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-4 gap-4">
+                <p className="text-sm text-gray-600 font-semibold">
+                  Showing {filteredSessions.length} session{filteredSessions.length === 1 ? '' : 'es'}
+                </p>
+                {/* Quick Access Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => setShowUpcomingSessions(true)}
+                    variant="outline"
+                    size="sm"
+                    className="border-green-500/30 text-green-600 hover:bg-green-500 hover:text-white transition-all duration-300 w-full sm:w-auto min-w-fit font-bold"
+                  >
+                    <Clock className="h-4 w-4 mr-2" />
+                    Upcoming ({upcomingSessions.length})
+                  </Button>
+                  <Button
+                    onClick={() => setShowPastSessions(true)}
+                    variant="outline"
+                    size="sm"
+                    className="border-gray-500/30 text-gray-600 hover:bg-gray-500 hover:text-white transition-all duration-300 w-full sm:w-auto min-w-fit font-bold"
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    Past ({pastSessions.length})
+                  </Button>
+                </div>
+              </div>
             </div>
-          </Button>
-          <Button
-            onClick={() => setShowPastModal(true)}
-            variant="outline"
-            className="border-[#181A18] text-[#181A18] hover:bg-[#181A18] hover:text-white font-bold p-3 sm:p-4 h-auto"
-          >
-            <Clock className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-            <div className="text-left">
-              <div className="text-sm sm:text-base">Past Sessions</div>
-              <div className="text-xs opacity-75">{pastSessions.length} sessions</div>
-            </div>
-          </Button>
-        </div>
 
-        {/* Calendar Section */}
-        <Card className="border-2 border-[#181A18] bg-white/90 backdrop-blur-sm shadow-xl">
-          <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg sm:text-2xl font-bold text-[#efeff1] flex items-center">
-                <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
-                {format(currentMonth, 'MMMM yyyy')}
-              </CardTitle>
-              <div className="flex items-center space-x-2">
+            {/* Calendar Grid */}
+            <div className="border-2 border-[#181A18] rounded-xl p-4 sm:p-6 bg-white shadow-lg">
+              
+              {/* Calendar Navigation */}
+              <div className="flex justify-between items-center mb-4 sm:mb-6">
                 <Button
-                  onClick={handlePreviousMonth}
+                  onClick={handlePrevMonth}
                   variant="outline"
                   size="sm"
-                  className="border-[#ff6b35] text-[#ff6b35] hover:bg-[#ff6b35] hover:text-white h-8 w-8 p-0"
+                  className="border-[#8e7a3f] text-[#8e7a3f] hover:bg-[#8e7a3f] hover:text-white transition-all duration-300"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
+                <h3 className="text-lg sm:text-2xl font-bold text-black">
+                  {format(currentMonth, 'MMMM yyyy')}
+                </h3>
                 <Button
                   onClick={handleNextMonth}
                   variant="outline"
                   size="sm"
-                  className="border-[#ff6b35] text-[#ff6b35] hover:bg-[#ff6b35] hover:text-white h-8 w-8 p-0"
+                  className="border-[#8e7a3f] text-[#8e7a3f] hover:bg-[#8e7a3f] hover:text-white transition-all duration-300"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-            </div>
-            <CardDescription className="text-gray-400 text-sm sm:text-base font-medium">
-              Click on a date with sessions to view details
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6">
-            <div className="w-full">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={handleDateSelect}
-                month={currentMonth}
-                onMonthChange={setCurrentMonth}
-                className="w-full"
-                classNames={{
-                  months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 w-full",
-                  month: "space-y-4 w-full",
-                  caption: "flex justify-center pt-1 relative items-center",
-                  caption_label: "text-sm font-bold",
-                  nav: "space-x-1 flex items-center",
-                  nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 border border-[#ff6b35] text-[#ff6b35] hover:bg-[#ff6b35] hover:text-white",
-                  nav_button_previous: "absolute left-1",
-                  nav_button_next: "absolute right-1",
-                  table: "w-full border-collapse space-y-1",
-                  head_row: "flex w-full",
-                  head_cell: "text-muted-foreground rounded-md w-full font-bold text-[0.8rem] flex-1 text-center",
-                  row: "flex w-full mt-2",
-                  cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 flex-1 h-12 sm:h-14",
-                  day: "h-full w-full p-1 font-bold aria-selected:opacity-100 hover:bg-[#ff6b35] hover:text-white rounded-md transition-colors relative flex items-center justify-center",
-                  day_range_end: "day-range-end",
-                  day_selected: "bg-[#ff6b35] text-white hover:bg-[#ff6b35] hover:text-white focus:bg-[#ff6b35] focus:text-white",
-                  day_today: "bg-gray-100 text-gray-900 font-bold border-2 border-[#ff6b35]",
-                  day_outside: "text-muted-foreground opacity-50 aria-selected:bg-[#ff6b35]/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
-                  day_disabled: "text-muted-foreground opacity-50",
-                  day_range_middle: "aria-selected:bg-[#ff6b35] aria-selected:text-white",
-                  day_hidden: "invisible",
-                }}
-                components={{
-                  Day: ({ date, ...props }) => {
-                    const dateKey = format(date, 'yyyy-MM-dd');
-                    const sessionCount = sessionCounts[dateKey] || 0;
-                    const hasSession = sessionCount > 0;
-                    
-                    return (
-                      <div className="relative w-full h-full">
-                        <button
-                          {...props}
-                          className={`h-full w-full p-1 font-bold rounded-md transition-colors relative flex flex-col items-center justify-center ${
-                            hasSession 
-                              ? 'bg-green-100 border-2 border-green-500 hover:bg-green-200' 
-                              : 'hover:bg-[#ff6b35] hover:text-white'
-                          } ${
-                            selectedDate && isSameDay(date, selectedDate)
-                              ? 'bg-[#ff6b35] text-white'
-                              : hasSession
-                              ? 'text-green-800'
-                              : 'text-gray-900'
-                          }`}
-                        >
-                          <span className="text-xs sm:text-sm">{format(date, 'd')}</span>
-                          {hasSession && (
-                            <div className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs font-bold">
-                              {sessionCount}
-                            </div>
-                          )}
-                        </button>
+              
+              {/* Days of Week Header */}
+              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-4">
+                {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
+                  <div key={day} className="text-center py-2 sm:py-3 bg-[#181A18] text-white font-bold rounded-lg text-xs sm:text-sm">
+                    {day.slice(0, 3)}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Calendar Days */}
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                {daysInMonth.map(day => {
+                  const daySessions = filteredSessions.filter(session => isSameDay(parseISO(session.date), day)) || [];
+                  const isToday = isSameDay(day, new Date());
+                  const hasSessions = daySessions.length > 0;
+                  
+                  return (
+                    <button
+                      key={day.toString()}
+                      onClick={() => handleDateClick(day)}
+                      className={`
+                        relative p-2 sm:p-3 h-16 sm:h-20 rounded-lg text-left transition-all duration-300 hover:scale-105 hover:shadow-lg
+                        overflow-hidden min-w-0 cursor-pointer
+                        ${isToday 
+                          ? 'bg-[#8e7a3f] border-2 border-[#8e7a3f] text-white'
+                          : hasSessions
+                            ? 'bg-green-100 border-2 border-green-500 text-black hover:border-green-600'
+                            : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }
+                      `}
+                    >
+                      <div className="font-bold text-sm sm:text-lg mb-1">
+                        {format(day, 'd')}
                       </div>
-                    );
-                  }
-                }}
-                modifiers={{
-                  hasSession: datesWithSessions,
-                }}
-              />
-            </div>
-            
-            {/* Legend */}
-            <div className="mt-4 flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-[#ff6b35] rounded"></div>
-                <span className="text-gray-700 font-bold">Selected</span>
+                      {hasSessions && (
+                        <div className="space-y-1">
+                          <div className="text-xs font-bold opacity-90 truncate">
+                            {daySessions.length} session{daySessions.length !== 1 ? 's' : ''}
+                          </div>
+                          <div className="w-3 h-3 bg-green-500 rounded-full absolute top-1 right-1"></div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-green-100 border-2 border-green-500 rounded relative">
-                  <div className="absolute -top-1 -right-1 bg-green-500 rounded-full h-3 w-3"></div>
+              
+              {/* Legend */}
+              <div className="mt-4 sm:mt-6 flex flex-wrap gap-3 sm:gap-4 justify-center text-xs sm:text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <span className="text-gray-600 font-semibold">Has Sessions</span>
                 </div>
-                <span className="text-gray-700 font-bold">Has Sessions</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-gray-100 border-2 border-[#ff6b35] rounded"></div>
-                <span className="text-gray-700 font-bold">Today</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-[#8e7a3f] rounded-full"></div>
+                  <span className="text-gray-600 font-semibold">Today</span>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Sessions Modal for Selected Date */}
-        <Dialog open={showSessionsModal} onOpenChange={setShowSessionsModal}>
-          <DialogContent className="max-w-[95vw] sm:max-w-3xl border-2 border-[#181A18] bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg max-h-[80vh] overflow-y-auto">
+        {/* Date Sessions Modal */}
+        <Dialog open={!!selectedDate} onOpenChange={() => setSelectedDate(null)}>
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl border-2 border-[#181A18] bg-white shadow-lg overflow-x-hidden">
             <DialogHeader>
-              <DialogTitle className="text-xl sm:text-2xl font-bold text-[#181A18] flex items-center">
-                <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
-                Sessions for {selectedDate ? format(selectedDate, 'MMM dd, yyyy') : 'Selected Date'}
+              <DialogTitle className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
+                <Eye className="h-4 sm:h-5 w-4 sm:w-5 mr-3 text-[#8e7a3f]" />
+                Sessions on {selectedDate ? format(selectedDate, 'EEEE, MMMM dd, yyyy') : ''}
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
-                {sessionsOnSelectedDate.length} session{sessionsOnSelectedDate.length === 1 ? '' : 's'} scheduled
+              <DialogDescription className="text-gray-600 text-sm sm:text-base font-semibold">
+                View and manage your sessions for the selected date
               </DialogDescription>
             </DialogHeader>
-            
-            <div className="space-y-3 sm:space-y-4">
-              {sessionsOnSelectedDate.map((session) => (
-                <Card
-                  key={session.id}
-                  className="border-2 border-[#ff6b35]/20 bg-white hover:border-[#ff6b35]/50 transition-all duration-300 hover:shadow-md cursor-pointer"
-                  onClick={() => setSelectedSession(session)}
-                >
-                  <CardContent className="p-3 sm:p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4 text-[#ff6b35]" />
-                        <span className="font-bold text-[#181A18] text-sm sm:text-base">
-                          {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
-                        </span>
-                      </div>
-                      <Badge className={`${getStatusBadgeColor(session.status)} border text-xs px-2 py-1 w-fit`}>
-                        {session.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="space-y-2 text-xs sm:text-sm">
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4 text-[#ff6b35] flex-shrink-0" />
-                        <span className="text-gray-700 font-bold">{session.branches.name}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Users className="w-4 h-4 text-[#ff6b35] flex-shrink-0" />
-                        <span className="text-gray-700 font-bold">{session.package_type || 'N/A'}</span>
-                      </div>
-                    </div>
-                    <Button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleManageAttendance(session.id);
-                      }}
-                      className="w-full bg-[#ff6b35] hover:bg-[#ff6b35]/90 text-white font-bold transition-all duration-300 text-sm"
-                      size="sm"
-                    >
-                      Manage Attendance
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="space-y-4">
+              {selectedDateSessions.length > 0 ? (
+                <div className="space-y-4">
+                  {selectedDateSessions.map(session => (
+                    <Card key={session.id} className="border border-[#181A18] bg-white hover:shadow-lg transition-all duration-300">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 items-center">
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Clock className="h-4 w-4 text-[#8e7a3f] flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm font-bold text-gray-600">Time</p>
+                              <p className="font-bold text-black text-sm truncate">
+                                {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <MapPin className="h-4 w-4 text-[#8e7a3f] flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm font-bold text-gray-600">Branch</p>
+                              <p className="font-bold text-black text-sm truncate">{session.branches.name}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Users className="h-4 w-4 text-[#8e7a3f] flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm font-bold text-gray-600">Players</p>
+                              <p className="font-bold text-black text-sm">{session.session_participants?.length || 0}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Users className="h-4 w-4 text-[#8e7a3f] flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm font-bold text-gray-600">Package</p>
+                              <p className="font-bold text-black text-sm truncate">{session.package_type || 'N/A'}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Badge className={`${getStatusBadgeColor(session.status)} font-bold px-2 sm:px-3 py-1 text-xs sm:text-sm truncate border`}>
+                              {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+                            </Badge>
+                          </div>
+                          <div className="flex justify-end">
+                            <Button
+                              onClick={() => handleAttendanceRedirect(session.id)}
+                              className="bg-[#8e7a3f] hover:bg-[#8e7a3f]/90 text-white font-bold transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                            >
+                              Manage Attendance
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 sm:py-12">
+                  <CalendarIcon className="h-12 sm:h-16 w-12 sm:w-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-lg sm:text-xl text-gray-500 mb-2 font-bold">
+                    No sessions on this day
+                  </p>
+                  <p className="text-gray-400 text-sm sm:text-base font-semibold">
+                    No sessions scheduled for this date.
+                  </p>
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>
 
         {/* Upcoming Sessions Modal */}
-        <Dialog open={showUpcomingModal} onOpenChange={setShowUpcomingModal}>
-          <DialogContent className="max-w-[95vw] sm:max-w-4xl border-2 border-[#181A18] bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg max-h-[80vh] overflow-y-auto">
+        <Dialog open={showUpcomingSessions} onOpenChange={setShowUpcomingSessions}>
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-6xl max-h-[80vh] border-2 border-green-200 bg-white shadow-lg overflow-x-hidden">
             <DialogHeader>
-              <DialogTitle className="text-xl sm:text-2xl font-bold text-[#181A18] flex items-center">
-                <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
-                Upcoming Sessions
+              <DialogTitle className="text-xl sm:text-2xl font-bold text-green-800 flex items-center">
+                <Clock className="h-5 sm:h-6 w-5 sm:w-6 mr-3 text-green-600" />
+                Upcoming Sessions ({upcomingSessions.length})
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
-                {upcomingSessions.length} upcoming session{upcomingSessions.length === 1 ? '' : 's'}
+              <DialogDescription className="text-green-600 text-sm sm:text-base font-bold">
+                All scheduled sessions for today and future dates
               </DialogDescription>
             </DialogHeader>
-            
-            <div className="space-y-3 sm:space-y-4">
-              {upcomingSessions.map((session) => (
-                <Card
-                  key={session.id}
-                  className="border-2 border-[#ff6b35]/20 bg-white hover:border-[#ff6b35]/50 transition-all duration-300 hover:shadow-md"
-                >
-                  <CardContent className="p-3 sm:p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center space-x-2">
-                        <CalendarDays className="w-4 h-4 text-[#ff6b35]" />
-                        <span className="font-bold text-[#181A18] text-sm sm:text-base">
-                          {format(parseISO(session.date), 'MMM dd, yyyy')}
-                        </span>
-                      </div>
-                      <Badge className={`${getStatusBadgeColor(session.status)} border text-xs px-2 py-1 w-fit`}>
-                        {session.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4 text-[#ff6b35] flex-shrink-0" />
-                        <span className="text-gray-700 font-bold">
-                          {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4 text-[#ff6b35] flex-shrink-0" />
-                        <span className="text-gray-700 font-bold">{session.branches.name}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 sm:col-span-2">
-                        <Users className="w-4 h-4 text-[#ff6b35] flex-shrink-0" />
-                        <span className="text-gray-700 font-bold">{session.package_type || 'N/A'}</span>
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => handleManageAttendance(session.id)}
-                      className="w-full bg-[#ff6b35] hover:bg-[#ff6b35]/90 text-white font-bold transition-all duration-300 text-sm"
-                      size="sm"
-                    >
-                      Manage Attendance
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <ScrollArea className="max-h-[60vh] pr-4">
+              {upcomingSessions.length > 0 ? (
+                <div className="space-y-4">
+                  {upcomingSessions.map((session) => (
+                    <Card key={session.id} className="border border-green-200 bg-white hover:shadow-md transition-all duration-200">
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 items-center">
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-green-600">Date</p>
+                            <p className="font-bold text-black text-sm truncate">{format(parseISO(session.date), 'MMM dd, yyyy')}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-green-600">Time</p>
+                            <p className="font-bold text-black text-sm truncate">
+                              {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                            </p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-green-600">Branch</p>
+                            <p className="font-bold text-black text-sm truncate">{session.branches.name}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-green-600">Package</p>
+                            <p className="font-bold text-black text-sm truncate">{session.package_type || 'N/A'}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-green-600">Players</p>
+                            <p className="font-bold text-black text-sm">{session.session_participants?.length || 0}</p>
+                          </div>
+                          <div className="flex justify-end">
+                            <Button
+                              onClick={() => {
+                                setShowUpcomingSessions(false);
+                                handleAttendanceRedirect(session.id);
+                              }}
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm font-bold"
+                            >
+                              Manage Attendance
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 sm:py-12">
+                  <Clock className="h-12 sm:h-16 w-12 sm:w-16 text-green-300 mx-auto mb-4" />
+                  <p className="text-lg sm:text-xl text-green-600 mb-2 font-bold">No upcoming sessions</p>
+                  <p className="text-green-500 text-sm sm:text-base font-semibold">Schedule new training sessions to get started.</p>
+                </div>
+              )}
+            </ScrollArea>
           </DialogContent>
         </Dialog>
 
         {/* Past Sessions Modal */}
-        <Dialog open={showPastModal} onOpenChange={setShowPastModal}>
-          <DialogContent className="max-w-[95vw] sm:max-w-4xl border-2 border-[#181A18] bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg max-h-[80vh] overflow-y-auto">
+        <Dialog open={showPastSessions} onOpenChange={setShowPastSessions}>
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-6xl max-h-[80vh] border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden">
             <DialogHeader>
-              <DialogTitle className="text-xl sm:text-2xl font-bold text-[#181A18] flex items-center">
-                <Clock className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
-                Past Sessions
+              <DialogTitle className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center">
+                <CalendarIcon className="h-5 sm:h-6 w-5 sm:w-6 mr-3 text-gray-600" />
+                Past Sessions ({pastSessions.length})
               </DialogTitle>
               <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
-                {pastSessions.length} past session{pastSessions.length === 1 ? '' : 's'}
+                All completed sessions and sessions before today
               </DialogDescription>
             </DialogHeader>
-            
-            <div className="space-y-3 sm:space-y-4">
-              {pastSessions.map((session) => (
-                <Card
-                  key={session.id}
-                  className="border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 hover:shadow-md"
-                >
-                  <CardContent className="p-3 sm:p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center space-x-2">
-                        <CalendarDays className="w-4 h-4 text-gray-500" />
-                        <span className="font-bold text-[#181A18] text-sm sm:text-base">
-                          {format(parseISO(session.date), 'MMM dd, yyyy')}
-                        </span>
-                      </div>
-                      <Badge className={`${getStatusBadgeColor(session.status)} border text-xs px-2 py-1 w-fit`}>
-                        {session.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-gray-700 font-bold">
-                          {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-gray-700 font-bold">{session.branches.name}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 sm:col-span-2">
-                        <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-gray-700 font-bold">{session.package_type || 'N/A'}</span>
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => handleManageAttendance(session.id)}
-                      className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold transition-all duration-300 text-sm"
-                      size="sm"
-                    >
-                      View Attendance
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Session Details Modal */}
-        <Dialog open={!!selectedSession} onOpenChange={() => setSelectedSession(null)}>
-          <DialogContent className="max-w-[95vw] sm:max-w-2xl border-2 border-[#181A18] bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg">
-            <DialogHeader>
-              <DialogTitle className="text-xl sm:text-2xl font-bold text-[#181A18] flex items-center">
-                <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-[#ff6b35]" />
-                Session Details
-              </DialogTitle>
-              <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
-                {selectedSession ? format(parseISO(selectedSession.date), 'EEEE, MMMM dd, yyyy') : ''}
-              </DialogDescription>
-            </DialogHeader>
-            {selectedSession && (
-              <div className="space-y-4 sm:space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div className="flex items-center space-x-3">
-                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-[#ff6b35] flex-shrink-0" />
-                    <div>
-                      <p className="text-xs sm:text-sm font-bold text-gray-600">Time</p>
-                      <p className="font-bold text-[#181A18] text-sm sm:text-base">
-                        {formatTime12Hour(selectedSession.start_time)} - {formatTime12Hour(selectedSession.end_time)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-[#ff6b35] flex-shrink-0" />
-                    <div>
-                      <p className="text-xs sm:text-sm font-bold text-gray-600">Branch</p>
-                      <p className="font-bold text-[#181A18] text-sm sm:text-base">{selectedSession.branches.name}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-[#ff6b35] flex-shrink-0" />
-                    <div>
-                      <p className="text-xs sm:text-sm font-bold text-gray-600">Package Type</p>
-                      <p className="font-bold text-[#181A18] text-sm sm:text-base">{selectedSession.package_type || 'N/A'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <Badge className={`${getStatusBadgeColor(selectedSession.status)} border font-bold px-2 sm:px-3 py-1 text-xs sm:text-sm w-fit`}>
-                      {selectedSession.status.charAt(0).toUpperCase() + selectedSession.status.slice(1)}
-                    </Badge>
-                  </div>
+            <ScrollArea className="max-h-[60vh] pr-4">
+              {pastSessions.length > 0 ? (
+                <div className="space-y-4">
+                  {pastSessions.map((session) => (
+                    <Card key={session.id} className="border border-gray-200 bg-white hover:shadow-md transition-all duration-200">
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 items-center">
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-gray-600">Date</p>
+                            <p className="font-bold text-black text-sm truncate">{format(parseISO(session.date), 'MMM dd, yyyy')}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-gray-600">Time</p>
+                            <p className="font-bold text-black text-sm truncate">
+                              {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                            </p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-gray-600">Branch</p>
+                            <p className="font-bold text-black text-sm truncate">{session.branches.name}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-gray-600">Package</p>
+                            <p className="font-bold text-black text-sm truncate">{session.package_type || 'N/A'}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-sm font-bold text-gray-600">Players</p>
+                            <p className="font-bold text-black text-sm">{session.session_participants?.length || 0}</p>
+                          </div>
+                          <div className="flex justify-end">
+                            <Button
+                              onClick={() => {
+                                setShowPastSessions(false);
+                                handleAttendanceRedirect(session.id);
+                              }}
+                              size="sm"
+                              className="bg-gray-600 hover:bg-gray-700 text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm font-bold"
+                            >
+                              View Details
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => setSelectedSession(null)}
-                    className="order-2 sm:order-1 font-bold"
-                  >
-                    Close
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      handleManageAttendance(selectedSession.id);
-                      setSelectedSession(null);
-                    }}
-                    className="bg-[#ff6b35] hover:bg-[#ff6b35]/90 text-white font-bold transition-all duration-300 hover:scale-105 hover:shadow-lg order-1 sm:order-2"
-                  >
-                    Manage Attendance
-                  </Button>
+              ) : (
+                <div className="text-center py-8 sm:py-12">
+                  <CalendarIcon className="h-12 sm:h-16 w-12 sm:w-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-lg sm:text-xl text-gray-500 mb-2 font-bold">No past sessions</p>
+                  <p className="text-gray-400 text-sm sm:text-base font-semibold">Completed sessions will appear here.</p>
                 </div>
-              </div>
-            )}
+              )}
+            </ScrollArea>
           </DialogContent>
         </Dialog>
       </div>
