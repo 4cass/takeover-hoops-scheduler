@@ -3,87 +3,99 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Basketball-themed design system with black, white, orange colors */
+/* Definition of the design system with your custom colors */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
+    /* Background: #EFEFF1 converted to HSL */
+    --background: 240 6% 94%;
+    /* Primary: #3A3A3C converted to HSL */
+    --foreground: 240 2% 23%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
+    /* Card backgrounds using slightly lighter version of background */
+    --card: 240 8% 96%;
+    --card-foreground: 240 2% 23%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
+    --popover: 240 8% 96%;
+    --popover-foreground: 240 2% 23%;
 
-    --primary: 24 100% 50%; /* Basketball orange */
-    --primary-foreground: 0 0% 100%;
+    /* Primary: #3A3A3C */
+    --primary: 240 2% 23%;
+    --primary-foreground: 240 6% 94%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 9%;
+    /* Secondary: #8E7A3F */
+    --secondary: 42 39% 40%;
+    --secondary-foreground: 240 6% 94%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    /* Muted variations */
+    --muted: 240 4% 88%;
+    --muted-foreground: 240 2% 45%;
 
-    --accent: 24 100% 50%; /* Basketball orange */
-    --accent-foreground: 0 0% 100%;
+    /* Accent: #C6B275 */
+    --accent: 42 39% 61%;
+    --accent-foreground: 240 2% 23%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 240 6% 94%;
 
-    --border: 0 0% 89%;
-    --input: 0 0% 89%;
-    --ring: 24 100% 50%;
+    /* Border and input colors */
+    --border: 240 4% 85%;
+    --input: 240 4% 85%;
+    --ring: 42 39% 61%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 4%; /* Dark black */
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 24 100% 50%; /* Basketball orange */
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 10%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 24 100% 50%;
+    /* Sidebar colors using primary theme */
+    --sidebar-background: 240 2% 23%;
+    --sidebar-foreground: 240 6% 94%;
+    --sidebar-primary: 42 39% 61%;
+    --sidebar-primary-foreground: 240 2% 23%;
+    --sidebar-accent: 42 39% 61%;
+    --sidebar-accent-foreground: 240 2% 23%;
+    --sidebar-border: 240 4% 30%;
+    --sidebar-ring: 42 39% 61%;
+    --sidebar-muted: 240 2% 40%;
   }
 
   .dark {
-    --background: 0 0% 4%;
-    --foreground: 0 0% 98%;
+    /* Keep the same colors for dark mode consistency */
+    --background: 240 6% 94%;
+    --foreground: 240 2% 23%;
 
-    --card: 0 0% 6%;
-    --card-foreground: 0 0% 98%;
+    --card: 240 8% 96%;
+    --card-foreground: 240 2% 23%;
 
-    --popover: 0 0% 4%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 240 8% 96%;
+    --popover-foreground: 240 2% 23%;
 
-    --primary: 24 100% 50%; /* Basketball orange */
-    --primary-foreground: 0 0% 100%;
+    --primary: 240 2% 23%;
+    --primary-foreground: 240 6% 94%;
 
-    --secondary: 0 0% 10%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 42 39% 40%;
+    --secondary-foreground: 240 6% 94%;
 
-    --muted: 0 0% 10%;
-    --muted-foreground: 0 0% 65%;
+    --muted: 240 4% 88%;
+    --muted-foreground: 240 2% 45%;
 
-    --accent: 0 0% 10%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 42 39% 61%;
+    --accent-foreground: 240 2% 23%;
 
     --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 240 6% 94%;
 
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 24 100% 50%;
-
-    --sidebar-background: 0 0% 4%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 24 100% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 10%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 24 100% 50%;
+    --border: 240 4% 85%;
+    --input: 240 4% 85%;
+    --ring: 42 39% 61%;
+    
+    --sidebar-background: 240 2% 23%;
+    --sidebar-foreground: 240 6% 94%;
+    --sidebar-primary: 42 39% 61%;
+    --sidebar-primary-foreground: 240 2% 23%;
+    --sidebar-accent: 42 39% 61%;
+    --sidebar-accent-foreground: 240 2% 23%;
+    --sidebar-border: 240 4% 30%;
+    --sidebar-ring: 42 39% 61%;
+    --sidebar-muted: 240 2% 40%;
   }
 }
 
@@ -93,26 +105,107 @@
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    @apply bg-background text-foreground font-poppins;
+    overflow-x: hidden;
+  }
+
+  /* Enhanced responsive utilities */
+  .container {
+    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Ensure modals and dialogs are responsive */
+  [data-radix-dialog-content] {
+    @apply max-w-[95vw] max-h-[95vh] overflow-y-auto;
+  }
+
+  /* Responsive text scaling */
+  .responsive-heading {
+    @apply text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl;
+  }
+
+  .responsive-subheading {
+    @apply text-base sm:text-lg md:text-xl lg:text-2xl;
+  }
+
+  .responsive-body {
+    @apply text-sm sm:text-base md:text-lg;
+  }
+
+  .responsive-small {
+    @apply text-xs sm:text-sm md:text-base;
   }
 }
 
-/* Custom basketball-themed utilities */
+/* Enhanced responsive classes */
 @layer utilities {
-  .basketball-gradient {
-    background: linear-gradient(135deg, #ff6b00 0%, #ff8533 100%);
+  .responsive-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6;
   }
   
-  .basketball-card {
-    @apply bg-white border-2 border-gray-100 shadow-lg hover:shadow-xl transition-all duration-200 hover:border-orange-200;
+  .responsive-grid-2 {
+    @apply grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6;
   }
   
-  .basketball-button {
-    @apply bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg;
+  .responsive-grid-3 {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6;
   }
   
-  .basketball-input {
-    @apply border-2 border-gray-200 focus:border-orange-500 focus:ring-orange-500 focus:ring-2 focus:ring-opacity-20 rounded-lg px-4 py-2 transition-all duration-200;
+  .responsive-flex {
+    @apply flex flex-col sm:flex-row gap-3 sm:gap-4 lg:gap-6;
+  }
+  
+  .responsive-padding {
+    @apply p-3 sm:p-4 md:p-6 lg:p-8;
+  }
+  
+  .responsive-margin {
+    @apply m-3 sm:m-4 md:m-6 lg:m-8;
+  }
+
+  .responsive-spacing {
+    @apply space-y-3 sm:space-y-4 md:space-y-6;
+  }
+
+  /* Form responsive utilities */
+  .responsive-form-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6;
+  }
+
+  /* Button responsive utilities */
+  .responsive-button {
+    @apply text-sm sm:text-base px-3 py-2 sm:px-4 sm:py-2.5;
+  }
+
+  /* Card responsive utilities */
+  .responsive-card {
+    @apply p-4 sm:p-6 m-2 sm:m-4;
+  }
+
+  /* Table responsive utilities */
+  .responsive-table {
+    @apply text-xs sm:text-sm md:text-base;
+  }
+}
+
+/* Mobile-first responsive breakpoints */
+@media (max-width: 640px) {
+  .mobile-stack {
+    @apply flex-col space-y-2;
+  }
+  
+  .mobile-full-width {
+    @apply w-full;
+  }
+  
+  .mobile-text-center {
+    @apply text-center;
+  }
+}
+
+/* Tablet responsive adjustments */  
+@media (min-width: 641px) and (max-width: 1024px) {
+  .tablet-compact {
+    @apply px-4 py-3;    
   }
 }
