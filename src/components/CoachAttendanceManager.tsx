@@ -246,24 +246,25 @@ export function CoachAttendanceManager() {
   };
 
   return (
-    <div className="min-h-screen bg-background pt-4 p-6">
-      <div className="max-w-7xl mx-auto space-y-8 -mt-5">
+    <div className="min-h-screen bg-background pt-4 p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8 -mt-5">
         {/* Header with Back Button */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
+        <div className="mb-4 sm:mb-8">
+          <div className="flex items-center gap-2 sm:gap-4 mb-4">
             <Button
               onClick={handleBackToCalendar}
               variant="outline"
-              className="border-[#8e7a3f] text-[#8e7a3f] hover:bg-[#8e7a3f] hover:text-white transition-all duration-300"
+              className="border-[#8e7a3f] text-[#8e7a3f] hover:bg-[#8e7a3f] hover:text-white transition-all duration-300 text-sm sm:text-base"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Calendar
+              <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Back to Calendar</span>
+              <span className="sm:hidden">Back</span>
             </Button>
           </div>
-          <h1 className="text-4xl font-bold text-[#181A18] mb-2 tracking-tight">
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#181A18] mb-2 tracking-tight">
             Attendance Management
           </h1>
-          <p className="text-lg text-gray-700">
+          <p className="text-base sm:text-lg text-gray-700">
             Track and manage player attendance for your training sessions
           </p>
         </div>
@@ -271,26 +272,26 @@ export function CoachAttendanceManager() {
         {/* Session Selection Card - Only show if no sessionId from URL */}
         {!sessionId && (
           <Card className="border-2 border-[#181A18] bg-white/90 backdrop-blur-sm shadow-xl">
-            <CardHeader className="border-b border-[#181A18] bg-[#181A18]">
-              <CardTitle className="text-2xl font-bold text-[#efeff1] flex items-center">
-                <Calendar className="h-6 w-6 mr-3 text-accent" style={{ color: 'accent' }} />
+            <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-4 sm:p-6">
+              <CardTitle className="text-xl sm:text-2xl font-bold text-[#efeff1] flex items-center">
+                <Calendar className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-accent" style={{ color: 'accent' }} />
                 Your Training Sessions
               </CardTitle>
-              <CardDescription className="text-gray-400 text-base">
+              <CardDescription className="text-gray-400 text-sm sm:text-base">
                 Select a training session to manage player attendance
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-8">
-              <div className="mb-8">
+            <CardContent className="p-4 sm:p-8">
+              <div className="mb-6 sm:mb-8">
                 <div className="flex items-center mb-4">
-                  <Filter className="h-5 w-5 text-accent mr-2" style={{ color: 'accent' }} />
-                  <h3 className="text-lg font-semibold text-foreground">Filter Sessions</h3>
+                  <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-accent mr-2" style={{ color: 'accent' }} />
+                  <h3 className="text-base sm:text-lg font-semibold text-foreground">Filter Sessions</h3>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Branch</label>
+                    <label className="text-xs sm:text-sm font-medium text-gray-700">Branch</label>
                     <Select value={branchFilter} onValueChange={setBranchFilter}>
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20">
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-sm">
                         <SelectValue placeholder="Select branch" />
                       </SelectTrigger>
                       <SelectContent>
@@ -302,12 +303,12 @@ export function CoachAttendanceManager() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Package Type</label>
+                    <label className="text-xs sm:text-sm font-medium text-gray-700">Package Type</label>
                     <Select
                       value={packageFilter}
                       onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setPackageFilter(value)}
                     >
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20">
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-sm">
                         <SelectValue placeholder="Select package type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -318,9 +319,9 @@ export function CoachAttendanceManager() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Status</label>
+                    <label className="text-xs sm:text-sm font-medium text-gray-700">Status</label>
                     <Select value={statusFilter} onValueChange={(value: SessionStatus) => setStatusFilter(value)}>
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20">
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-sm">
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -337,18 +338,18 @@ export function CoachAttendanceManager() {
                   <input
                     type="text"
                     placeholder="Search by branch..."
-                    className="pl-10 pr-4 py-3 w-full border-2 border-accent/40 rounded-xl text-sm focus:border-accent focus:ring-accent/20 bg-white"
+                    className="pl-10 pr-4 py-2 sm:py-3 w-full border-2 border-accent/40 rounded-xl text-sm focus:border-accent focus:ring-accent/20 bg-white"
                     value={sessionSearchTerm}
                     onChange={(e) => setSessionSearchTerm(e.target.value)}
                     style={{ borderColor: 'accent' }}
                   />
                 </div>
-                <p className="text-sm text-gray-600 mt-3">
+                <p className="text-xs sm:text-sm text-gray-600 mt-3">
                   Showing {filteredSessions.length} session{filteredSessions.length === 1 ? '' : 's'}
                 </p>
               </div>
 
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredSessions.map((session) => (
                   <Card
                     key={session.id}
@@ -360,11 +361,11 @@ export function CoachAttendanceManager() {
                     onClick={() => handleSessionCardClick(session)}
                     style={{ borderColor: 'accent' }}
                   >
-                    <CardContent className="p-5 space-y-4">
+                    <CardContent className="p-4 sm:p-5 space-y-3 sm:space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <Calendar className="w-4 h-4 text-accent" style={{ color: 'accent' }} />
-                          <span className="font-semibold text-black text-sm">
+                          <span className="font-semibold text-black text-xs sm:text-sm">
                             {format(new Date(session.date + 'T00:00:00'), 'MMM dd, yyyy')}
                           </span>
                         </div>
@@ -372,7 +373,7 @@ export function CoachAttendanceManager() {
                           {session.status}
                         </Badge>
                       </div>
-                      <div className="space-y-3 text-sm">
+                      <div className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
                         <div className="flex items-center space-x-2">
                           <Clock className="w-4 h-4 text-accent" style={{ color: 'accent' }} />
                           <span className="text-gray-700 font-medium">
@@ -381,11 +382,11 @@ export function CoachAttendanceManager() {
                         </div>
                         <div className="flex items-center space-x-2">
                           <MapPin className="w-4 h-4 text-accent" style={{ color: 'accent' }} />
-                          <span className="text-gray-700">{session.branches.name}</span>
+                          <span className="text-gray-700 truncate">{session.branches.name}</span>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Users className="w-4 h-4 text-accent" style={{ color: 'accent' }} />
-                          <span className="text-gray-700">{session.package_type || 'N/A'}</span>
+                          <span className="text-gray-700 truncate">{session.package_type || 'N/A'}</span>
                         </div>
                       </div>
                     </CardContent>
@@ -394,12 +395,12 @@ export function CoachAttendanceManager() {
               </div>
 
               {filteredSessions.length === 0 && (
-                <div className="py-12 text-center">
-                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                <div className="py-8 sm:py-12 text-center">
+                  <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                     {sessionSearchTerm || statusFilter !== "all" || branchFilter !== "all" || packageFilter !== "All" ? "No sessions found" : "No sessions"}
                   </h3>
-                  <p className="text-gray-600">
+                  <p className="text-sm sm:text-base text-gray-600">
                     {sessionSearchTerm || statusFilter !== "all" || branchFilter !== "all" || packageFilter !== "All" ? "Try adjusting your search terms or filters." : "No scheduled sessions available."}
                   </p>
                 </div>
@@ -410,58 +411,57 @@ export function CoachAttendanceManager() {
 
         {/* Session Details Modal */}
         <Dialog open={!!selectedSessionModal} onOpenChange={() => setSelectedSessionModal(null)}>
-          <DialogContent className="max-w-2xl border-2 border-foreground bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg">
+          <DialogContent className="max-w-[95vw] sm:max-w-2xl border-2 border-foreground bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-foreground flex items-center">
-                <Calendar className="h-6 w-6 mr-3 text-accent" style={{ color: 'accent' }} />
+              <DialogTitle className="text-xl sm:text-2xl font-bold text-foreground flex items-center">
+                <Calendar className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 text-accent" style={{ color: 'accent' }} />
                 Session Details
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-base">
+              <DialogDescription className="text-gray-600 text-sm sm:text-base">
                 {selectedSessionModal ? formatDate(selectedSessionModal.date) : ''}
               </DialogDescription>
             </DialogHeader>
             {selectedSessionModal && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="flex items-center space-x-3">
-                    <Clock className="h-5 w-5 text-accent" style={{ color: 'accent' }} />
+                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-accent" style={{ color: 'accent' }} />
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Time</p>
-                      <p className="font-semibold text-black">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Time</p>
+                      <p className="font-semibold text-black text-sm sm:text-base">
                         {formatTime12Hour(selectedSessionModal.start_time)} - {formatTime12Hour(selectedSessionModal.end_time)}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <MapPin className="h-5 w-5 text-accent" style={{ color: 'accent' }} />
+                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-accent" style={{ color: 'accent' }} />
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Branch</p>
-                      <p className="font-semibold text-black">{selectedSessionModal.branches.name}</p>
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Branch</p>
+                      <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.branches.name}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Users className="h-5 w-5 text-accent" style={{ color: 'accent' }} />
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent" style={{ color: 'accent' }} />
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Package Type</p>
-                      <p className="font-semibold text-black">{selectedSessionModal.package_type || 'N/A'}</p>
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Package Type</p>
+                      <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.package_type || 'N/A'}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Badge className={`${getStatusBadgeColor(selectedSessionModal.status)} border font-medium px-3 py-1`}>
+                    <Badge className={`${getStatusBadgeColor(selectedSessionModal.status)} border font-medium px-2 sm:px-3 py-1 text-xs sm:text-sm`}>
                       {selectedSessionModal.status.charAt(0).toUpperCase() + selectedSessionModal.status.slice(1)}
                     </Badge>
                   </div>
                 </div>
                 <div className="flex justify-end">
-  <Button
-    onClick={() => handleManageAttendance(selectedSessionModal.id)}
-    className="bg-accent hover:from-[#fe822d] hover:to-accent text-white font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg"
-    style={{ backgroundColor: 'accent' }}
-  >
-    Manage Attendance
-  </Button>
-</div>
-
+                  <Button
+                    onClick={() => handleManageAttendance(selectedSessionModal.id)}
+                    className="bg-accent hover:from-[#fe822d] hover:to-accent text-white font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg text-sm sm:text-base px-4 sm:px-6"
+                    style={{ backgroundColor: 'accent' }}
+                  >
+                    Manage Attendance
+                  </Button>
+                </div>
               </div>
             )}
           </DialogContent>
@@ -469,154 +469,183 @@ export function CoachAttendanceManager() {
 
         {/* Attendance Management Modal */}
         <Dialog open={showAttendanceModal} onOpenChange={() => setShowAttendanceModal(false)}>
-          <DialogContent className="max-w-6xl max-h-[80vh] border-2 border-foreground bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-foreground flex items-center">
-                <Users className="h-6 w-6 mr-3 text-accent" style={{ color: 'accent' }} />
-                Attendance Management
+          <DialogContent className="max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[85vh] sm:max-h-[80vh] border-2 border-foreground bg-white shadow-lg overflow-hidden">
+            <DialogHeader className="pb-4 border-b">
+              <DialogTitle className="text-lg sm:text-xl font-bold text-foreground flex items-center">
+                Manage Attendance
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  - {selectedSessionDetails ? `${format(new Date(selectedSessionDetails.date + 'T00:00:00'), 'EEE, MMM dd, yyyy')} at ${formatTime12Hour(selectedSessionDetails.start_time)}` : ''}
+                </span>
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-base">
-                {selectedSessionDetails ? `${formatDate(selectedSessionDetails.date)} • ${selectedSessionDetails.branches.name}` : 'Manage player attendance for this session'}
+              <DialogDescription className="text-gray-600 text-sm">
+                Update attendance for players in this training session
               </DialogDescription>
-            </DialogHeader>
-            <div className="p-6">
-              {/* Stats */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6 mb-6">
-                <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-gray-700 font-medium">Present: {presentCount}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span className="text-gray-700 font-medium">Absent: {absentCount}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                    <span className="text-gray-700 font-medium">Pending: {pendingCount}</span>
-                  </div>
+              
+              {/* Session Details */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mt-4 text-xs sm:text-sm">
+                <div>
+                  <span className="font-medium text-gray-600">Coach:</span>
+                  <span className="block text-black">{selectedSessionDetails?.coaches?.name || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-600">Branch:</span>
+                  <span className="block text-black">{selectedSessionDetails?.branches?.name || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-600">Package Type:</span>
+                  <span className="block text-black">{selectedSessionDetails?.package_type || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-600">Status:</span>
+                  <Badge className={`${getStatusBadgeColor(selectedSessionDetails?.status || '')} text-xs`}>
+                    {selectedSessionDetails?.status || 'N/A'}
+                  </Badge>
                 </div>
               </div>
-
-              {/* Search for Attendance Records */}
-              <div className="mb-6">
-                <div className="flex items-center mb-4">
-                  <Filter className="h-5 w-5 text-accent mr-2" style={{ color: 'accent' }} />
-                  <h3 className="text-lg font-semibold text-foreground">Filter Players</h3>
+            </DialogHeader>
+            
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              {/* Search Players */}
+              <div className="mb-4 sm:mb-6">
+                <div className="flex items-center mb-3">
+                  <Search className="h-4 w-4 text-gray-500 mr-2" />
+                  <h3 className="text-sm sm:text-base font-semibold text-foreground">Search Players</h3>
                 </div>
-                <div className="relative max-w-md">
+                <div className="relative max-w-sm">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search players..."
-                    className="pl-10 pr-4 py-3 w-full border-2 border-accent/40 rounded-xl text-sm focus:border-accent focus:ring-accent/20 bg-white"
+                    placeholder="Search by player name..."
+                    className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg text-sm focus:border-accent focus:ring-1 focus:ring-accent bg-white"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ borderColor: 'accent' }}
                   />
                 </div>
               </div>
 
-              {/* Attendance Table */}
-              <div className="border-2 border-foreground rounded-2xl bg-white shadow-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-foreground text-white">
-                      <tr>
-                        <th className="py-4 px-6 text-left font-semibold text-base">Player Name</th>
-                        <th className="py-4 px-6 text-left font-semibold text-base">Status</th>
-                        <th className="py-4 px-6 text-left font-semibold text-base">Marked At</th>
-                        <th className="py-4 px-6 text-left font-semibold text-base">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredAttendanceRecords.map((record, index) => (
-                        <tr 
-                          key={record.id} 
-                          className={`transition-all duration-300 hover:bg-accent/5 ${
-                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                          }`}
-                        >
-                          <td className="py-4 px-6">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-white font-semibold text-sm" style={{ backgroundColor: 'accent' }}>
-                                {record.students.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                              </div>
-                              <span className="font-semibold text-black text-base">{record.students.name}</span>
-                            </div>
-                          </td>
-                          <td className="py-4 px-6">
-                            <div className="flex items-center space-x-2">
-                              {getAttendanceIcon(record.status)}
-                              <Badge className={`${getAttendanceBadgeColor(record.status)} border capitalize font-medium text-sm`}>
-                                {record.status}
-                              </Badge>
-                            </div>
-                          </td>
-                          <td className="py-4 px-6 text-gray-600 text-sm">
-                            {record.marked_at ? (
-                              <span className="font-medium">{formatDateTime(record.marked_at)}</span>
-                            ) : (
-                              <span className="italic text-gray-400">Not marked</span>
-                            )}
-                          </td>
-                          <td className="py-4 px-6">
-                            <div className="flex flex-row items-center space-x-2">
-                              {attendanceStatuses.map((status) => (
-                                <Button
-                                  key={status}
-                                  size="sm"
-                                  variant={record.status === status ? "default" : "outline"}
-                                  onClick={() => handleAttendanceChange(record.id, status)}
-                                  className={`transition-all duration-300 hover:scale-105 text-sm ${
-                                    record.status === status
-                                      ? status === "present"
-                                        ? "bg-green-600 hover:bg-green-700 text-white"
-                                        : status === "absent"
-                                        ? "bg-red-600 hover:bg-red-700 text-white"
-                                        : "bg-amber-600 hover:bg-amber-700 text-white"
-                                      : "border-accent/30 text-accent hover:bg-accent hover:text-white"
-                                  }`}
-                                  style={{ borderColor: 'accent', color: record.status === status ? undefined : 'accent' }}
-                                >
-                                  {getAttendanceIcon(status)}
-                                  <span className="ml-1 capitalize hidden sm:inline">{status}</span>
-                                </Button>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {/* Stats */}
+              <div className="flex flex-wrap items-center gap-3 sm:gap-6 mb-4 sm:mb-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                  <span className="text-gray-700">Present: <strong>{presentCount}</strong></span>
                 </div>
-                
-                {filteredAttendanceRecords.length === 0 && (
-                  <div className="py-12 text-center">
-                    <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {searchTerm ? 'No players found' : 'No attendance records'}
-                    </h3>
-                    <p className="text-gray-600 text-base">
-                      {searchTerm 
-                        ? 'Try adjusting your search terms.' 
-                        : 'No attendance records found for this session.'
-                      }
-                    </p>
+                <div className="flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-red-600" />
+                  <span className="text-gray-700">Absent: <strong>{absentCount}</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span className="text-gray-700">Pending: <strong>{pendingCount}</strong></span>
+                </div>
+              </div>
+
+              {/* Players List */}
+              <div className="space-y-3">
+                {filteredAttendanceRecords.map((record) => (
+                  <div 
+                    key={record.id} 
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200 gap-3"
+                  >
+                    <div className="flex items-center space-x-3 flex-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-accent flex items-center justify-center text-white font-semibold text-xs sm:text-sm" style={{ backgroundColor: 'accent' }}>
+                        {record.students.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <span className="font-semibold text-black text-sm sm:text-base block">{record.students.name}</span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          {getAttendanceIcon(record.status)}
+                          <Badge className={`${getAttendanceBadgeColor(record.status)} text-xs capitalize`}>
+                            {record.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-row items-center space-x-2 justify-end">
+                      <Select
+                        value={record.status}
+                        onValueChange={(value: AttendanceStatusLiteral) => handleAttendanceChange(record.id, value)}
+                      >
+                        <SelectTrigger className="w-28 sm:w-32 h-8 sm:h-9 text-xs sm:text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-amber-600" />
+                              Pending
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="present">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                              Present
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="absent">
+                            <div className="flex items-center gap-2">
+                              <XCircle className="w-4 h-4 text-red-600" />
+                              Absent
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                )}
+                ))}
+              </div>
+              
+              {filteredAttendanceRecords.length === 0 && (
+                <div className="py-8 sm:py-12 text-center">
+                  <Users className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+                    {searchTerm ? 'No players found' : 'No attendance records'}
+                  </h3>
+                  <p className="text-sm sm:text-base text-gray-600">
+                    {searchTerm 
+                      ? 'Try adjusting your search terms.' 
+                      : 'No attendance records found for this session.'
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t bg-gray-50 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+              <p className="text-xs sm:text-sm text-gray-600">
+                {filteredAttendanceRecords.length} player{filteredAttendanceRecords.length === 1 ? '' : 's'} in this session
+              </p>
+              <div className="flex gap-2 sm:gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAttendanceModal(false)}
+                  className="text-sm px-4 py-2"
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    toast.success("Attendance saved successfully!");
+                    setShowAttendanceModal(false);
+                  }}
+                  className="bg-accent hover:bg-accent/90 text-white text-sm px-4 py-2"
+                  style={{ backgroundColor: 'accent' }}
+                >
+                  Save and Close
+                </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
         
         {!selectedSession && !sessionId && (
-          <div className="text-center py-16">
-            <div className="w-24 h-24 rounded-full bg-accent flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: 'accent' }}>
-              <Calendar className="w-12 h-12 text-white" />
+          <div className="text-center py-8 sm:py-16">
+            <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-accent flex items-center justify-center mx-auto mb-4 sm:mb-6" style={{ backgroundColor: 'accent' }}>
+              <Calendar className="w-8 h-8 sm:w-12 sm:h-12 text-white" />
             </div>
-            <h3 className="text-2xl font-bold text-[#181A18] mb-3">Select a Training Session</h3>
-            <p className="text-lg text-gray-600">Choose a session from above to start managing attendance.</p>
+            <h3 className="text-xl sm:text-2xl font-bold text-[#181A18] mb-2 sm:mb-3">Select a Training Session</h3>
+            <p className="text-base sm:text-lg text-gray-600">Choose a session from above to start managing attendance.</p>
           </div>
         )}
       </div>
