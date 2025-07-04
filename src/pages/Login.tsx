@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -84,7 +85,7 @@ export default function Login() {
               <img
                 src="/lovable-uploads/599e456c-7d01-4d0c-a68c-b753300de7de.png"
                 alt="Coach Logo"
-                className="w-40 h-40 object-contain"
+                className="w-64 h-64 object-contain"
               />
             </div>
             <CardTitle className="text-white text-lg font-semibold">

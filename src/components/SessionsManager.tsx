@@ -124,7 +124,6 @@ export function SessionsManager() {
         console.error('Error fetching training sessions:', error);
         throw new Error(`Failed to fetch training sessions: ${error.message}`);
       }
-      console.log('Fetched sessions:', data);
       return data as TrainingSession[];
     }
   });
@@ -138,7 +137,6 @@ export function SessionsManager() {
         .order('name');
       
       if (error) throw error;
-      console.log('Fetched branches:', data);
       return data;
     }
   });
@@ -151,11 +149,7 @@ export function SessionsManager() {
         .select('id, name')
         .order('name');
 
-      if (error) {
-        console.error('coaches query error:', error);
-        throw error;
-      }
-      console.log('Fetched coaches:', data);
+      if (error) throw error;
       return data as { id: string; name: string; }[];
     },
   });
@@ -163,24 +157,14 @@ export function SessionsManager() {
   const { data: students, isLoading: studentsLoading, error: studentsError } = useQuery({
     queryKey: ['students-select', formData.branch_id, formData.package_type],
     queryFn: async () => {
-      if (!formData.branch_id || !formData.package_type) {
-        console.log('Students query skipped: missing branch_id or package_type', { 
-          branch_id: formData.branch_id, 
-          package_type: formData.package_type 
-        });
-        return [];
-      }
+      if (!formData.branch_id || !formData.package_type) return [];
       const { data, error } = await supabase
         .from('students')
         .select('id, name, remaining_sessions, branch_id, package_type')
         .eq('branch_id', formData.branch_id)
         .eq('package_type', formData.package_type)
         .order('name');
-      if (error) {
-        console.error('Students query error:', error);
-        throw error;
-      }
-      console.log(`Fetched students for branch_id=${formData.branch_id} and package_type=${formData.package_type}:`, data);
+      if (error) throw error;
       return data as Student[];
     },
     enabled: !!formData.branch_id && !!formData.package_type,
@@ -188,15 +172,11 @@ export function SessionsManager() {
 
   const createMutation = useMutation({
     mutationFn: async (session: typeof formData) => {
-      if (!session.package_type) {
-        throw new Error('Package type is required');
-      }
+      if (!session.package_type) throw new Error('Package type is required');
 
       const coachId = formData.package_type === "Personal Training" ? formData.coach_id : selectedCoaches[0];
       
-      if (!coachId) {
-        throw new Error('At least one coach must be selected');
-      }
+      if (!coachId) throw new Error('At least one coach must be selected');
 
       const coachesToCheck = formData.package_type === "Camp Training" ? selectedCoaches : [formData.coach_id];
       
@@ -214,8 +194,6 @@ export function SessionsManager() {
           throw new Error(`Coach ${coachName} is already scheduled for a session on this date/time.`);
         }
       }
-
-      console.log('Creating session with data:', session);
       
       const { data, error } = await supabase
         .from('training_sessions')
@@ -223,12 +201,7 @@ export function SessionsManager() {
         .select()
         .single();
       
-      if (error) {
-        console.error('Error creating session:', error);
-        throw error;
-      }
-
-      console.log('Session created successfully:', data);
+      if (error) throw error;
 
       if (selectedStudents.length > 0) {
         const { error: participantsError } = await supabase
@@ -264,24 +237,17 @@ export function SessionsManager() {
       resetForm();
     },
     onError: (error) => {
-      console.error('Create mutation error:', error);
       toast.error('Failed to create session: ' + error.message);
     }
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...session }: typeof formData & { id: string }) => {
-      if (!session.package_type) {
-        throw new Error('Package type is required');
-      }
+      if (!session.package_type) throw new Error('Package type is required');
 
       const coachId = formData.package_type === "Personal Training" ? formData.coach_id : selectedCoaches[0];
       
-      if (!coachId) {
-        throw new Error('At least one coach must be selected');
-      }
-
-      console.log('Updating session with data:', session);
+      if (!coachId) throw new Error('At least one coach must be selected');
 
       const { data, error } = await supabase
         .from('training_sessions')
@@ -290,12 +256,7 @@ export function SessionsManager() {
         .select()
         .single();
       
-      if (error) {
-        console.error('Error updating session:', error);
-        throw error;
-      }
-
-      console.log('Session updated successfully:', data);
+      if (error) throw error;
 
       await supabase
         .from('session_participants')
@@ -336,7 +297,6 @@ export function SessionsManager() {
       resetForm();
     },
     onError: (error) => {
-      console.error('Update mutation error:', error);
       toast.error('Failed to update session: ' + error.message);
     }
   });
@@ -354,7 +314,7 @@ export function SessionsManager() {
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Training session deleted successfully');
-      setCurrentPage(1); // Reset to first page on delete
+      setCurrentPage(1);
     },
     onError: (error) => {
       toast.error('Failed to delete session: ' + error.message);
@@ -415,8 +375,6 @@ export function SessionsManager() {
       return;
     }
 
-    console.log('Submitting form with data:', formData);
-
     const coachesToCheck = formData.package_type === "Personal Training" ? [formData.coach_id] : selectedCoaches;
     
     const hasConflict = sessions?.some(session =>
@@ -442,7 +400,6 @@ export function SessionsManager() {
   };
 
   const handleEdit = (session: TrainingSession) => {
-    console.log('Editing session:', session);
     setEditingSession(session);
     setFormData({
       date: session.date,
@@ -519,7 +476,6 @@ export function SessionsManager() {
       return sortOrder === "Newest to Oldest" ? dateB - dateA : dateA - dateB;
     }) || [];
 
-  // Pagination logic
   const totalPages = Math.ceil(filteredSessions.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -531,485 +487,481 @@ export function SessionsManager() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12" style={{ backgroundColor: 'white' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#BEA877' }}></div>
-        <span className="ml-3 text-gray-600">Loading sessions...</span>
+      <div className="min-h-screen bg-white p-3 sm:p-4 md:p-5 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#BEA877' }}></div>
+          <span className="mt-2 text-gray-600 text-xs sm:text-sm">Loading sessions...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pt-4 p-6">
-      <div className="max-w-7xl mx-auto space-y-8 -mt-5">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-black mb-2 tracking-tight">Sessions Manager</h1>
-          <p className="text-lg text-gray-700">Manage session information</p>
+    <div className="min-h-screen bg-white pt-4 p-3 sm:p-4 md:p-5">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="mb-6">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#181818] mb-2 tracking-tight">Sessions Manager</h1>
+          <p className="text-xs sm:text-sm md:text-base text-gray-700">Manage session information</p>
         </div>
-        <Card className="shadow-xl border-2 border-foreground" style={{ backgroundColor: 'white' }}>
-          <CardHeader className="border-b border-[#181A18] bg-[#181A18]">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <Card className="border-2 border-[#181A18] bg-white shadow-xl overflow-hidden">
+          <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div>
-                <CardTitle className="text-2xl font-bold text-[#efeff1] flex items-center">
-                  <Calendar className="h-6 w-6 mr-3 text-accent" style={{ color: '#BEA877' }} />
+                <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
+                  <Calendar className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
                   Training Sessions
                 </CardTitle>
-                <CardDescription className="text-gray-400 text-base">
+                <CardDescription className="text-gray-400 text-xs sm:text-sm">
                   View and manage all basketball training sessions
                 </CardDescription>
               </div>
-              <div className="flex space-x-3">
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      onClick={() => resetForm()}
-                      className="px-6 py-3 font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
-                      style={{ backgroundColor: '#BEA877', color: '#efeff1' }}
-                    >
-                      <Plus className="w-5 h-5 mr-2" />
-                      Schedule New Session
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" style={{ backgroundColor: '#fffefe' }}>
-                    <DialogHeader className="pb-6">
-                      <DialogTitle className="text-2xl font-bold text-gray-900">
-                        {editingSession ? 'Edit Training Session' : 'Schedule New Training Session'}
-                      </DialogTitle>
-                      <DialogDescription className="text-gray-600">
-                        {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
-                      </DialogDescription>
-                    </DialogHeader>
-                    
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor="branch" className="flex items-center text-sm font-medium text-gray-700">
-                            <MapPin className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                            Branch Location
-                          </Label>
-                          <Select 
-                            value={formData.branch_id} 
-                            onValueChange={(value) => {
-                              setFormData(prev => ({ ...prev, branch_id: value, package_type: "", coach_id: "" }));
-                              setSelectedStudents([]);
-                              setSelectedCoaches([]);
-                            }}
-                          >
-                            <SelectTrigger className="border-2 focus:border-accent rounded-lg">
-                              <SelectValue placeholder="Select branch" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {branches?.map(branch => (
-                                <SelectItem key={branch.id} value={branch.id}>
-                                  {branch.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="package_type" className="flex items-center text-sm font-medium text-gray-700">
-                            <Users className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                            Package Type
-                          </Label>
-                          <Select
-                            value={formData.package_type}
-                            onValueChange={(value: "Camp Training" | "Personal Training") => {
-                              setFormData(prev => ({ ...prev, package_type: value, coach_id: "" }));
-                              setSelectedStudents([]);
-                              setSelectedCoaches([]);
-                            }}
-                            disabled={!formData.branch_id}
-                          >
-                            <SelectTrigger className="border-2 focus:border-accent rounded-lg">
-                              <SelectValue placeholder={formData.branch_id ? "Select package type" : "Select branch first"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Camp Training">Camp Training</SelectItem>
-                              <SelectItem value="Personal Training">Personal Training</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="coach" className="flex items-center text-sm font-medium text-gray-700">
-                          <User className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                          {formData.package_type === "Camp Training" ? "Select Coaches (Multiple)" : "Assigned Coach"}
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button 
+                    onClick={() => resetForm()}
+                    className="bg-accent hover:bg-[#8e7a3f] text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                    style={{ backgroundColor: '#BEA877' }}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Schedule New Session
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden p-3 sm:p-4 md:p-5">
+                  <DialogHeader className="pb-4">
+                    <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
+                      {editingSession ? 'Edit Training Session' : 'Schedule New Training Session'}
+                    </DialogTitle>
+                    <DialogDescription className="text-gray-600 text-xs sm:text-sm">
+                      {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col space-y-2 min-w-0">
+                        <Label htmlFor="branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                          <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                          Branch Location
                         </Label>
-                        
-                        {formData.package_type === "Personal Training" ? (
-                          <Select 
-                            value={formData.coach_id} 
-                            onValueChange={(value) => {
-                              setFormData(prev => ({ ...prev, coach_id: value }));
-                              setSelectedCoaches([]);
-                            }}
-                            disabled={!formData.package_type || coachesLoading}
-                          >
-                            <SelectTrigger className="border-2 focus:border-accent rounded-lg">
-                              <SelectValue placeholder={
-                                coachesLoading ? "Loading coaches..." : 
-                                coachesError ? "Error loading coaches" : 
-                                formData.package_type ? "Select coach" : "Select package type first"
-                              } />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {coaches?.map(coach => (
-                                <SelectItem key={coach.id} value={coach.id}>
-                                  {coach.name} 
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : formData.package_type === "Camp Training" ? (
-                          <div className="border-2 rounded-lg p-4 max-h-48 overflow-y-auto" style={{ backgroundColor: '#faf0e8', borderColor: 'black' }}>
-                            {coachesLoading ? (
-                              <p className="text-sm text-gray-600">Loading coaches...</p>
-                            ) : coachesError ? (
-                              <p className="text-sm text-red-600">Error loading coaches: {(coachesError as Error).message}</p>
-                            ) : coaches?.length === 0 ? (
-                              <p className="text-sm text-gray-600">No coaches available.</p>
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {coaches?.map(coach => (
-                                  <div key={coach.id} className="flex items-center space-x-3 p-2 rounded-md hover:bg-white transition-colors">
-                                    <input
-                                      type="checkbox"
-                                      id={`coach-${coach.id}`}
-                                      checked={selectedCoaches.includes(coach.id)}
-                                      onChange={() => handleCoachToggle(coach.id)}
-                                      className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent"
-                                    />
-                                    <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-sm cursor-pointer">
-                                      <span className="font-medium">{coach.name}</span>
-                                    </Label>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <p className="text-xs text-gray-600 mt-2">
-                              Selected: {selectedCoaches.length} coach{selectedCoaches.length === 1 ? '' : 'es'}
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="border-2 rounded-lg p-4 text-center text-gray-500">
-                            Please select a package type first
-                          </div>
-                        )}
-                        
-                        {coachesError && (
-                          <p className="text-sm text-red-600 mt-1">Error loading coaches: {(coachesError as Error).message}</p>
-                        )}
+                        <Select 
+                          value={formData.branch_id} 
+                          onValueChange={(value) => {
+                            setFormData(prev => ({ ...prev, branch_id: value, package_type: "", coach_id: "" }));
+                            setSelectedStudents([]);
+                            setSelectedCoaches([]);
+                          }}
+                        >
+                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                            <SelectValue placeholder="Select branch" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {branches?.map(branch => (
+                              <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
+                                {branch.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor="date" className="flex items-center text-sm font-medium text-gray-700">
-                            <Calendar className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                            Session Date
-                          </Label>
-                          <Input
-                            id="date"
-                            type="date"
-                            value={formData.date}
-                            onChange={(e) => {
-                              console.log('Date input changed:', e.target.value);
-                              setFormData(prev => ({ ...prev, date: e.target.value }));
-                            }}
-                            required
-                            min={getTodayDate()}
-                            className="border-2 focus:border-accent rounded-lg"
-                            disabled={!formData.branch_id}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="status" className="text-sm font-medium text-gray-700">Session Status</Label>
-                          <Select 
-                            value={formData.status} 
-                            onValueChange={(value: SessionStatus) => setFormData(prev => ({ ...prev, status: value }))}
-                            disabled={!formData.branch_id}
-                          >
-                            <SelectTrigger className="border-2 focus:border-accent rounded-lg">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="scheduled">Scheduled</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                              <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor="start_time" className="flex items-center text-sm font-medium text-gray-700">
-                            <Clock className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                            Start Time
-                          </Label>
-                          <Input
-                            id="start_time"
-                            type="time"
-                            value={formData.start_time}
-                            onChange={(e) => {
-                              console.log('Start time input changed:', e.target.value);
-                              setFormData(prev => ({ ...prev, start_time: e.target.value }));
-                            }}
-                            required
-                            className="border-2 focus:border-accent rounded-lg"
-                            disabled={!formData.branch_id}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="end_time" className="flex items-center text-sm font-medium text-gray-700">
-                            <Clock className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                            End Time
-                          </Label>
-                          <Input
-                            id="end_time"
-                            type="time"
-                            value={formData.end_time}
-                            onChange={(e) => {
-                              console.log('End time input changed:', e.target.value);
-                              setFormData(prev => ({ ...prev, end_time: e.target.value }));
-                            }}
-                            required
-                            className="border-2 focus:border-accent rounded-lg"
-                            disabled={!formData.branch_id}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <Label className="flex items-center text-sm font-medium text-gray-700">
-                          <Users className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                          Select Players ({selectedStudents.length} selected)
+                      <div className="flex flex-col space-y-2 min-w-0">
+                        <Label htmlFor="package_type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                          <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                          Package Type
                         </Label>
-                        <div className="border-2 rounded-lg p-4 max-h-48 overflow-y-auto" style={{ backgroundColor: '#faf0e8', borderColor: 'black' }}>
-                          {formData.branch_id && formData.package_type ? (
-                            studentsLoading ? (
-                              <p className="text-sm text-gray-600">Loading students...</p>
-                            ) : studentsError ? (
-                              <p className="text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
-                            ) : students?.length === 0 ? (
-                              <p className="text-sm text-gray-600">
-                                No students available for this branch and package type combination.
-                              </p>
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {students?.map(student => (
-                                  <div key={student.id} className="flex items-center space-x-3 p-2 rounded-md hover:bg-white transition-colors">
-                                    <input
-                                      type="checkbox"
-                                      id={student.id}
-                                      checked={selectedStudents.includes(student.id)}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          setSelectedStudents(prev => [...prev, student.id]);
-                                        } else {
-                                          setSelectedStudents(prev => prev.filter(id => id !== student.id));
-                                        }
-                                      }}
-                                      className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent"
-                                    />
-                                    <Label htmlFor={student.id} className="flex-1 text-sm cursor-pointer">
-                                      <span className="font-medium">{student.name}</span>
-                                      <span className="text-gray-500 ml-2">({student.remaining_sessions} sessions left)</span>
-                                    </Label>
-                                  </div>
-                                ))}
-                              </div>
-                            )
+                        <Select
+                          value={formData.package_type}
+                          onValueChange={(value: "Camp Training" | "Personal Training") => {
+                            setFormData(prev => ({ ...prev, package_type: value, coach_id: "" }));
+                            setSelectedStudents([]);
+                            setSelectedCoaches([]);
+                          }}
+                          disabled={!formData.branch_id}
+                        >
+                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                            <SelectValue placeholder={formData.branch_id ? "Select package type" : "Select branch first"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
+                            <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex flex-col space-y-2 min-w-0">
+                      <Label htmlFor="coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                        <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                        {formData.package_type === "Camp Training" ? "Select Coaches (Multiple)" : "Assigned Coach"}
+                      </Label>
+                      {formData.package_type === "Personal Training" ? (
+                        <Select 
+                          value={formData.coach_id} 
+                          onValueChange={(value) => {
+                            setFormData(prev => ({ ...prev, coach_id: value }));
+                            setSelectedCoaches([]);
+                          }}
+                          disabled={!formData.package_type || coachesLoading}
+                        >
+                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                            <SelectValue placeholder={
+                              coachesLoading ? "Loading coaches..." : 
+                              coachesError ? "Error loading coaches" : 
+                              formData.package_type ? "Select coach" : "Select package type first"
+                            } />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {coaches?.map(coach => (
+                              <SelectItem key={coach.id} value={coach.id} className="text-xs sm:text-sm">
+                                {coach.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : formData.package_type === "Camp Training" ? (
+                        <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                          {coachesLoading ? (
+                            <p className="text-xs sm:text-sm text-gray-600">Loading coaches...</p>
+                          ) : coachesError ? (
+                            <p className="text-xs sm:text-sm text-red-600">Error loading coaches: {(coachesError as Error).message}</p>
+                          ) : coaches?.length === 0 ? (
+                            <p className="text-xs sm:text-sm text-gray-600">No coaches available.</p>
                           ) : (
-                            <p className="text-sm text-gray-600">Select a branch and package type to view available students.</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {coaches?.map(coach => (
+                                <div key={coach.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    id={`coach-${coach.id}`}
+                                    checked={selectedCoaches.includes(coach.id)}
+                                    onChange={() => handleCoachToggle(coach.id)}
+                                    className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                    style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                  />
+                                  <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                                    {coach.name}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
                           )}
+                          <p className="text-xs text-gray-600 mt-2">
+                            Selected: {selectedCoaches.length} coach{selectedCoaches.length === 1 ? '' : 'es'}
+                          </p>
                         </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="notes" className="flex items-center text-sm font-medium text-gray-700">
-                          <Eye className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                          Session Notes (Optional)
+                      ) : (
+                        <div className="border-2 rounded-lg p-3 text-center text-gray-500 text-xs sm:text-sm" style={{ borderColor: '#181A18' }}>
+                          Please select a package type first
+                        </div>
+                      )}
+                      {coachesError && (
+                        <p className="text-xs sm:text-sm text-red-600 mt-1">Error loading coaches: {(coachesError as Error).message}</p>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col space-y-2 min-w-0">
+                        <Label htmlFor="date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                          <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                          Session Date
                         </Label>
                         <Input
-                          id="notes"
-                          value={formData.notes}
-                          onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                          placeholder="Add any special notes or instructions for this session..."
-                          className="border-2 focus:border-accent rounded-lg"
+                          id="date"
+                          type="date"
+                          value={formData.date}
+                          onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                          required
+                          min={getTodayDate()}
+                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
                           disabled={!formData.branch_id}
+                          style={{ borderColor: '#BEA877' }}
                         />
                       </div>
-
-                      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-6 border-t">
-                        {editingSession && (
-                          <Button 
-                            type="button" 
-                            variant="destructive" 
-                            onClick={() => {
-                              if (editingSession) {
-                                deleteMutation.mutate(editingSession.id);
-                                resetForm();
-                              }
-                            }}
-                            disabled={deleteMutation.isPending || !formData.branch_id}
-                            className="w-full sm:w-auto"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete Session
-                          </Button>
-                        )}
-                        <div className="flex space-x-3 w-full sm:w-auto">
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            onClick={resetForm} 
-                            className="flex-1 sm:flex-none"
-                          >
-                            Cancel
-                          </Button>
-                          <Button 
-                            type="submit" 
-                            disabled={
-                              createMutation.isPending || 
-                              updateMutation.isPending || 
-                              !formData.branch_id || 
-                              !formData.package_type || 
-                              (formData.package_type === "Personal Training" && !formData.coach_id) ||
-                              (formData.package_type === "Camp Training" && selectedCoaches.length === 0) ||
-                              !formData.date
-                            }
-                            className="flex-1 sm:flex-none font-semibold"
-                            style={{ backgroundColor: '#BEA877', color: 'white' }}
-                          >
-                            {editingSession ? 'Update Session' : 'Schedule Session'}
-                          </Button>
-                        </div>
+                      <div className="flex flex-col space-y-2 min-w-0">
+                        <Label htmlFor="status" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                          <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                          Session Status
+                        </Label>
+                        <Select 
+                          value={formData.status} 
+                          onValueChange={(value: SessionStatus) => setFormData(prev => ({ ...prev, status: value }))}
+                          disabled={!formData.branch_id}
+                        >
+                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="scheduled" className="text-xs sm:text-sm">Scheduled</SelectItem>
+                            <SelectItem value="completed" className="text-xs sm:text-sm">Completed</SelectItem>
+                            <SelectItem value="cancelled" className="text-xs sm:text-sm">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col space-y-2 min-w-0">
+                        <Label htmlFor="start_time" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                          <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                          Start Time
+                        </Label>
+                        <Input
+                          id="start_time"
+                          type="time"
+                          value={formData.start_time}
+                          onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
+                          required
+                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                          disabled={!formData.branch_id}
+                          style={{ borderColor: '#BEA877' }}
+                        />
+                      </div>
+                      <div className="flex flex-col space-y-2 min-w-0">
+                        <Label htmlFor="end_time" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                          <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                          End Time
+                        </Label>
+                        <Input
+                          id="end_time"
+                          type="time"
+                          value={formData.end_time}
+                          onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
+                          required
+                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                          disabled={!formData.branch_id}
+                          style={{ borderColor: '#BEA877' }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col space-y-2 min-w-0">
+                      <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                        <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                        Select Players ({selectedStudents.length} selected)
+                      </Label>
+                      <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                        {formData.branch_id && formData.package_type ? (
+                          studentsLoading ? (
+                            <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
+                          ) : studentsError ? (
+                            <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
+                          ) : students?.length === 0 ? (
+                            <p className="text-xs sm:text-sm text-gray-600">
+                              No students available for this branch and package type combination.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {students?.map(student => (
+                                <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    id={student.id}
+                                    checked={selectedStudents.includes(student.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedStudents(prev => [...prev, student.id]);
+                                      } else {
+                                        setSelectedStudents(prev => prev.filter(id => id !== student.id));
+                                      }
+                                    }}
+                                    className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                    style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                  />
+                                  <Label htmlFor={student.id} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                                    {student.name} ({student.remaining_sessions} sessions left)
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        ) : (
+                          <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col space-y-2 min-w-0">
+                      <Label htmlFor="notes" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                        <Eye className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                        Session Notes (Optional)
+                      </Label>
+                      <Input
+                        id="notes"
+                        value={formData.notes}
+                        onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Add any special notes or instructions for this session..."
+                        className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                        disabled={!formData.branch_id}
+                        style={{ borderColor: '#BEA877' }}
+                      />
+                    </div>
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4 border-t border-gray-200 flex-wrap">
+                      {editingSession && (
+                        <Button 
+                          type="button" 
+                          variant="destructive" 
+                          onClick={() => {
+                            if (editingSession) {
+                              deleteMutation.mutate(editingSession.id);
+                              resetForm();
+                            }
+                          }}
+                          disabled={deleteMutation.isPending || !formData.branch_id}
+                          className="bg-red-600 text-white hover:bg-red-700 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete Session
+                        </Button>
+                      )}
+                      <div className="flex space-x-3 w-full sm:w-auto flex-wrap gap-2">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={resetForm} 
+                          className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          type="submit" 
+                          disabled={
+                            createMutation.isPending || 
+                            updateMutation.isPending || 
+                            !formData.branch_id || 
+                            !formData.package_type || 
+                            (formData.package_type === "Personal Training" && !formData.coach_id) ||
+                            (formData.package_type === "Camp Training" && selectedCoaches.length === 0) ||
+                            !formData.date
+                          }
+                          className="bg-accent hover:bg-[#8e7a3f] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                          style={{ backgroundColor: '#BEA877' }}
+                        >
+                          {editingSession ? 'Update Session' : 'Schedule Session'}
+                        </Button>
+                      </div>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
           </CardHeader>
-          <CardContent className="p-6 border-b border-accent">
+          <CardContent className="p-3 sm:p-4 md:p-5">
             <div className="mb-6">
               <div className="flex items-center mb-4">
-                <Filter className="h-5 w-5 text-[#BEA877] mr-2" />
-                <h3 className="text-lg font-semibold text-black">Filter Sessions</h3>
+                <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filter Sessions</h3>
               </div>
-              <div className="flex flex-col space-y-4 lg:flex-row lg:items-end lg:gap-4 lg:space-y-0">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by coach or branch..."
-                    className="pl-10 pr-4 py-3 w-full border-2 border-accent rounded-xl text-sm focus:border-accent focus:ring-accent bg-white"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ borderColor: '#BEA877' }}
-                  />
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3 md:gap-4">
+                <div className="flex flex-col space-y-2 min-w-0">
+                  <Label htmlFor="search-sessions" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                    <Search className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    Search Sessions
+                  </Label>
+                  <div className="relative w-full">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      id="search-sessions"
+                      type="text"
+                      placeholder="Search by coach or branch..."
+                      className="pl-10 pr-4 py-2 w-full border-2 border-accent rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-accent/20"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      style={{ borderColor: '#BEA877' }}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <Label htmlFor="filter-package" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                    <Users className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                    Filter by Package Type
+                <div className="flex flex-col space-y-2 min-w-0">
+                  <Label htmlFor="filter-package" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                    <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    Package Type
                   </Label>
                   <Select
                     value={filterPackageType}
                     onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setFilterPackageType(value)}
                   >
-                    <SelectTrigger className="border-2 focus:border-accent rounded-xl" style={{ borderColor: '#BEA877' }}>
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
                       <SelectValue placeholder="Select package type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="All">All Sessions</SelectItem>
-                      <SelectItem value="Camp Training">Camp Training</SelectItem>
-                      <SelectItem value="Personal Training">Personal Training</SelectItem>
+                      <SelectItem value="All" className="text-xs sm:text-sm">All Sessions</SelectItem>
+                      <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
+                      <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex-1">
-                  <Label htmlFor="filter-branch" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                    <MapPin className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                    Filter by Branch
+                <div className="flex flex-col space-y-2 min-w-0">
+                  <Label htmlFor="filter-branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                    <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    Branch
                   </Label>
                   <Select
                     value={branchFilter}
                     onValueChange={(value) => setBranchFilter(value)}
                   >
-                    <SelectTrigger className="border-2 focus:border-accent rounded-xl" style={{ borderColor: '#BEA877' }}>
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
                       <SelectValue placeholder="Select branch" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="All">All Branches</SelectItem>
+                      <SelectItem value="All" className="text-xs sm:text-sm">All Branches</SelectItem>
                       {branches?.map(branch => (
-                        <SelectItem key={branch.id} value={branch.id}>
+                        <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
                           {branch.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex-1">
-                  <Label htmlFor="filter-coach" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                    <User className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
-                    Filter by Coach
+                <div className="flex flex-col space-y-2 min-w-0">
+                  <Label htmlFor="filter-coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                    <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    Coach
                   </Label>
                   <Select
                     value={coachFilter}
                     onValueChange={(value) => setCoachFilter(value)}
                   >
-                    <SelectTrigger className="border-2 focus:border-accent rounded-xl" style={{ borderColor: '#BEA877' }}>
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
                       <SelectValue placeholder="Select coach" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="All">All Coaches</SelectItem>
+                      <SelectItem value="All" className="text-xs sm:text-sm">All Coaches</SelectItem>
                       {coaches?.map(coach => (
-                        <SelectItem key={coach.id} value={coach.id}>
+                        <SelectItem key={coach.id} value={coach.id} className="text-xs sm:text-sm">
                           {coach.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex-1">
-                  <Label htmlFor="sort-order" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                    <Calendar className="w-4 h-4 mr-2" style={{ color: '#BEA877' }} />
+                <div className="flex flex-col space-y-2 min-w-0">
+                  <Label htmlFor="sort-order" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                    <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                     Sort Order
                   </Label>
                   <Select
                     value={sortOrder}
                     onValueChange={(value: "Newest to Oldest" | "Oldest to Newest") => setSortOrder(value)}
                   >
-                    <SelectTrigger className="border-2 focus:border-accent rounded-xl" style={{ borderColor: '#BEA877' }}>
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
                       <SelectValue placeholder="Select sort order" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Newest to Oldest">Newest to Oldest</SelectItem>
-                      <SelectItem value="Oldest to Newest">Oldest to Newest</SelectItem>
+                      <SelectItem value="Newest to Oldest" className="text-xs sm:text-sm">Newest to Oldest</SelectItem>
+                      <SelectItem value="Oldest to Newest" className="text-xs sm:text-sm">Oldest to Newest</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <p className="text-sm text-gray-600 mt-3">
+              <p className="text-xs sm:text-sm text-gray-600 mt-3">
                 Showing {filteredSessions.length} session{filteredSessions.length === 1 ? '' : 's'}
               </p>
             </div>
-
             {filteredSessions.length === 0 ? (
-              <div className="text-center py-16">
-                <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              <div className="text-center py-10 sm:py-12 md:py-16">
+                <Calendar className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 mx-auto mb-4 text-gray-400" />
+                <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 mb-2">
                   {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? `No sessions found` : "No Training Sessions"}
                 </h3>
-                <p className="text-gray-600 mb-6">
+                <p className="text-gray-600 text-xs sm:text-sm md:text-base mb-4">
                   {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? "Try adjusting your search or filter." : "Get started by scheduling your first training session"}
                 </p>
                 <Button 
                   onClick={() => setIsDialogOpen(true)}
-                  className="font-semibold"
-                  style={{ backgroundColor: '#BEA877', color: 'white' }}
+                  className="bg-accent hover:bg-[#8e7a3f] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                  style={{ backgroundColor: '#BEA877' }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Schedule First Session
@@ -1017,101 +969,93 @@ export function SessionsManager() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
                   {paginatedSessions.map((session) => (
                     <Card 
                       key={session.id} 
-                      className="border-2 transition-all duration-300 hover:shadow-lg rounded-xl border-accent"
+                      className="border-2 transition-all duration-300 hover:shadow-lg rounded-lg border-accent overflow-hidden"
                       style={{ borderColor: '#BEA877' }}
                     >
                       <CardHeader className="pb-3">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="w-5 h-5" style={{ color: '#BEA877' }} />
-                            <h3 className="font-bold text-lg text-gray-900">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Calendar className="w-4 sm:w-5 h-4 sm:h-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                            <h3 className="font-bold text-base sm:text-lg text-gray-900 truncate">
                               {formatDisplayDate(session.date)}
                             </h3>
                           </div>
-                          <Badge className={`font-medium ${getStatusBadgeColor(session.status)}`}>
+                          <Badge className={`font-medium ${getStatusBadgeColor(session.status)} text-xs sm:text-sm px-2 py-1 truncate max-w-full`}>
                             {session.status}
                           </Badge>
                         </div>
-                        <div className="flex items-center space-x-2 text-gray-600">
-                          <Clock className="w-4 h-4" />
-                          <span className="text-sm font-medium">
+                        <div className="flex items-center space-x-2 text-gray-600 min-w-0">
+                          <Clock className="w-4 h-4 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm truncate">
                             {formatDisplayTime(session.start_time)} - {formatDisplayTime(session.end_time)}
                           </span>
                         </div>
                       </CardHeader>
-                      
                       <CardContent className="space-y-3">
-                        <div className="flex items-center space-x-2">
-                          <User className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm"><span className="font-medium">Coach:</span> {session.coaches.name}</span>
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Coach:</span> {session.coaches.name}</span>
                         </div>
-                        
-                        <div className="flex items-center space-x-2">
-                          <MapPin className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm"><span className="font-medium">Branch:</span> {session.branches.name}</span>
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Branch:</span> {session.branches.name}</span>
                         </div>
-                        
-                        <div className="flex items-center space-x-2">
-                          <Users className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm"><span className="font-medium">Package:</span> {session.package_type || 'N/A'}</span>
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Package:</span> {session.package_type || 'N/A'}</span>
                         </div>
-                        
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <Users className="w-4 h-4 text-gray-500" />
-                            <span className="text-sm font-medium">{session.session_participants?.length || 0} Players</span>
-                          </div>
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleView(session)}
-                              className="bg-blue-600 text-white"
-                            >
-                              <Eye className="w-4 h-4" /> View
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleEdit(session)}
-                              className="bg-yellow-600 text-white"
-                            >
-                              <Pencil className="w-4 h-4" /> Edit
-                            </Button>
-                          </div>
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm font-medium">{session.session_participants?.length || 0} Players</span>
                         </div>
-                        
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleView(session)}
+                            className="bg-blue-600 text-white hover:bg-blue-700 w-8 sm:w-9 md:w-10 h-8 sm:h-9 md:h-10 p-0 flex items-center justify-center"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEdit(session)}
+                            className="bg-yellow-600 text-white hover:bg-yellow-700 w-8 sm:w-9 md:w-10 h-8 sm:h-9 md:h-10 p-0 flex items-center justify-center"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        </div>
                         {session.notes && (
-                          <div className="mt-3 p-2 bg-white rounded-md border border-accent" style={{ borderColor: '#BEA877' }}>
-                            <p className="text-xs text-gray-600 italic">"{session.notes}"</p>
+                          <div className="mt-3 p-2 bg-white rounded-md border border-accent overflow-hidden" style={{ borderColor: '#BEA877' }}>
+                            <p className="text-xs text-gray-600 italic truncate">"{session.notes}"</p>
                           </div>
                         )}
                       </CardContent>
                     </Card>
                   ))}
                 </div>
-
                 {totalPages > 1 && (
-                  <div className="flex justify-center items-center mt-6 space-x-2">
+                  <div className="flex justify-center items-center mt-6 space-x-2 flex-wrap gap-2">
                     <Button
                       variant="outline"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
-                      className="border-2 border-accent text-accent hover:bg-accent hover:text-white"
+                      className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
                       style={{ borderColor: '#BEA877', color: '#BEA877' }}
                     >
-                      <ChevronLeft className="w-4 h-4 " />
+                      <ChevronLeft className="w-4 h-4" />
                     </Button>
                     {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
                       <Button
                         key={page}
                         variant={currentPage === page ? "default" : "outline"}
                         onClick={() => handlePageChange(page)}
-                        className={`border-2 ${
+                        className={`border-2 w-10 h-10 p-0 flex items-center justify-center text-xs sm:text-sm ${
                           currentPage === page
                             ? 'bg-accent text-white'
                             : 'border-accent text-accent hover:bg-accent hover:text-white'
@@ -1129,7 +1073,7 @@ export function SessionsManager() {
                       variant="outline"
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}
-                      className="border-2 border-accent text-accent hover:bg-accent hover:text-white"
+                      className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
                       style={{ borderColor: '#BEA877', color: '#BEA877' }}
                     >
                       <ChevronRight className="w-4 h-4" />
@@ -1140,58 +1084,57 @@ export function SessionsManager() {
             )}
           </CardContent>
         </Card>
-
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-          <DialogContent className="max-w-lg" style={{ backgroundColor: '#fffefe' }}>
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-2xl md:max-w-3xl border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden p-3 sm:p-4 md:p-5">
             <DialogHeader className="pb-4">
-              <DialogTitle className="text-xl font-bold text-gray-900">Session Details</DialogTitle>
-              <DialogDescription className="text-gray-600">
+              <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">Session Details</DialogTitle>
+              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
                 View details of the selected training session
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="w-4 h-4 text-accent" style={{ color: '#BEA877' }} />
-                    <span className="text-sm font-medium text-gray-700">
+              <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50 overflow-x-auto">
+                <div className="space-y-2 min-w-0">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <Calendar className="w-4 h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
                       Date: {selectedSession ? formatDisplayDate(selectedSession.date) : 'N/A'}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Clock className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
                       Time: {selectedSession ? `${formatDisplayTime(selectedSession.start_time)} - ${formatDisplayTime(selectedSession.end_time)}` : 'N/A'}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <MapPin className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
                       Branch: {selectedSession?.branches.name || 'N/A'}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <User className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
                       Coach: {selectedSession?.coaches.name || 'N/A'}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Users className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
                       Package: {selectedSession?.package_type || 'N/A'}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Users className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700">
                       Players: {selectedSession?.session_participants?.length || 0}
                     </span>
                   </div>
                   {selectedSession?.notes && (
-                    <div className="flex items-start space-x-2">
-                      <Eye className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium text-gray-700">
+                    <div className="flex items-start space-x-2 min-w-0">
+                      <Eye className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
                         Notes: {selectedSession.notes}
                       </span>
                     </div>
@@ -1199,24 +1142,24 @@ export function SessionsManager() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Participants</Label>
-                <div className="border-2 rounded-lg p-3 max-h-60 overflow-y-auto" style={{ borderColor: '#BEA877', backgroundColor: '#faf0e8' }}>
+                <Label className="text-xs sm:text-sm font-medium text-gray-700">Participants</Label>
+                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
                   {selectedSession?.session_participants?.length === 0 ? (
-                    <p className="text-sm text-gray-600">No participants assigned.</p>
+                    <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
                   ) : (
                     selectedSession?.session_participants?.map(participant => (
-                      <div key={participant.id} className="flex items-center space-x-2 p-2">
-                        <span className="text-sm text-gray-700">{participant.students.name}</span>
+                      <div key={participant.id} className="flex items-center space-x-2 p-2 min-w-0">
+                        <span className="text-xs sm:text-sm text-gray-700 truncate">{participant.students.name}</span>
                       </div>
                     ))
                   )}
                 </div>
               </div>
-              <div className="flex justify-end pt-4 border-t">
+              <div className="flex justify-end pt-4 border-t border-gray-200">
                 <Button
                   variant="outline"
                   onClick={() => setIsViewDialogOpen(false)}
-                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100"
+                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
                 >
                   Close
                 </Button>
@@ -1224,73 +1167,76 @@ export function SessionsManager() {
             </div>
           </DialogContent>
         </Dialog>
-
         <Dialog open={isParticipantsDialogOpen} onOpenChange={setIsParticipantsDialogOpen}>
-          <DialogContent className="max-w-lg" style={{ backgroundColor: '#fffefe' }}>
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden p-3 sm:p-4 md:p-5">
             <DialogHeader className="pb-4">
-              <DialogTitle className="text-xl font-bold text-gray-900">Manage Session Participants</DialogTitle>
-              <DialogDescription className="text-gray-600">
+              <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">Manage Session Participants</DialogTitle>
+              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
                 Add or remove players from this training session
               </DialogDescription>
             </DialogHeader>
-            
             <div className="space-y-4">
-              <div className="p-4 rounded-lg">
-                <p className="text-sm text-gray-700 mb-1">
-                  <span className="font-medium">Session Date:</span>{' '}
-                  {selectedSession?.date ? formatDisplayDate(selectedSession.date) : 'Invalid Date'}
-                </p>
-                <p className="text-sm text-gray-700 mb-1">
-                  <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'N/A'}
-                </p>
-                <p className="text-sm text-gray-700">
-                  <span className="font-medium">Coach:</span> {selectedSession?.coaches.name || 'N/A'}
-                </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  Currently selected: {selectedStudents.length} players
-                </p>
+              <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50 overflow-x-auto">
+                <div className="space-y-2 min-w-0">
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Session Date:</span>{' '}
+                    {selectedSession?.date ? formatDisplayDate(selectedSession.date) : 'Invalid Date'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'N/A'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Coach:</span> {selectedSession?.coaches.name || 'N/A'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-600">
+                    Currently selected: {selectedStudents.length} players
+                  </p>
+                </div>
               </div>
-              
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Available Players</Label>
-                <div className="border-2 rounded-lg p-3 max-h-60 overflow-y-auto space-y-2" style={{ borderColor: '#BEA877', backgroundColor: '#faf0e8' }}>
+                <Label className="text-xs sm:text-sm font-medium text-gray-700">Available Players</Label>
+                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
                   {studentsLoading ? (
-                    <p className="text-sm text-gray-600">Loading students...</p>
+                    <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
                   ) : studentsError ? (
-                    <p className="text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
+                    <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
                   ) : students?.length === 0 ? (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-xs sm:text-sm text-gray-600">
                       No students available for this branch and package type combination.
                     </p>
                   ) : (
-                    students?.map(student => (
-                      <div key={student.id} className="flex items-center space-x-3 p-2 rounded-md hover:bg-white transition-colors">
-                        <input
-                          type="checkbox"
-                          id={`participant-${student.id}`}
-                          checked={selectedStudents.includes(student.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedStudents(prev => [...prev, student.id]);
-                            } else {
-                              setSelectedStudents(prev => prev.filter(id => id !== student.id));
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent"
-                          style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                        />
-                        <Label htmlFor={`participant-${student.id}`} className="flex-1 text-sm cursor-pointer">
-                          <span className="font-medium">{student.name}</span>
-                          <span className="text-gray-500 ml-2">({student.remaining_sessions} sessions left)</span>
-                        </Label>
-                      </div>
-                    ))
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {students?.map(student => (
+                        <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                          <input
+                            type="checkbox"
+                            id={`participant-${student.id}`}
+                            checked={selectedStudents.includes(student.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedStudents(prev => [...prev, student.id]);
+                              } else {
+                                setSelectedStudents(prev => prev.filter(id => id !== student.id));
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                            style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                          />
+                          <Label htmlFor={`participant-${student.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                            {student.name} ({student.remaining_sessions} sessions left)
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
-
-              <div className="flex justify-end space-x-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsParticipantsDialogOpen(false)}>
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 flex-wrap gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsParticipantsDialogOpen(false)}
+                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                >
                   Cancel
                 </Button>
                 <Button
@@ -1332,8 +1278,8 @@ export function SessionsManager() {
                     toast.success('Participants updated successfully');
                     setIsParticipantsDialogOpen(false);
                   }}
-                  className="font-semibold"
-                  style={{ backgroundColor: '#BEA877', color: 'white' }}
+                  className="bg-accent hover:bg-[#8e7a3f] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                  style={{ backgroundColor: '#BEA877' }}
                 >
                   Save Changes
                 </Button>
