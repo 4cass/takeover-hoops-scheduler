@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { DashboardStats } from '@/components/DashboardStats';
-import BranchesManager from '@/components/BranchesManager';
+import { BranchesManager } from '@/components/BranchesManager';
 import CoachesManager from '@/components/CoachesManager';
 import SessionsManager from '@/components/SessionsManager';
 import AttendanceManager from '@/components/AttendanceManager';
@@ -11,10 +11,12 @@ import StudentsManager from '@/components/StudentsManager';
 import { CalendarManager } from '@/components/CalendarManager';
 import { CoachCalendarManager } from '@/components/CoachCalendarManager';
 import { CoachAttendanceManager } from '@/components/CoachAttendanceManager';
-import ProtectedRoute from '@/components/ProtectedRoute';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { useAuth } from '@/context/AuthContext';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
+  const { role } = useAuth();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -42,7 +44,7 @@ const Dashboard = () => {
   };
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={['admin', 'coach']}>
       <SidebarProvider>
         <AppSidebar activeTab={activeTab} onTabChange={setActiveTab} />
         <SidebarInset>

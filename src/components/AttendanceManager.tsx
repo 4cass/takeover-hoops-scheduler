@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -84,6 +83,7 @@ const AttendanceManager = () => {
           attendance_records (
             id,
             student_id,
+            session_id,
             status,
             marked_at,
             students!attendance_records_student_id_fkey (
@@ -104,7 +104,6 @@ const AttendanceManager = () => {
     }
   });
 
-  // Mark attendance mutation
   const markAttendanceMutation = useMutation({
     mutationFn: async ({ sessionId, studentId, status }: { sessionId: string; studentId: string; status: 'present' | 'absent' }) => {
       const { error } = await supabase
