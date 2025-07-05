@@ -30,6 +30,7 @@ type TrainingSession = {
   end_time: string;
   branch_id: string;
   coach_id: string;
+  coach_ids: string[] | null;
   notes: string | null;
   status: SessionStatus;
   package_type: "Camp Training" | "Personal Training" | null;
@@ -42,7 +43,6 @@ type TrainingSession = {
   }>;
 };
 
-// Helper function to format date for display
 const formatDisplayDate = (dateString: string) => {
   try {
     const date = parseISO(dateString);
@@ -53,7 +53,6 @@ const formatDisplayDate = (dateString: string) => {
   }
 };
 
-// Helper function to format time for display
 const formatDisplayTime = (timeString: string) => {
   try {
     const today = new Date().toISOString().split('T')[0];
@@ -66,7 +65,6 @@ const formatDisplayTime = (timeString: string) => {
   }
 };
 
-// Helper function to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
   const today = new Date();
   const year = today.getFullYear();
@@ -175,7 +173,7 @@ export function SessionsManager() {
     mutationFn: async (session: typeof formData) => {
       if (!session.package_type) throw new Error('Package type is required');
 
-      let sessionsToCreate = [];
+      let sessionData;
 
       if (formData.package_type === "Personal Training") {
         if (!formData.coach_id) throw new Error('Coach must be selected for Personal Training');
@@ -194,11 +192,12 @@ export function SessionsManager() {
           throw new Error(`Coach ${coachName} is already scheduled for a session on this date/time.`);
         }
 
-        sessionsToCreate.push({
+        sessionData = {
           ...session,
           coach_id: formData.coach_id,
+          coach_ids: null,
           package_type: session.package_type
-        });
+        };
       } else if (formData.package_type === "Camp Training") {
         if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected for Camp Training');
         
@@ -206,77 +205,77 @@ export function SessionsManager() {
         for (const coachId of selectedCoaches) {
           const { data: conflicts } = await supabase
             .from('training_sessions')
-            .select('id')
-            .eq('coach_id', coachId)
+            .select('id, coach_ids')
             .eq('date', session.date)
             .lte('start_time', session.end_time)
             .gte('end_time', session.start_time);
 
           if (conflicts && conflicts.length > 0) {
-            const coachName = coaches?.find(c => c.id === coachId)?.name;
-            throw new Error(`Coach ${coachName} is already scheduled for a session on this date/time.`);
+            // Check if any conflict involves this coach
+            const hasConflict = conflicts.some(conflict => {
+              if (conflict.coach_ids) {
+                return conflict.coach_ids.includes(coachId);
+              }
+              return false;
+            });
+
+            if (hasConflict) {
+              const coachName = coaches?.find(c => c.id === coachId)?.name;
+              throw new Error(`Coach ${coachName} is already scheduled for a session on this date/time.`);
+            }
           }
         }
 
-        // Create separate sessions for each coach in camp training
-        sessionsToCreate = selectedCoaches.map(coachId => ({
+        sessionData = {
           ...session,
-          coach_id: coachId,
+          coach_id: selectedCoaches[0], // Primary coach for display
+          coach_ids: selectedCoaches,
           package_type: session.package_type
-        }));
+        };
       }
 
-      const createdSessions = [];
+      console.log('Creating session with data:', sessionData);
+      const { data: sessionResult, error } = await supabase
+        .from('training_sessions')
+        .insert([sessionData])
+        .select()
+        .single();
       
-      // Insert all sessions
-      for (const sessionData of sessionsToCreate) {
-        console.log('Creating session for coach:', sessionData.coach_id);
-        const { data: sessionResult, error } = await supabase
-          .from('training_sessions')
-          .insert([sessionData])
-          .select()
-          .single();
-        
-        if (error) throw error;
-        createdSessions.push(sessionResult);
-      }
+      if (error) throw error;
 
-      // Add participants to all created sessions
+      // Add participants to the session
       if (selectedStudents.length > 0) {
-        for (const session of createdSessions) {
-          const { error: participantsError } = await supabase
-            .from('session_participants')
-            .insert(
-              selectedStudents.map(studentId => ({
-                session_id: session.id,
-                student_id: studentId
-              }))
-            );
-          
-          if (participantsError) throw participantsError;
+        const { error: participantsError } = await supabase
+          .from('session_participants')
+          .insert(
+            selectedStudents.map(studentId => ({
+              session_id: sessionResult.id,
+              student_id: studentId
+            }))
+          );
+        
+        if (participantsError) throw participantsError;
 
-          const { error: attendanceError } = await supabase
-            .from('attendance_records')
-            .insert(
-              selectedStudents.map(studentId => ({
-                session_id: session.id,
-                student_id: studentId,
-                status: 'pending' as const
-              }))
-            );
-          
-          if (attendanceError) throw attendanceError;
-        }
+        const { error: attendanceError } = await supabase
+          .from('attendance_records')
+          .insert(
+            selectedStudents.map(studentId => ({
+              session_id: sessionResult.id,
+              student_id: studentId,
+              status: 'pending' as const
+            }))
+          );
+        
+        if (attendanceError) throw attendanceError;
       }
 
-      return createdSessions;
+      return sessionResult;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      const sessionCount = data.length;
       const coachCount = formData.package_type === "Camp Training" ? selectedCoaches.length : 1;
-      toast.success(`${sessionCount} training session${sessionCount > 1 ? 's' : ''} created successfully for ${coachCount} coach${coachCount > 1 ? 'es' : ''}`);
+      toast.success(`Training session created successfully with ${coachCount} coach${coachCount > 1 ? 'es' : ''}`);
       resetForm();
     },
     onError: (error) => {
@@ -288,13 +287,29 @@ export function SessionsManager() {
     mutationFn: async ({ id, ...session }: typeof formData & { id: string }) => {
       if (!session.package_type) throw new Error('Package type is required');
 
-      const coachId = formData.package_type === "Personal Training" ? formData.coach_id : selectedCoaches[0];
-      
-      if (!coachId) throw new Error('At least one coach must be selected');
+      let updateData;
+
+      if (formData.package_type === "Personal Training") {
+        if (!formData.coach_id) throw new Error('Coach must be selected for Personal Training');
+        updateData = {
+          ...session,
+          coach_id: formData.coach_id,
+          coach_ids: null,
+          package_type: session.package_type
+        };
+      } else if (formData.package_type === "Camp Training") {
+        if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected for Camp Training');
+        updateData = {
+          ...session,
+          coach_id: selectedCoaches[0],
+          coach_ids: selectedCoaches,
+          package_type: session.package_type
+        };
+      }
 
       const { data, error } = await supabase
         .from('training_sessions')
-        .update({ ...session, coach_id: coachId, package_type: session.package_type || null })
+        .update(updateData)
         .eq('id', id)
         .select()
         .single();
@@ -418,24 +433,6 @@ export function SessionsManager() {
       return;
     }
 
-    // Check for conflicts
-    const coachesToCheck = formData.package_type === "Personal Training" ? [formData.coach_id] : selectedCoaches;
-    
-    const hasConflict = sessions?.some(session =>
-      coachesToCheck.includes(session.coach_id) &&
-      session.date === formData.date &&
-      (
-        (formData.start_time < session.end_time) &&
-        (formData.end_time > session.start_time)
-      ) &&
-      (!editingSession || editingSession.id !== session.id)
-    );
-
-    if (hasConflict) {
-      toast.error('One or more selected coaches are already scheduled for a session on this date/time.');
-      return;
-    }
-
     if (editingSession) {
       updateMutation.mutate({ ...formData, id: editingSession.id });
     } else {
@@ -459,7 +456,7 @@ export function SessionsManager() {
     if (session.package_type === "Personal Training") {
       setSelectedCoaches([]);
     } else {
-      setSelectedCoaches([session.coach_id]);
+      setSelectedCoaches(session.coach_ids || [session.coach_id]);
     }
     setIsDialogOpen(true);
   };
@@ -506,13 +503,24 @@ export function SessionsManager() {
     }
   };
 
+  const getCoachNames = (session: TrainingSession) => {
+    if (session.coach_ids && session.coach_ids.length > 0) {
+      const coachNames = session.coach_ids
+        .map(coachId => coaches?.find(c => c.id === coachId)?.name)
+        .filter(Boolean)
+        .join(', ');
+      return coachNames || session.coaches.name;
+    }
+    return session.coaches.name;
+  };
+
   const filteredSessions = sessions
     ?.filter((session) =>
-      (session.coaches.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (getCoachNames(session).toLowerCase().includes(searchTerm.toLowerCase()) ||
        session.branches.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterPackageType === "All" || session.package_type === filterPackageType) &&
       (branchFilter === "All" || session.branch_id === branchFilter) &&
-      (coachFilter === "All" || session.coach_id === coachFilter)
+      (coachFilter === "All" || session.coach_id === coachFilter || (session.coach_ids && session.coach_ids.includes(coachFilter)))
     )
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
@@ -1046,7 +1054,9 @@ export function SessionsManager() {
                       <CardContent className="space-y-3">
                         <div className="flex items-center space-x-2 min-w-0">
                           <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Coach:</span> {session.coaches.name}</span>
+                          <span className="text-xs sm:text-sm truncate">
+                            <span className="font-medium">Coach{session.coach_ids && session.coach_ids.length > 1 ? 'es' : ''}:</span> {getCoachNames(session)}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-2 min-w-0">
                           <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
@@ -1164,7 +1174,7 @@ export function SessionsManager() {
                   <div className="flex items-center space-x-2 min-w-0">
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Coach: {selectedSession?.coaches.name || 'N/A'}
+                      Coach{selectedSession?.coach_ids && selectedSession.coach_ids.length > 1 ? 'es' : ''}: {selectedSession ? getCoachNames(selectedSession) : 'N/A'}
                     </span>
                   </div>
                   <div className="flex items-center space-x-2 min-w-0">
@@ -1234,7 +1244,7 @@ export function SessionsManager() {
                     <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'N/A'}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
-                    <span className="font-medium">Coach:</span> {selectedSession?.coaches.name || 'N/A'}
+                    <span className="font-medium">Coach{selectedSession?.coach_ids && selectedSession.coach_ids.length > 1 ? 'es' : ''}:</span> {selectedSession ? getCoachNames(selectedSession) : 'N/A'}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-600">
                     Currently selected: {selectedStudents.length} players
