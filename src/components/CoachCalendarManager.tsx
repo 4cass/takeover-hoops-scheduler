@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
@@ -60,7 +59,7 @@ export function CoachCalendarManager() {
     enabled: !!user?.id,
   });
 
-  // Fetch training sessions for this coach
+  // Fetch training sessions for this coach with explicit foreign key references
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ['coach-calendar-sessions', coachId],
     queryFn: async () => {
@@ -76,14 +75,14 @@ export function CoachCalendarManager() {
           ),
           session_coaches!inner (
             coach_id,
-            coaches (
+            coaches!session_coaches_coach_id_fkey (
               id,
               name
             )
           ),
           session_participants (
             student_id,
-            students (
+            students!session_participants_student_id_fkey (
               name
             )
           )

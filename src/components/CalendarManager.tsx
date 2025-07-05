@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
@@ -39,7 +38,7 @@ interface TrainingSession {
 export function CalendarManager() {
   const [selectedEvent, setSelectedEvent] = useState<TrainingSession | null>(null);
 
-  // Fetch training sessions
+  // Fetch training sessions with explicit foreign key references
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ['calendar-sessions'],
     queryFn: async () => {
@@ -52,14 +51,14 @@ export function CalendarManager() {
             city
           ),
           session_coaches (
-            coaches (
+            coaches!session_coaches_coach_id_fkey (
               id,
               name
             )
           ),
           session_participants (
             student_id,
-            students (
+            students!session_participants_student_id_fkey (
               name
             )
           )
@@ -76,7 +75,6 @@ export function CalendarManager() {
     }
   });
 
-  // Transform sessions into calendar events
   const events = sessions.map(session => {
     const startDateTime = new Date(`${session.date}T${session.start_time}`);
     const endDateTime = new Date(`${session.date}T${session.end_time}`);
