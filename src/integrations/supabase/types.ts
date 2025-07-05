@@ -197,20 +197,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "fk_session_participants_session"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "training_sessions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fk_session_participants_student"
-            columns: ["student_id"]
-            isOneToOne: false
-            referencedRelation: "students"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "session_participants_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
@@ -276,6 +262,7 @@ export type Database = {
       training_sessions: {
         Row: {
           branch_id: string
+          coach_id: string | null
           created_at: string
           date: string
           end_time: string
@@ -288,6 +275,7 @@ export type Database = {
         }
         Insert: {
           branch_id: string
+          coach_id?: string | null
           created_at?: string
           date: string
           end_time: string
@@ -300,6 +288,7 @@ export type Database = {
         }
         Update: {
           branch_id?: string
+          coach_id?: string | null
           created_at?: string
           date?: string
           end_time?: string
@@ -312,10 +301,10 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "fk_training_sessions_branch"
-            columns: ["branch_id"]
+            foreignKeyName: "fk_training_sessions_coach"
+            columns: ["coach_id"]
             isOneToOne: false
-            referencedRelation: "branches"
+            referencedRelation: "coaches"
             referencedColumns: ["id"]
           },
           {
