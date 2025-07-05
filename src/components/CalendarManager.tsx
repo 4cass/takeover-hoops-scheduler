@@ -118,12 +118,12 @@ export function CalendarManager() {
     end: endOfMonth(currentMonth),
   });
 
-  const getStatusBadgeColor = (status: string) => {
+  const getStatusBadgeVariant = (status: string) => {
     switch (status) {
-      case 'scheduled': return 'bg-[accent]/10 text-[accent] border-[accent]/20';
-      case 'completed': return 'bg-green-100 text-green-700 border-green-200';
-      case 'cancelled': return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'scheduled': return 'scheduled';
+      case 'completed': return 'completed';
+      case 'cancelled': return 'cancelled';
+      default: return 'default';
     }
   };
 
@@ -334,8 +334,8 @@ export function CalendarManager() {
                             {daySessions.length} session{daySessions.length !== 1 ? 's' : ''}
                           </div>
                           <div className="flex space-x-1">
-                            {hasScheduled && <div className="w-2 h-2 bg-blue-500 rounded-full"></div>}
-                            {hasCompleted && <div className="w-2 h-2 bg-green-500 rounded-full"></div>}
+                            {hasScheduled && <div className="w-2 h-2 bg-green-500 rounded-full"></div>}
+                            {hasCompleted && <div className="w-2 h-2 bg-blue-500 rounded-full"></div>}
                             {hasCancelled && <div className="w-2 h-2 bg-red-500 rounded-full"></div>}
                           </div>
                         </div>
@@ -348,11 +348,11 @@ export function CalendarManager() {
               {/* Legend */}
               <div className="mt-4 sm:mt-6 flex flex-wrap gap-3 sm:gap-4 justify-center text-xs sm:text-sm">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                   <span className="text-gray-600">Scheduled</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
                   <span className="text-gray-600">Completed</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -421,7 +421,7 @@ export function CalendarManager() {
                             </div>
                           </div>
                           <div className="flex items-center space-x-2 min-w-0">
-                            <Badge className={`${getStatusBadgeColor(session.status)} font-medium px-2 sm:px-3 py-1 text-xs sm:text-sm truncate`}>
+                            <Badge variant={getStatusBadgeVariant(session.status)} className="font-medium px-2 sm:px-3 py-1 text-xs sm:text-sm truncate">
                               {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
                             </Badge>
                           </div>
