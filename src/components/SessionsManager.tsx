@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -29,16 +30,12 @@ type TrainingSession = {
   end_time: string;
   branch_id: string;
   coach_id: string;
-  notes: string | null;
   status: SessionStatus;
   package_type: "Camp Training" | "Personal Training" | null;
+  notes?: string;
   branches: { name: string };
   coaches: { name: string };
-  session_participants: Array<{
-    id: string;
-    student_id: string;
-    students: { name: string };
-  }>;
+  session_participants: Array<{ students: { name: string } }>;
 };
 
 // Helper function to format date for display
@@ -103,7 +100,7 @@ export function SessionsManager() {
 
   const queryClient = useQueryClient();
 
-  const { data: sessions, isLoading, error } = useQuery({
+  const { data: sessions = [], refetch } = useQuery({
     queryKey: ['training-sessions'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -113,8 +110,6 @@ export function SessionsManager() {
           branches (name),
           coaches (name),
           session_participants (
-            id,
-            student_id,
             students (name)
           )
         `)
@@ -174,66 +169,108 @@ export function SessionsManager() {
     mutationFn: async (session: typeof formData) => {
       if (!session.package_type) throw new Error('Package type is required');
 
-      const coachId = formData.package_type === "Personal Training" ? formData.coach_id : selectedCoaches[0];
-      
-      if (!coachId) throw new Error('At least one coach must be selected');
+      let sessionsToCreate = [];
 
-      const coachesToCheck = formData.package_type === "Camp Training" ? selectedCoaches : [formData.coach_id];
-      
-      for (const checkCoachId of coachesToCheck) {
+      if (formData.package_type === "Personal Training") {
+        if (!formData.coach_id) throw new Error('Coach must be selected for Personal Training');
+        
+        // Check for conflicts
         const { data: conflicts } = await supabase
           .from('training_sessions')
           .select('id')
-          .eq('coach_id', checkCoachId)
+          .eq('coach_id', formData.coach_id)
           .eq('date', session.date)
           .lte('start_time', session.end_time)
           .gte('end_time', session.start_time);
 
         if (conflicts && conflicts.length > 0) {
-          const coachName = coaches?.find(c => c.id === checkCoachId)?.name;
+          const coachName = coaches?.find(c => c.id === formData.coach_id)?.name;
           throw new Error(`Coach ${coachName} is already scheduled for a session on this date/time.`);
         }
-      }
-      
-      const { data, error } = await supabase
-        .from('training_sessions')
-        .insert([{ ...session, coach_id: coachId, package_type: session.package_type || null }])
-        .select()
-        .single();
-      
-      if (error) throw error;
 
+        sessionsToCreate.push({
+          ...session,
+          coach_id: formData.coach_id,
+          package_type: session.package_type
+        });
+      } else if (formData.package_type === "Camp Training") {
+        if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected for Camp Training');
+        
+        // Check for conflicts for all selected coaches
+        for (const coachId of selectedCoaches) {
+          const { data: conflicts } = await supabase
+            .from('training_sessions')
+            .select('id')
+            .eq('coach_id', coachId)
+            .eq('date', session.date)
+            .lte('start_time', session.end_time)
+            .gte('end_time', session.start_time);
+
+          if (conflicts && conflicts.length > 0) {
+            const coachName = coaches?.find(c => c.id === coachId)?.name;
+            throw new Error(`Coach ${coachName} is already scheduled for a session on this date/time.`);
+          }
+        }
+
+        // Create separate sessions for each coach in camp training
+        sessionsToCreate = selectedCoaches.map(coachId => ({
+          ...session,
+          coach_id: coachId,
+          package_type: session.package_type
+        }));
+      }
+
+      const createdSessions = [];
+      
+      // Insert all sessions
+      for (const sessionData of sessionsToCreate) {
+        console.log('Creating session for coach:', sessionData.coach_id);
+        const { data: sessionResult, error } = await supabase
+          .from('training_sessions')
+          .insert([sessionData])
+          .select()
+          .single();
+        
+        if (error) throw error;
+        createdSessions.push(sessionResult);
+      }
+
+      // Add participants to all created sessions
       if (selectedStudents.length > 0) {
-        const { error: participantsError } = await supabase
-          .from('session_participants')
-          .insert(
-            selectedStudents.map(studentId => ({
-              session_id: data.id,
-              student_id: studentId
-            }))
-          );
-        
-        if (participantsError) throw participantsError;
+        for (const session of createdSessions) {
+          const { error: participantsError } = await supabase
+            .from('session_participants')
+            .insert(
+              selectedStudents.map(studentId => ({
+                session_id: session.id,
+                student_id: studentId
+              }))
+            );
+          
+          if (participantsError) throw participantsError;
 
-        const { error: attendanceError } = await supabase
-          .from('attendance_records')
-          .insert(
-            selectedStudents.map(studentId => ({
-              session_id: data.id,
-              student_id: studentId,
-              status: 'pending' as const
-            }))
-          );
-        
-        if (attendanceError) throw attendanceError;
+          const { error: attendanceError } = await supabase
+            .from('attendance_records')
+            .insert(
+              selectedStudents.map(studentId => ({
+                session_id: session.id,
+                student_id: studentId,
+                status: 'pending' as const
+              }))
+            );
+          
+          if (attendanceError) throw attendanceError;
+        }
       }
 
-      return data;
+      return createdSessions;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      toast.success('Training session created successfully');
+      const sessionCount = data.length;
+      const coachCount = formData.package_type === "Camp Training" ? selectedCoaches.length : 1;
+      toast.success(`${sessionCount} training session${sessionCount > 1 ? 's' : ''} created successfully for ${coachCount} coach${coachCount > 1 ? 'es' : ''}`);
       resetForm();
     },
     onError: (error) => {
@@ -375,6 +412,7 @@ export function SessionsManager() {
       return;
     }
 
+    // Check for conflicts
     const coachesToCheck = formData.package_type === "Personal Training" ? [formData.coach_id] : selectedCoaches;
     
     const hasConflict = sessions?.some(session =>
@@ -411,7 +449,7 @@ export function SessionsManager() {
       status: session.status,
       package_type: session.package_type || "",
     });
-    setSelectedStudents(session.session_participants?.map(p => p.student_id) || []);
+    setSelectedStudents(session.session_participants?.map(p => p.students.name) || []);
     if (session.package_type === "Personal Training") {
       setSelectedCoaches([]);
     } else {
@@ -433,7 +471,7 @@ export function SessionsManager() {
       package_type: session.package_type || "",
       coach_id: session.coach_id,
     }));
-    setSelectedStudents(session.session_participants?.map(p => p.student_id) || []);
+    setSelectedStudents(session.session_participants?.map(p => p.students.name) || []);
     setIsParticipantsDialogOpen(true);
   };
 
@@ -497,7 +535,7 @@ export function SessionsManager() {
   }
 
   return (
-    <div className="min-h-screen bg-white pt-4 p-3 sm:p-4 md:p-5">
+    <div className="min-h-screen bg-background pt-4 p-3 sm:p-4 md:p-5">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="mb-6">
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#181818] mb-2 tracking-tight">Sessions Manager</h1>
@@ -526,314 +564,318 @@ export function SessionsManager() {
                     Schedule New Session
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden p-3 sm:p-4 md:p-5">
-                  <DialogHeader className="pb-4">
-                    <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
-                      {editingSession ? 'Edit Training Session' : 'Schedule New Training Session'}
-                    </DialogTitle>
-                    <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                      {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                          <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          Branch Location
-                        </Label>
-                        <Select 
-                          value={formData.branch_id} 
-                          onValueChange={(value) => {
-                            setFormData(prev => ({ ...prev, branch_id: value, package_type: "", coach_id: "" }));
-                            setSelectedStudents([]);
-                            setSelectedCoaches([]);
-                          }}
-                        >
-                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                            <SelectValue placeholder="Select branch" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {branches?.map(branch => (
-                              <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
-                                {branch.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="package_type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                          <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          Package Type
-                        </Label>
-                        <Select
-                          value={formData.package_type}
-                          onValueChange={(value: "Camp Training" | "Personal Training") => {
-                            setFormData(prev => ({ ...prev, package_type: value, coach_id: "" }));
-                            setSelectedStudents([]);
-                            setSelectedCoaches([]);
-                          }}
-                          disabled={!formData.branch_id}
-                        >
-                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                            <SelectValue placeholder={formData.branch_id ? "Select package type" : "Select branch first"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
-                            <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="flex flex-col space-y-2 min-w-0">
-                      <Label htmlFor="coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                        {formData.package_type === "Camp Training" ? "Select Coaches (Multiple)" : "Assigned Coach"}
-                      </Label>
-                      {formData.package_type === "Personal Training" ? (
-                        <Select 
-                          value={formData.coach_id} 
-                          onValueChange={(value) => {
-                            setFormData(prev => ({ ...prev, coach_id: value }));
-                            setSelectedCoaches([]);
-                          }}
-                          disabled={!formData.package_type || coachesLoading}
-                        >
-                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                            <SelectValue placeholder={
-                              coachesLoading ? "Loading coaches..." : 
-                              coachesError ? "Error loading coaches" : 
-                              formData.package_type ? "Select coach" : "Select package type first"
-                            } />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {coaches?.map(coach => (
-                              <SelectItem key={coach.id} value={coach.id} className="text-xs sm:text-sm">
-                                {coach.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : formData.package_type === "Camp Training" ? (
-                        <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
-                          {coachesLoading ? (
-                            <p className="text-xs sm:text-sm text-gray-600">Loading coaches...</p>
-                          ) : coachesError ? (
-                            <p className="text-xs sm:text-sm text-red-600">Error loading coaches: {(coachesError as Error).message}</p>
-                          ) : coaches?.length === 0 ? (
-                            <p className="text-xs sm:text-sm text-gray-600">No coaches available.</p>
-                          ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {coaches?.map(coach => (
-                                <div key={coach.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
-                                  <input
-                                    type="checkbox"
-                                    id={`coach-${coach.id}`}
-                                    checked={selectedCoaches.includes(coach.id)}
-                                    onChange={() => handleCoachToggle(coach.id)}
-                                    className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                    style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                                  />
-                                  <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-hidden">
+                  <ScrollArea className="max-h-[85vh]">
+                    <div className="p-3 sm:p-4 md:p-5">
+                      <DialogHeader className="pb-4">
+                        <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
+                          {editingSession ? 'Edit Training Session' : 'Schedule New Training Session'}
+                        </DialogTitle>
+                        <DialogDescription className="text-gray-600 text-xs sm:text-sm">
+                          {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label htmlFor="branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                              <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              Branch Location
+                            </Label>
+                            <Select 
+                              value={formData.branch_id} 
+                              onValueChange={(value) => {
+                                setFormData(prev => ({ ...prev, branch_id: value, package_type: "", coach_id: "" }));
+                                setSelectedStudents([]);
+                                setSelectedCoaches([]);
+                              }}
+                            >
+                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                                <SelectValue placeholder="Select branch" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {branches?.map(branch => (
+                                  <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
+                                    {branch.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label htmlFor="package_type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                              <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              Package Type
+                            </Label>
+                            <Select
+                              value={formData.package_type}
+                              onValueChange={(value: "Camp Training" | "Personal Training") => {
+                                setFormData(prev => ({ ...prev, package_type: value, coach_id: "" }));
+                                setSelectedStudents([]);
+                                setSelectedCoaches([]);
+                              }}
+                              disabled={!formData.branch_id}
+                            >
+                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                                <SelectValue placeholder={formData.branch_id ? "Select package type" : "Select branch first"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
+                                <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="flex flex-col space-y-2 min-w-0">
+                          <Label htmlFor="coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                            <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                            {formData.package_type === "Camp Training" ? "Select Coaches (Multiple)" : "Assigned Coach"}
+                          </Label>
+                          {formData.package_type === "Personal Training" ? (
+                            <Select 
+                              value={formData.coach_id} 
+                              onValueChange={(value) => {
+                                setFormData(prev => ({ ...prev, coach_id: value }));
+                                setSelectedCoaches([]);
+                              }}
+                              disabled={!formData.package_type || coachesLoading}
+                            >
+                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                                <SelectValue placeholder={
+                                  coachesLoading ? "Loading coaches..." : 
+                                  coachesError ? "Error loading coaches" : 
+                                  formData.package_type ? "Select coach" : "Select package type first"
+                                } />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {coaches?.map(coach => (
+                                  <SelectItem key={coach.id} value={coach.id} className="text-xs sm:text-sm">
                                     {coach.name}
-                                  </Label>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : formData.package_type === "Camp Training" ? (
+                            <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                              {coachesLoading ? (
+                                <p className="text-xs sm:text-sm text-gray-600">Loading coaches...</p>
+                              ) : coachesError ? (
+                                <p className="text-xs sm:text-sm text-red-600">Error loading coaches: {(coachesError as Error).message}</p>
+                              ) : coaches?.length === 0 ? (
+                                <p className="text-xs sm:text-sm text-gray-600">No coaches available.</p>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {coaches?.map(coach => (
+                                    <div key={coach.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        id={`coach-${coach.id}`}
+                                        checked={selectedCoaches.includes(coach.id)}
+                                        onChange={() => handleCoachToggle(coach.id)}
+                                        className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                        style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                      />
+                                      <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                                        {coach.name}
+                                      </Label>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
+                              )}
+                              <p className="text-xs text-gray-600 mt-2">
+                                Selected: {selectedCoaches.length} coach{selectedCoaches.length === 1 ? '' : 'es'}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="border-2 rounded-lg p-3 text-center text-gray-500 text-xs sm:text-sm" style={{ borderColor: '#181A18' }}>
+                              Please select a package type first
                             </div>
                           )}
-                          <p className="text-xs text-gray-600 mt-2">
-                            Selected: {selectedCoaches.length} coach{selectedCoaches.length === 1 ? '' : 'es'}
-                          </p>
+                          {coachesError && (
+                            <p className="text-xs sm:text-sm text-red-600 mt-1">Error loading coaches: {(coachesError as Error).message}</p>
+                          )}
                         </div>
-                      ) : (
-                        <div className="border-2 rounded-lg p-3 text-center text-gray-500 text-xs sm:text-sm" style={{ borderColor: '#181A18' }}>
-                          Please select a package type first
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label htmlFor="date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                              <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              Session Date
+                            </Label>
+                            <Input
+                              id="date"
+                              type="date"
+                              value={formData.date}
+                              onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                              required
+                              min={getTodayDate()}
+                              className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                              disabled={!formData.branch_id}
+                              style={{ borderColor: '#BEA877' }}
+                            />
+                          </div>
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label htmlFor="status" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                              <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              Session Status
+                            </Label>
+                            <Select 
+                              value={formData.status} 
+                              onValueChange={(value: SessionStatus) => setFormData(prev => ({ ...prev, status: value }))}
+                              disabled={!formData.branch_id}
+                            >
+                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="scheduled" className="text-xs sm:text-sm">Scheduled</SelectItem>
+                                <SelectItem value="completed" className="text-xs sm:text-sm">Completed</SelectItem>
+                                <SelectItem value="cancelled" className="text-xs sm:text-sm">Cancelled</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
-                      )}
-                      {coachesError && (
-                        <p className="text-xs sm:text-sm text-red-600 mt-1">Error loading coaches: {(coachesError as Error).message}</p>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                          <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          Session Date
-                        </Label>
-                        <Input
-                          id="date"
-                          type="date"
-                          value={formData.date}
-                          onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                          required
-                          min={getTodayDate()}
-                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                          disabled={!formData.branch_id}
-                          style={{ borderColor: '#BEA877' }}
-                        />
-                      </div>
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="status" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                          <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          Session Status
-                        </Label>
-                        <Select 
-                          value={formData.status} 
-                          onValueChange={(value: SessionStatus) => setFormData(prev => ({ ...prev, status: value }))}
-                          disabled={!formData.branch_id}
-                        >
-                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="scheduled" className="text-xs sm:text-sm">Scheduled</SelectItem>
-                            <SelectItem value="completed" className="text-xs sm:text-sm">Completed</SelectItem>
-                            <SelectItem value="cancelled" className="text-xs sm:text-sm">Cancelled</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="start_time" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                          <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          Start Time
-                        </Label>
-                        <Input
-                          id="start_time"
-                          type="time"
-                          value={formData.start_time}
-                          onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
-                          required
-                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                          disabled={!formData.branch_id}
-                          style={{ borderColor: '#BEA877' }}
-                        />
-                      </div>
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="end_time" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                          <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          End Time
-                        </Label>
-                        <Input
-                          id="end_time"
-                          type="time"
-                          value={formData.end_time}
-                          onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
-                          required
-                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                          disabled={!formData.branch_id}
-                          style={{ borderColor: '#BEA877' }}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex flex-col space-y-2 min-w-0">
-                      <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                        Select Players ({selectedStudents.length} selected)
-                      </Label>
-                      <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
-                        {formData.branch_id && formData.package_type ? (
-                          studentsLoading ? (
-                            <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
-                          ) : studentsError ? (
-                            <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
-                          ) : students?.length === 0 ? (
-                            <p className="text-xs sm:text-sm text-gray-600">
-                              No students available for this branch and package type combination.
-                            </p>
-                          ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {students?.map(student => (
-                                <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
-                                  <input
-                                    type="checkbox"
-                                    id={student.id}
-                                    checked={selectedStudents.includes(student.id)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedStudents(prev => [...prev, student.id]);
-                                      } else {
-                                        setSelectedStudents(prev => prev.filter(id => id !== student.id));
-                                      }
-                                    }}
-                                    className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                    style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                                  />
-                                  <Label htmlFor={student.id} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
-                                    {student.name} ({student.remaining_sessions} sessions left)
-                                  </Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label htmlFor="start_time" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                              <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              Start Time
+                            </Label>
+                            <Input
+                              id="start_time"
+                              type="time"
+                              value={formData.start_time}
+                              onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
+                              required
+                              className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                              disabled={!formData.branch_id}
+                              style={{ borderColor: '#BEA877' }}
+                            />
+                          </div>
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label htmlFor="end_time" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                              <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              End Time
+                            </Label>
+                            <Input
+                              id="end_time"
+                              type="time"
+                              value={formData.end_time}
+                              onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
+                              required
+                              className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                              disabled={!formData.branch_id}
+                              style={{ borderColor: '#BEA877' }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-col space-y-2 min-w-0">
+                          <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                            <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                            Select Players ({selectedStudents.length} selected)
+                          </Label>
+                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                            {formData.branch_id && formData.package_type ? (
+                              studentsLoading ? (
+                                <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
+                              ) : studentsError ? (
+                                <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
+                              ) : students?.length === 0 ? (
+                                <p className="text-xs sm:text-sm text-gray-600">
+                                  No students available for this branch and package type combination.
+                                </p>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {students?.map(student => (
+                                    <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        id={student.id}
+                                        checked={selectedStudents.includes(student.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedStudents(prev => [...prev, student.id]);
+                                          } else {
+                                            setSelectedStudents(prev => prev.filter(id => id !== student.id));
+                                          }
+                                        }}
+                                        className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                        style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                      />
+                                      <Label htmlFor={student.id} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                                        {student.name} ({student.remaining_sessions} sessions left)
+                                      </Label>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
-                          )
-                        ) : (
-                          <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
-                        )}
-                      </div>
+                              )
+                            ) : (
+                              <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col space-y-2 min-w-0">
+                          <Label htmlFor="notes" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                            <Eye className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                            Session Notes (Optional)
+                          </Label>
+                          <Input
+                            id="notes"
+                            value={formData.notes}
+                            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                            placeholder="Add any special notes or instructions for this session..."
+                            className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                            disabled={!formData.branch_id}
+                            style={{ borderColor: '#BEA877' }}
+                          />
+                        </div>
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4 border-t border-gray-200 flex-wrap">
+                          {editingSession && (
+                            <Button 
+                              type="button" 
+                              variant="destructive" 
+                              onClick={() => {
+                                if (editingSession) {
+                                  deleteMutation.mutate(editingSession.id);
+                                  resetForm();
+                                }
+                              }}
+                              disabled={deleteMutation.isPending || !formData.branch_id}
+                              className="bg-red-600 text-white hover:bg-red-700 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete Session
+                            </Button>
+                          )}
+                          <div className="flex space-x-3 w-full sm:w-auto flex-wrap gap-2">
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              onClick={resetForm} 
+                              className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                            >
+                              Cancel
+                            </Button>
+                            <Button 
+                              type="submit" 
+                              disabled={
+                                createMutation.isPending || 
+                                updateMutation.isPending || 
+                                !formData.branch_id || 
+                                !formData.package_type || 
+                                (formData.package_type === "Personal Training" && !formData.coach_id) ||
+                                (formData.package_type === "Camp Training" && selectedCoaches.length === 0) ||
+                                !formData.date
+                              }
+                              className="bg-accent hover:bg-[#8e7a3f] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                              style={{ backgroundColor: '#BEA877' }}
+                            >
+                              {editingSession ? 'Update Session' : 'Schedule Session'}
+                            </Button>
+                          </div>
+                        </div>
+                      </form>
                     </div>
-                    <div className="flex flex-col space-y-2 min-w-0">
-                      <Label htmlFor="notes" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <Eye className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                        Session Notes (Optional)
-                      </Label>
-                      <Input
-                        id="notes"
-                        value={formData.notes}
-                        onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                        placeholder="Add any special notes or instructions for this session..."
-                        className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                        disabled={!formData.branch_id}
-                        style={{ borderColor: '#BEA877' }}
-                      />
-                    </div>
-                    <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4 border-t border-gray-200 flex-wrap">
-                      {editingSession && (
-                        <Button 
-                          type="button" 
-                          variant="destructive" 
-                          onClick={() => {
-                            if (editingSession) {
-                              deleteMutation.mutate(editingSession.id);
-                              resetForm();
-                            }
-                          }}
-                          disabled={deleteMutation.isPending || !formData.branch_id}
-                          className="bg-red-600 text-white hover:bg-red-700 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete Session
-                        </Button>
-                      )}
-                      <div className="flex space-x-3 w-full sm:w-auto flex-wrap gap-2">
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={resetForm} 
-                          className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                        >
-                          Cancel
-                        </Button>
-                        <Button 
-                          type="submit" 
-                          disabled={
-                            createMutation.isPending || 
-                            updateMutation.isPending || 
-                            !formData.branch_id || 
-                            !formData.package_type || 
-                            (formData.package_type === "Personal Training" && !formData.coach_id) ||
-                            (formData.package_type === "Camp Training" && selectedCoaches.length === 0) ||
-                            !formData.date
-                          }
-                          className="bg-accent hover:bg-[#8e7a3f] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                          style={{ backgroundColor: '#BEA877' }}
-                        >
-                          {editingSession ? 'Update Session' : 'Schedule Session'}
-                        </Button>
-                      </div>
-                    </div>
-                  </form>
+                  </ScrollArea>
                 </DialogContent>
               </Dialog>
             </div>
