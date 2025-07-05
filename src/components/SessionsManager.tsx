@@ -102,7 +102,7 @@ const SessionsManager = () => {
       }
       
       console.log('Training sessions fetched:', data);
-      return data as TrainingSession[];
+      return data;
     },
   });
 
