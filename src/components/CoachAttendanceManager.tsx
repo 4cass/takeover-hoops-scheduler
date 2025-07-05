@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
@@ -116,8 +117,20 @@ export function CoachAttendanceManager() {
       
       let query = supabase
         .from("training_sessions")
-        .select("id, date, start_time, end_time, status, package_type, branches (name), coaches (name)")
-        .eq("coach_id", coachId)
+        .select(`
+          id, 
+          date, 
+          start_time, 
+          end_time, 
+          status, 
+          package_type,
+          branches!training_sessions_branch_id_fkey (name),
+          session_coaches!inner (
+            coach_id,
+            coaches (name)
+          )
+        `)
+        .eq("session_coaches.coach_id", coachId)
         .gte("date", format(pastDate, 'yyyy-MM-dd'))
         .lte("date", format(futureDate, 'yyyy-MM-dd'));
 
@@ -151,7 +164,14 @@ export function CoachAttendanceManager() {
       console.log("Fetching attendance for session:", selectedSession);
       const { data, error } = await supabase
         .from("attendance_records")
-        .select("id, session_id, student_id, status, marked_at, students (name)")
+        .select(`
+          id, 
+          session_id, 
+          student_id, 
+          status, 
+          marked_at, 
+          students!attendance_records_student_id_fkey (name)
+        `)
         .eq("session_id", selectedSession)
         .order("created_at", { ascending: true });
       
