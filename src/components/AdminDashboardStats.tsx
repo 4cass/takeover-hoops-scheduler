@@ -1,3 +1,4 @@
+
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,11 +81,7 @@ export function AdminDashboardStats() {
           .limit(3),
         supabase
           .from('training_sessions')
-          .select(`
-            id, 
-            created_at, 
-            coaches!inner (name)
-          `)
+          .select('id, created_at, coaches!inner (name)')
           .eq('status', 'scheduled')
           .order('created_at', { ascending: false })
           .limit(3),
@@ -317,9 +314,7 @@ export function AdminDashboardStats() {
                               {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
                             </div>
                           </TableCell>
-                          <TableCell className="text-muted-foreground font-medium">
-                            {session.coaches?.name || 'No coach assigned'}
-                          </TableCell>
+                          <TableCell className="text-muted-foreground font-medium">{session.coaches?.name}</TableCell>
                           <TableCell className="text-muted-foreground font-medium">{session.branches?.name}</TableCell>
                         </TableRow>
                       ))}
