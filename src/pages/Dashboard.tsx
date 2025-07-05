@@ -11,12 +11,24 @@ import StudentsManager from '@/components/StudentsManager';
 import { CalendarManager } from '@/components/CalendarManager';
 import { CoachCalendarManager } from '@/components/CoachCalendarManager';
 import { CoachAttendanceManager } from '@/components/CoachAttendanceManager';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/context/AuthContext';
+import { Navigate } from 'react-router-dom';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
-  const { role } = useAuth();
+  const { user, role, loading } = useAuth();
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!role || !['admin', 'coach'].includes(role)) {
+    return <Navigate to="/index" replace />;
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -44,16 +56,14 @@ const Dashboard = () => {
   };
 
   return (
-    <ProtectedRoute allowedRoles={['admin', 'coach']}>
-      <SidebarProvider>
-        <AppSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        <SidebarInset>
-          <div className="p-6">
-            {renderContent()}
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
-    </ProtectedRoute>
+    <SidebarProvider>
+      <AppSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <SidebarInset>
+        <div className="p-6">
+          {renderContent()}
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 };
 
