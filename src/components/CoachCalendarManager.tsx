@@ -359,46 +359,49 @@ export function CoachCalendarManager() {
                   selectedDateSessions.map(session => (
                     <Card key={session.id} className="border border-[#181A18] bg-white hover:shadow-lg transition-all duration-300">
                       <CardContent className="p-3 sm:p-4 lg:p-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 sm:gap-4 items-start lg:items-center">
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-gray-600">Time</p>
-                              <p className="font-bold text-black text-xs sm:text-sm truncate">
-                                {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
-                              </p>
+                        <div className="space-y-4">
+                          {/* Session Information Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-gray-600">Time</p>
+                                <p className="font-bold text-black text-xs sm:text-sm truncate">
+                                  {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-gray-600">Branch</p>
+                                <p className="font-bold text-black text-xs sm:text-sm truncate">{session.branches.name}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <Users className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-gray-600">Players</p>
+                                <p className="font-bold text-black text-xs sm:text-sm">{session.session_participants?.length || 0}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <Users className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-gray-600">Package</p>
+                                <p className="font-bold text-black text-xs sm:text-sm truncate">{session.package_type || 'N/A'}</p>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-gray-600">Branch</p>
-                              <p className="font-bold text-black text-xs sm:text-sm truncate">{session.branches.name}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-gray-600">Players</p>
-                              <p className="font-bold text-black text-xs sm:text-sm">{session.session_participants?.length || 0}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-gray-600">Package</p>
-                              <p className="font-bold text-black text-xs sm:text-sm truncate">{session.package_type || 'N/A'}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <Badge className={`${getStatusBadgeColor(session.status)} font-bold px-2 sm:px-3 py-1 text-xs border`}>
+                          
+                          {/* Status and Action Section */}
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2 border-t border-gray-100">
+                            <Badge variant={session.status as "scheduled" | "completed" | "cancelled"} className="font-bold px-3 py-1 text-xs">
                               {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
                             </Badge>
-                          </div>
-                          <div className="flex justify-end lg:justify-end">
                             <Button
                               onClick={() => handleAttendanceRedirect(session.id)}
-                              className="bg-[#8e7a3f] hover:bg-[#8e7a3f]/90 text-white font-bold transition-all duration-300 w-full lg:w-auto text-xs sm:text-sm"
+                              className="bg-[#8e7a3f] hover:bg-[#8e7a3f]/90 text-white font-bold transition-all duration-300 w-full sm:w-auto text-xs sm:text-sm"
                               size="sm"
                             >
                               Manage Attendance
