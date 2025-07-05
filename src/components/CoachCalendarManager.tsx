@@ -21,11 +21,9 @@ type TrainingSession = {
   start_time: string;
   end_time: string;
   branch_id: string;
-  coach_id: string;
   status: SessionStatus;
   package_type: "Camp Training" | "Personal Training" | null;
   branches: { name: string };
-  coaches: { name: string };
   session_participants: Array<{ students: { name: string } }>;
 };
 
@@ -69,27 +67,29 @@ export function CoachCalendarManager() {
     queryKey: ['coach-training-sessions', coachId, selectedBranch, filterPackageType, currentMonth],
     queryFn: async () => {
       if (!coachId) return [];
+      
       let query = supabase
-        .from('training_sessions')
+        .from('session_coaches')
         .select(`
-          id, date, start_time, end_time, branch_id, coach_id, status, package_type,
-          branches (name),
-          coaches (name),
-          session_participants (
-            students (name)
+          training_sessions!inner (
+            id, date, start_time, end_time, branch_id, status, package_type,
+            branches (name),
+            session_participants (
+              students (name)
+            )
           )
         `)
         .eq('coach_id', coachId)
-        .gte('date', format(startOfMonth(currentMonth), 'yyyy-MM-dd'))
-        .lte('date', format(endOfMonth(currentMonth), 'yyyy-MM-dd'));
+        .gte('training_sessions.date', format(startOfMonth(currentMonth), 'yyyy-MM-dd'))
+        .lte('training_sessions.date', format(endOfMonth(currentMonth), 'yyyy-MM-dd'));
 
       if (selectedBranch !== "all") {
-        query = query.eq('branch_id', selectedBranch);
+        query = query.eq('training_sessions.branch_id', selectedBranch);
       }
 
-      const { data, error } = await query.order('date', { ascending: true });
+      const { data, error } = await query.order('training_sessions.date', { ascending: true });
       if (error) throw error;
-      return data as TrainingSession[];
+      return data?.map(item => item.training_sessions).filter(Boolean) as TrainingSession[] || [];
     },
     enabled: !!coachId
   });
