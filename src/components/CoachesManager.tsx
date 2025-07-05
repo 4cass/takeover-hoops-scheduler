@@ -380,50 +380,7 @@ export function CoachesManager() {
                     />
                   </div>
                 </div>
-                <div className="space-y-2 flex flex-col min-w-0">
-                  <Label htmlFor="filter-branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                    <MapPin className="w-4 h-4 mr-2 text-accent" style={{ color: '#BEA877' }} />
-                    Branch
-                  </Label>
-                  <Select
-                    value={branchFilter}
-                    onValueChange={(value) => setBranchFilter(value)}
-                  >
-                    <SelectTrigger className="border-2 focus:border-accent rounded-lg py-2 text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                      <SelectValue placeholder="Select Branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All" className="text-xs sm:text-sm">All Branches</SelectItem>
-                      {branches?.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
-                          {branch.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 flex flex-col min-w-0">
-                  <Label htmlFor="filter-package-type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                    <Users className="w-4 h-4 mr-2 text-accent" style={{ color: '#BEA877' }} />
-                    Package Type
-                  </Label>
-                  <Select
-                    value={coachPackageTypeFilter}
-                    onValueChange={(value) => setCoachPackageTypeFilter(value)}
-                  >
-                    <SelectTrigger className="border-2 focus:border-accent rounded-lg py-2 text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                      <SelectValue placeholder="Select Package Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All" className="text-xs sm:text-sm">All Package Types</SelectItem>
-                      {PACKAGE_TYPES.map((packageType) => (
-                        <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
-                          {packageType}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                 
               </div>
               <p className="text-xs sm:text-sm text-gray-600 mt-3">
                 Showing {filteredCoaches.length} coach{filteredCoaches.length === 1 ? '' : 'es'}
