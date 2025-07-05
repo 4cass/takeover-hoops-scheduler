@@ -5,7 +5,7 @@ import { useLocation, Routes, Route, useNavigate, Navigate } from "react-router-
 import { DashboardStats } from "@/components/DashboardStats";
 import { CalendarManager } from "@/components/CalendarManager";
 import { CoachCalendarManager } from "@/components/CoachCalendarManager";
-import SessionsManager from "@/components/SessionsManager";
+import { SessionsManager } from "@/components/SessionsManager";
 import { AttendanceManager } from "@/components/AttendanceManager";
 import { CoachAttendanceManager } from "@/components/CoachAttendanceManager";
 import { StudentsManager } from "@/components/StudentsManager";
