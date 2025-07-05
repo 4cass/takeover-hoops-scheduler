@@ -126,22 +126,34 @@ export function AttendanceManager() {
         throw error;
       }
       
+      if (!data) {
+        console.log("No sessions data returned");
+        return [];
+      }
+      
       console.log("Fetched sessions:", data);
       
       // Group sessions by unique combination of date, start_time, end_time, branch_id, package_type
       const groupedSessions = new Map();
       
-      data?.forEach(session => {
+      data.forEach(session => {
+        // Validate session structure
+        if (!session || typeof session !== 'object') {
+          console.warn("Invalid session object:", session);
+          return;
+        }
+
         const key = `${session.date}-${session.start_time}-${session.end_time}-${session.branch_id}-${session.package_type}`;
         
         if (groupedSessions.has(key)) {
           // Merge coaches and participants
           const existingSession = groupedSessions.get(key);
           
-          // Add coaches from session_coaches
-          if (session.session_coaches) {
+          // Add coaches from session_coaches - validate array first
+          if (Array.isArray(session.session_coaches)) {
             session.session_coaches.forEach(sc => {
-              if (!existingSession.session_coaches.some(esc => esc.coach_id === sc.coach_id)) {
+              if (sc && typeof sc === 'object' && sc.coach_id && 
+                  !existingSession.session_coaches.some(esc => esc.coach_id === sc.coach_id)) {
                 existingSession.session_coaches.push(sc);
               }
             });
@@ -159,10 +171,11 @@ export function AttendanceManager() {
             }
           }
           
-          // Merge participants (avoid duplicates)
-          if (session.session_participants) {
+          // Merge participants (avoid duplicates) - validate array first
+          if (Array.isArray(session.session_participants)) {
             session.session_participants.forEach(sp => {
-              if (!existingSession.session_participants.some(esp => esp.student_id === sp.student_id)) {
+              if (sp && typeof sp === 'object' && sp.student_id &&
+                  !existingSession.session_participants.some(esp => esp.student_id === sp.student_id)) {
                 existingSession.session_participants.push(sp);
               }
             });
@@ -171,9 +184,9 @@ export function AttendanceManager() {
           // Initialize session_coaches array
           const sessionCoaches = [];
           
-          // Add coaches from session_coaches relation
-          if (session.session_coaches) {
-            sessionCoaches.push(...session.session_coaches);
+          // Add coaches from session_coaches relation - validate array first
+          if (Array.isArray(session.session_coaches)) {
+            sessionCoaches.push(...session.session_coaches.filter(sc => sc && typeof sc === 'object'));
           }
           
           // Add main coach if not already included
@@ -191,7 +204,7 @@ export function AttendanceManager() {
           groupedSessions.set(key, {
             ...session,
             session_coaches: sessionCoaches,
-            session_participants: session.session_participants || []
+            session_participants: Array.isArray(session.session_participants) ? session.session_participants : []
           });
         }
       });
@@ -274,12 +287,14 @@ export function AttendanceManager() {
       const uniqueAttendance = [];
       const seenStudents = new Set();
       
-      data?.forEach(record => {
-        if (!seenStudents.has(record.student_id)) {
-          seenStudents.add(record.student_id);
-          uniqueAttendance.push(record);
-        }
-      });
+      if (Array.isArray(data)) {
+        data.forEach(record => {
+          if (record && record.student_id && !seenStudents.has(record.student_id)) {
+            seenStudents.add(record.student_id);
+            uniqueAttendance.push(record);
+          }
+        });
+      }
       
       return uniqueAttendance;
     },
@@ -314,9 +329,9 @@ export function AttendanceManager() {
     ?.filter((session) => {
       // Get coach names for filtering
       const coachNames = [];
-      if (session.session_coaches && Array.isArray(session.session_coaches)) {
+      if (Array.isArray(session.session_coaches)) {
         session.session_coaches.forEach(sc => {
-          if (sc.coaches && sc.coaches.name) {
+          if (sc && sc.coaches && sc.coaches.name) {
             coachNames.push(sc.coaches.name);
           }
         });
@@ -331,8 +346,8 @@ export function AttendanceManager() {
       const matchesStatus = filterSessionStatus === "All" || session.status === filterSessionStatus;
       const matchesBranch = branchFilter === "All" || session.branch_id === branchFilter;
       const matchesCoach = coachFilter === "All" || 
-                          (session.session_coaches && Array.isArray(session.session_coaches) && 
-                           session.session_coaches.some(sc => sc.coach_id === coachFilter));
+                          (Array.isArray(session.session_coaches) && 
+                           session.session_coaches.some(sc => sc && sc.coach_id === coachFilter));
       
       return matchesSearch && matchesPackage && matchesStatus && matchesBranch && matchesCoach;
     })
@@ -580,9 +595,9 @@ export function AttendanceManager() {
                   {paginatedSessions.map((session) => {
                     // Get coach names
                     const coachNames = [];
-                    if (session.session_coaches && Array.isArray(session.session_coaches)) {
+                    if (Array.isArray(session.session_coaches)) {
                       session.session_coaches.forEach(sc => {
-                        if (sc.coaches && sc.coaches.name) {
+                        if (sc && sc.coaches && sc.coaches.name) {
                           coachNames.push(sc.coaches.name);
                         }
                       });
@@ -741,7 +756,9 @@ export function AttendanceManager() {
                   <div className="flex items-center space-x-2 min-w-0">
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Coach: {selectedSessionDetails?.session_coaches?.map(sc => sc.coaches?.name).filter(Boolean).join(', ') || 'N/A'}
+                      Coach: {Array.isArray(selectedSessionDetails?.session_coaches) 
+                        ? selectedSessionDetails.session_coaches.map(sc => sc.coaches?.name).filter(Boolean).join(', ') || 'N/A'
+                        : 'N/A'}
                     </span>
                   </div>
                   <div className="flex items-center space-x-2 min-w-0">
@@ -826,7 +843,9 @@ export function AttendanceManager() {
             <div className="space-y-4">
               <div className="p-3 sm:p-4 rounded-lg bg-gray-50 border border-gray-200 overflow-x-auto">
                 <p className="text-xs sm:text-sm text-gray-700 mb-1 truncate">
-                  <span className="font-medium">Coach:</span> {selectedSessionDetails?.session_coaches?.map(sc => sc.coaches?.name).filter(Boolean).join(', ') || 'N/A'}
+                  <span className="font-medium">Coach:</span> {Array.isArray(selectedSessionDetails?.session_coaches) 
+                    ? selectedSessionDetails.session_coaches.map(sc => sc.coaches?.name).filter(Boolean).join(', ') || 'N/A'
+                    : 'N/A'}
                 </p>
                 <p className="text-xs sm:text-sm text-gray-700 mb-1 truncate">
                   <span className="font-medium">Branch:</span> {selectedSessionDetails?.branches?.name || 'N/A'}
