@@ -1,9 +1,10 @@
+
 import { useQuery } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { format, isSameDay, startOfMonth, endOfMonth } from "date-fns";
 import { useState, useEffect } from "react";
@@ -25,17 +26,17 @@ type TrainingSession = {
 };
 
 export function CoachCalendarManager() {
-  const { user } = useAuth();
+  const { coachData } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
   const [filterPackageType, setFilterPackageType] = useState<string>("all");
   const [coachId, setCoachId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.id) {
-      setCoachId(user.id);
+    if (coachData?.id) {
+      setCoachId(coachData.id);
     }
-  }, [user]);
+  }, [coachData]);
 
   const { data: sessions = [] } = useQuery({
     queryKey: ['coach-training-sessions', coachId, selectedBranch, filterPackageType, currentMonth],

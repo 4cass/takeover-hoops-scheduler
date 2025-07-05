@@ -29,15 +29,10 @@ export function CoachDashboardStats() {
       if (!coachData?.id) return { sessions: 0 };
 
       const sessionsRes = await supabase
-        .from('session_coaches')
-        .select(`
-          training_sessions!inner (
-            id,
-            status
-          )
-        `)
+        .from('training_sessions')
+        .select('id, status')
         .eq('coach_id', coachData.id)
-        .eq('training_sessions.status', 'scheduled');
+        .eq('status', 'scheduled');
 
       console.log("Sessions result:", sessionsRes);
 
@@ -54,22 +49,20 @@ export function CoachDashboardStats() {
       if (!coachData?.id) return [];
 
       const { data, error } = await supabase
-        .from('session_coaches')
+        .from('training_sessions')
         .select(`
-          training_sessions!inner (
-            id,
-            date,
-            start_time,
-            end_time,
-            status,
-            branches!inner (name),
-            session_participants (count)
-          )
+          id,
+          date,
+          start_time,
+          end_time,
+          status,
+          branches!inner (name),
+          session_participants (count)
         `)
         .eq('coach_id', coachData.id)
-        .eq('training_sessions.status', 'scheduled')
-        .gte('training_sessions.date', new Date().toISOString().slice(0, 10))
-        .order('training_sessions.date', { ascending: true })
+        .eq('status', 'scheduled')
+        .gte('date', new Date().toISOString().slice(0, 10))
+        .order('date', { ascending: true })
         .limit(5);
 
       if (error) {
@@ -78,7 +71,7 @@ export function CoachDashboardStats() {
       }
       
       console.log("Upcoming sessions:", data);
-      return data?.map(item => item.training_sessions).filter(Boolean) || [];
+      return data || [];
     },
     enabled: !!coachData?.id && !loading
   });
@@ -97,27 +90,21 @@ export function CoachDashboardStats() {
             students!inner (name),
             training_sessions!inner (
               date,
-              session_coaches!inner (
-                coach_id
-              )
+              coach_id
             )
           `)
-          .eq('training_sessions.session_coaches.coach_id', coachData.id)
+          .eq('training_sessions.coach_id', coachData.id)
           .eq('status', 'present')
           .order('created_at', { ascending: false })
           .limit(5),
         supabase
-          .from('session_coaches')
+          .from('training_sessions')
           .select(`
             id,
-            created_at,
-            training_sessions!inner (
-              id,
-              status
-            )
+            created_at
           `)
           .eq('coach_id', coachData.id)
-          .eq('training_sessions.status', 'scheduled')
+          .eq('status', 'scheduled')
           .order('created_at', { ascending: false })
           .limit(5)
       ]);
