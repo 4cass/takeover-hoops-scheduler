@@ -1,4 +1,3 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,7 +29,7 @@ export function CoachDashboardStats() {
 
       const sessionsRes = await supabase
         .from('training_sessions')
-        .select('id, status')
+        .select('id')
         .eq('coach_id', coachData.id)
         .eq('status', 'scheduled');
 
@@ -55,7 +54,6 @@ export function CoachDashboardStats() {
           date,
           start_time,
           end_time,
-          status,
           branches!inner (name),
           session_participants (count)
         `)
@@ -99,10 +97,7 @@ export function CoachDashboardStats() {
           .limit(5),
         supabase
           .from('training_sessions')
-          .select(`
-            id,
-            created_at
-          `)
+          .select('id, created_at')
           .eq('coach_id', coachData.id)
           .eq('status', 'scheduled')
           .order('created_at', { ascending: false })
@@ -119,7 +114,7 @@ export function CoachDashboardStats() {
         ...(sessionsRes.data?.map(item => ({
           id: item.id,
           type: 'session',
-          description: `You were assigned to a new session`,
+          description: `You scheduled a new session`,
           created_at: item.created_at
         })) || [])
       ];
