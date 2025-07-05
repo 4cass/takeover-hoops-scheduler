@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -120,16 +119,38 @@ export function SessionsManager() {
 
       if (error) {
         console.error('Error fetching sessions:', error);
-        toast.error('Failed to fetch sessions');
+        toast.error('Failed to fetch sessions: ' + error.message);
         return;
       }
 
-      console.log('Sessions fetched:', data);
+      console.log('Raw sessions data:', data);
+
+      if (!data) {
+        setSessions([]);
+        return;
+      }
+
+      // Check if data is valid before processing
+      const validData = data.filter(session => {
+        const hasValidCoaches = Array.isArray(session.session_coaches);
+        const hasValidParticipants = Array.isArray(session.session_participants);
+        
+        if (!hasValidCoaches) {
+          console.warn('Invalid session_coaches data for session:', session.id);
+        }
+        if (!hasValidParticipants) {
+          console.warn('Invalid session_participants data for session:', session.id);
+        }
+        
+        return hasValidCoaches && hasValidParticipants;
+      });
+
+      console.log('Valid sessions after filtering:', validData);
       
       // Group sessions by unique combination of date, time, and branch to handle multiple coaches
       const groupedSessions = new Map();
       
-      data?.forEach(session => {
+      validData.forEach(session => {
         const key = `${session.date}-${session.start_time}-${session.end_time}-${session.branch_id}`;
         
         if (!groupedSessions.has(key)) {
@@ -143,18 +164,18 @@ export function SessionsManager() {
         const groupedSession = groupedSessions.get(key);
         
         // Merge coaches
-        if (session.session_coaches) {
+        if (session.session_coaches && Array.isArray(session.session_coaches)) {
           session.session_coaches.forEach(sc => {
-            if (!groupedSession.session_coaches.find(gsc => gsc.coaches.id === sc.coaches.id)) {
+            if (sc.coaches && !groupedSession.session_coaches.find(gsc => gsc.coaches.id === sc.coaches.id)) {
               groupedSession.session_coaches.push(sc);
             }
           });
         }
         
         // Merge participants
-        if (session.session_participants) {
+        if (session.session_participants && Array.isArray(session.session_participants)) {
           session.session_participants.forEach(sp => {
-            if (!groupedSession.session_participants.find(gsp => gsp.students.id === sp.students.id)) {
+            if (sp.students && !groupedSession.session_participants.find(gsp => gsp.students.id === sp.students.id)) {
               groupedSession.session_participants.push(sp);
             }
           });
@@ -162,10 +183,12 @@ export function SessionsManager() {
       });
       
       const uniqueSessions = Array.from(groupedSessions.values());
+      console.log('Final grouped sessions:', uniqueSessions);
       setSessions(uniqueSessions);
     } catch (error) {
       console.error('Error in fetchSessions:', error);
       toast.error('Failed to fetch sessions');
+      setSessions([]);
     }
   };
 
@@ -647,19 +670,22 @@ export function SessionsManager() {
                   <div>
                     <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                       <Users className="h-4 w-4" />
-                      Coaches: {session.session_coaches.map(sc => sc.coaches.name).join(', ')}
+                      Coaches: {session.session_coaches && Array.isArray(session.session_coaches) ? 
+                        session.session_coaches.map(sc => sc.coaches?.name || 'Unknown').join(', ') : 
+                        'No coaches assigned'
+                      }
                     </h4>
                   </div>
                   
-                  {session.session_participants.length > 0 && (
+                  {session.session_participants && Array.isArray(session.session_participants) && session.session_participants.length > 0 && (
                     <div>
                       <h4 className="font-semibold text-sm mb-2">
                         Students ({session.session_participants.length}):
                       </h4>
                       <div className="flex flex-wrap gap-1">
                         {session.session_participants.map((participant) => (
-                          <Badge key={participant.students.id} variant="secondary">
-                            {participant.students.name}
+                          <Badge key={participant.students?.id || Math.random()} variant="secondary">
+                            {participant.students?.name || 'Unknown Student'}
                           </Badge>
                         ))}
                       </div>
@@ -679,7 +705,6 @@ export function SessionsManager() {
         )}
       </div>
 
-      {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
