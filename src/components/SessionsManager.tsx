@@ -109,7 +109,8 @@ const SessionsManager = () => {
 
       if (error) throw error;
 
-      return data.map(session => ({
+      // Group coaches by session to avoid duplicate session cards
+      return (data || []).map(session => ({
         ...session,
         coaches: session.session_coaches?.map(sc => sc.coaches).filter(Boolean) || [],
         participants: session.session_participants || []

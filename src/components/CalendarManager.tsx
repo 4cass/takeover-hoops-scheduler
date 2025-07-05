@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
@@ -67,6 +68,7 @@ export function CalendarManager() {
 
       if (error) throw error;
 
+      // Group coaches by session to avoid duplicate session cards
       return (data || []).map(session => ({
         ...session,
         coaches: session.session_coaches?.map(sc => sc.coaches).filter(Boolean) || [],

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -97,7 +98,8 @@ const AttendanceManager = () => {
 
       if (error) throw error;
 
-      return data.map(session => ({
+      // Group coaches by session to avoid duplicate session cards
+      return (data || []).map(session => ({
         ...session,
         coaches: session.session_coaches?.map(sc => sc.coaches).filter(Boolean) || []
       }));
