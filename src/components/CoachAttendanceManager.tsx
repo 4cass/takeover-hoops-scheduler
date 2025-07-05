@@ -276,7 +276,7 @@ export function CoachAttendanceManager() {
           <Card className="border-2 border-[#181A18] bg-white/90 backdrop-blur-sm shadow-lg">
             <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-4 sm:p-6">
               <CardTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-[#efeff1] flex items-center">
-                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-accent" />
+                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
                 Your Training Sessions
               </CardTitle>
               <CardDescription className="text-gray-400 text-sm sm:text-base">
@@ -286,14 +286,14 @@ export function CoachAttendanceManager() {
             <CardContent className="p-4 sm:p-6 lg:p-8">
               <div className="mb-6 space-y-4 sm:space-y-6">
                 <div className="flex items-center mb-4">
-                  <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-accent mr-2" />
+                  <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
                   <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-foreground">Filter Sessions</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Branch</label>
                     <Select value={branchFilter} onValueChange={setBranchFilter}>
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10">
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#BEA877' }}>
                         <SelectValue placeholder="Select branch" />
                       </SelectTrigger>
                       <SelectContent>
@@ -310,7 +310,7 @@ export function CoachAttendanceManager() {
                       value={packageFilter}
                       onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setPackageFilter(value)}
                     >
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10">
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#BEA877' }}>
                         <SelectValue placeholder="Select package type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -323,7 +323,7 @@ export function CoachAttendanceManager() {
                   <div className="space-y-2">
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Status</label>
                     <Select value={statusFilter} onValueChange={(value: SessionStatus) => setStatusFilter(value)}>
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10">
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#BEA877' }}>
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -343,6 +343,7 @@ export function CoachAttendanceManager() {
                     className="pl-8 sm:pl-10 pr-4 py-2 sm:py-3 w-full border-2 border-accent/40 rounded-xl text-xs sm:text-sm focus:border-accent focus:ring-accent/20 bg-white"
                     value={sessionSearchTerm}
                     onChange={(e) => setSessionSearchTerm(e.target.value)}
+                    style={{ borderColor: '#BEA877' }}
                   />
                 </div>
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -360,11 +361,12 @@ export function CoachAttendanceManager() {
                         : "border-accent/20 bg-white hover:border-accent/50"
                     }`}
                     onClick={() => handleSessionCardClick(session)}
+                    style={{ borderColor: '#BEA877' }}
                   >
                     <CardContent className="p-3 sm:p-4 lg:p-5 space-y-2 sm:space-y-3">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center space-x-2">
-                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-accent" />
+                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-accent" style={{ color: '#BEA877' }} />
                           <span className="font-semibold text-black text-xs sm:text-sm">
                             {format(new Date(session.date + 'T00:00:00'), 'MMM dd, yyyy')}
                           </span>
@@ -375,17 +377,17 @@ export function CoachAttendanceManager() {
                       </div>
                       <div className="space-y-2 text-xs sm:text-sm">
                         <div className="flex items-center space-x-2">
-                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" />
+                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                           <span className="text-gray-700 font-medium">
                             {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
                           </span>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" />
+                          <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                           <span className="text-gray-700 truncate">{session.branches.name}</span>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" />
+                          <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                           <span className="text-gray-700 truncate">{session.package_type || 'N/A'}</span>
                         </div>
                       </div>
@@ -414,7 +416,7 @@ export function CoachAttendanceManager() {
           <DialogContent className="max-w-[95vw] sm:max-w-lg lg:max-w-2xl border-2 border-foreground bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg">
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground flex items-center">
-                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-accent" />
+                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
                 Session Details
               </DialogTitle>
               <DialogDescription className="text-gray-600 text-sm sm:text-base">
@@ -425,7 +427,7 @@ export function CoachAttendanceManager() {
               <div className="space-y-4 sm:space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="flex items-center space-x-3">
-                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" />
+                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Time</p>
                       <p className="font-semibold text-black text-sm sm:text-base">
@@ -434,14 +436,14 @@ export function CoachAttendanceManager() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" />
+                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Branch</p>
                       <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.branches.name}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" />
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Package Type</p>
                       <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.package_type || 'N/A'}</p>
@@ -457,6 +459,7 @@ export function CoachAttendanceManager() {
                   <Button
                     onClick={() => handleManageAttendance(selectedSessionModal.id)}
                     className="bg-accent hover:bg-accent/90 text-white font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg text-sm sm:text-base px-4 sm:px-6"
+                    style={{ backgroundColor: '#BEA877' }}
                   >
                     Manage Attendance
                   </Button>
@@ -468,64 +471,69 @@ export function CoachAttendanceManager() {
 
         {/* Attendance Management Modal */}
         <Dialog open={showAttendanceModal} onOpenChange={() => setShowAttendanceModal(false)}>
-          <DialogContent className="max-w-[95vw] sm:max-w-3xl lg:max-w-5xl xl:max-w-6xl max-h-[90vh] border-2 border-foreground bg-white shadow-lg overflow-hidden">
-            <DialogHeader className="pb-4 border-b space-y-2 sm:space-y-3">
-              <DialogTitle className="text-base sm:text-lg lg:text-xl font-bold text-foreground flex items-center flex-wrap gap-2">
-                <span>Manage Attendance</span>
-                {selectedSessionDetails && (
-                  <span className="text-xs sm:text-sm font-normal text-gray-500">
-                    - {format(new Date(selectedSessionDetails.date + 'T00:00:00'), 'EEE, MMM dd, yyyy')} at {formatTime12Hour(selectedSessionDetails.start_time)}
-                  </span>
-                )}
-              </DialogTitle>
-              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                Update attendance for players in this training session
-              </DialogDescription>
-              
-              {/* Session Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 mt-4 text-xs sm:text-sm">
-                <div>
-                  <span className="font-medium text-gray-600">Coach:</span>
-                  <span className="block text-black truncate">{selectedSessionDetails?.coaches?.name || 'N/A'}</span>
+          <DialogContent className="max-w-[95vw] sm:max-w-3xl lg:max-w-5xl xl:max-w-6xl max-h-[90vh] border-2 border-[#181A18] bg-white shadow-lg p-3 sm:p-4 lg:p-6">
+            <div className="flex-1 overflow-y-auto">
+              <DialogHeader className="pb-4 border-b border-gray-200 space-y-2 sm:space-y-3">
+                <DialogTitle className="text-base sm:text-lg lg:text-xl font-bold text-[#181A18] flex items-center flex-wrap gap-2">
+                  <span>Manage Attendance</span>
+                  {selectedSessionDetails && (
+                    <span className="text-xs sm:text-sm font-normal text-gray-500">
+                      - {format(new Date(selectedSessionDetails.date + 'T00:00:00'), 'EEE, MMM dd, yyyy')} at {formatTime12Hour(selectedSessionDetails.start_time)}
+                    </span>
+                  )}
+                </DialogTitle>
+                <DialogDescription className="text-gray-600 text-left text-xs sm:text-sm">
+                  Update attendance for players in this training session
+                </DialogDescription>
+
+                {/* Session Details */}
+                <div className="mt-3 sm:mt-4 space-y-2 sm:space-y-3 text-xs sm:text-sm lg:text-base">
+                  <div className="flex flex-row gap-4 sm:gap-6">
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="font-medium text-gray-600">Coach:</span>
+                      <span className="text-black truncate">{selectedSessionDetails?.coaches?.name || 'N/A'}</span>
+                    </div>
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="font-medium text-gray-600">Branch:</span>
+                      <span className="text-black truncate">{selectedSessionDetails?.branches?.name || 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-row gap-4 sm:gap-6">
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="font-medium text-gray-600">Package:</span>
+                      <span className="text-black truncate">{selectedSessionDetails?.package_type || 'N/A'}</span>
+                    </div>
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="font-medium text-gray-600">Status:</span>
+                      <Badge variant={getStatusVariant(selectedSessionDetails?.status || '')} className="text-xs sm:text-sm">
+                        {selectedSessionDetails?.status || 'N/A'}
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-600">Branch:</span>
-                  <span className="block text-black truncate">{selectedSessionDetails?.branches?.name || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-600">Package Type:</span>
-                  <span className="block text-black truncate">{selectedSessionDetails?.package_type || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-600">Status:</span>
-                  <Badge variant={getStatusVariant(selectedSessionDetails?.status || '')} className="text-xs">
-                    {selectedSessionDetails?.status || 'N/A'}
-                  </Badge>
-                </div>
-              </div>
-            </DialogHeader>
-            
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              </DialogHeader>
+
               {/* Search Players */}
-              <div className="mb-4 sm:mb-6">
+              <div className="mb-4 sm:mb-6 p-3 sm:p-4 lg:p-6">
                 <div className="flex items-center mb-3">
                   <Search className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 mr-2" />
-                  <h3 className="text-sm sm:text-base font-semibold text-foreground">Search Players</h3>
+                  <h3 className="text-sm sm:text-base font-semibold text-[#181A18]">Search Players</h3>
                 </div>
                 <div className="relative max-w-sm">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Search by player name..."
-                    className="pl-8 sm:pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-1 focus:ring-accent bg-white"
+                    className="pl-8 sm:pl-10 pr-4 py-2 w-full border-2 border-accent/40 rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-1 focus:ring-accent bg-white"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ borderColor: '#BEA877' }}
                   />
                 </div>
               </div>
 
               {/* Stats */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 text-xs sm:text-sm">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 p-3 sm:p-4 lg:p-6">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
                   <span className="text-gray-700">Present: <strong>{presentCount}</strong></span>
@@ -541,21 +549,21 @@ export function CoachAttendanceManager() {
               </div>
 
               {/* Players List */}
-              <div className="space-y-2 sm:space-y-3">
+              <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 lg:p-6">
                 {filteredAttendanceRecords.map((record) => (
                   <div 
                     key={record.id} 
                     className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200 gap-2 sm:gap-3"
                   >
                     <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full bg-accent flex items-center justify-center text-white font-semibold text-xs sm:text-sm flex-shrink-0">
+                      <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full bg-accent flex items-center justify-center text-white font-semibold text-xs sm:text-sm flex-shrink-0" style={{ backgroundColor: '#BEA877' }}>
                         {record.students.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="font-semibold text-black text-xs sm:text-sm lg:text-base block truncate">{record.students.name}</span>
                         <div className="flex items-center space-x-2 mt-1">
                           {getAttendanceIcon(record.status)}
-                          <Badge className={`${getAttendanceBadgeColor(record.status)} text-xs capitalize`}>
+                          <Badge className={`${getAttendanceBadgeColor(record.status)} text-xs sm:text-sm capitalize`}>
                             {record.status}
                           </Badge>
                         </div>
@@ -597,7 +605,7 @@ export function CoachAttendanceManager() {
               </div>
               
               {filteredAttendanceRecords.length === 0 && (
-                <div className="py-8 sm:py-12 text-center">
+                <div className="py-8 sm:py-12 text-center p-3 sm:p-4 lg:p-6">
                   <Users className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                     {searchTerm ? 'No players found' : 'No attendance records'}
@@ -610,19 +618,13 @@ export function CoachAttendanceManager() {
                   </p>
                 </div>
               )}
-            </div>
 
-            {/* Footer */}
-            <div className="border-t bg-gray-50 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-              <p className="text-xs sm:text-sm text-gray-600">
-                {filteredAttendanceRecords.length} player{filteredAttendanceRecords.length === 1 ? '' : 's'} in this session
-              </p>
-              <div className="flex gap-2 sm:gap-3">
+              {/* Footer */}
+              <div className="border-t border-gray-200 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-row justify-end gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setShowAttendanceModal(false)}
-                  size="sm"
-                  className="text-xs sm:text-sm px-3 py-2"
+                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
                 >
                   Close
                 </Button>
@@ -631,10 +633,10 @@ export function CoachAttendanceManager() {
                     toast.success("Attendance saved successfully!");
                     setShowAttendanceModal(false);
                   }}
-                  size="sm"
-                  className="bg-accent hover:bg-accent/90 text-white text-xs sm:text-sm px-3 py-2"
+                  className="bg-accent hover:bg-accent/90 text-white min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
+                  style={{ backgroundColor: '#BEA877' }}
                 >
-                  Save and Close
+                  Save
                 </Button>
               </div>
             </div>
@@ -643,7 +645,7 @@ export function CoachAttendanceManager() {
         
         {!selectedSession && !sessionId && (
           <div className="text-center py-8 sm:py-16">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-24 lg:h-24 rounded-full bg-accent flex items-center justify-center mx-auto mb-4 sm:mb-6">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-24 lg:h-24 rounded-full bg-accent flex items-center justify-center mx-auto mb-4 sm:mb-6" style={{ backgroundColor: '#BEA877' }}>
               <Calendar className="w-6 h-6 sm:w-8 sm:h-8 lg:w-12 lg:h-12 text-white" />
             </div>
             <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-[#181A18] mb-2 sm:mb-3">Select a Training Session</h3>

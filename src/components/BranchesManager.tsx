@@ -246,19 +246,19 @@ export function BranchesManager() {
                         style={{ borderColor: '#BEA877' }}
                       />
                     </div>
-                    <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 gap-2">
+                    <div className="flex flex-row justify-end gap-2 pt-4 border-t border-gray-200">
                       <Button
                         type="button"
                         variant="outline"
                         onClick={resetForm}
-                        className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                        className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
                       >
                         Cancel
                       </Button>
                       <Button
                         type="submit"
                         disabled={createMutation.isPending || updateMutation.isPending}
-                        className="bg-accent text-white hover:bg-accent/90 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                        className="bg-accent text-white hover:bg-accent/90 min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
                         style={{ backgroundColor: '#BEA877' }}
                       >
                         {createMutation.isPending || updateMutation.isPending ? "Processing..." : editingBranch ? "Update" : "Create"}

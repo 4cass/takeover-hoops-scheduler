@@ -218,7 +218,6 @@ export function AttendanceManager() {
       return sortOrder === "Newest to Oldest" ? dateB - dateA : dateA - dateB;
     }) || [];
 
-  // Pagination logic
   const totalPages = Math.ceil(filteredSessions.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -243,7 +242,7 @@ export function AttendanceManager() {
   const getAttendanceIcon = (status: AttendanceStatusLiteral) => {
     switch (status) {
       case "present": return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case "absent": return <XCircle className="w-4 h-4 text-red-600" />;
+      case "absent" : return <XCircle className="w-4 h-4 text-red-600" />;
       case "pending": return <Clock className="w-4 h-4 text-amber-600" />;
       default: return <Clock className="w-4 h-4 text-gray-400" />;
     }
@@ -274,7 +273,7 @@ export function AttendanceManager() {
 
   if (!sessions) {
     return (
-      <div className="min-h-screen bg-white p-3 sm:p-4 md:p-6">
+      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
           <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Loading attendance...</h3>
@@ -623,15 +622,38 @@ export function AttendanceManager() {
               </div>
               <div className="space-y-2">
                 <Label className="text-xs sm:text-sm font-medium text-gray-700">Participants</Label>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mb-4 gap-2">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">Present: {presentCount}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <XCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">Absent: {absentCount}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <Clock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">Pending: {pendingCount}</span>
+                  </div>
+                </div>
                 <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
                   {selectedSessionDetails?.session_participants?.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
                   ) : (
-                    selectedSessionDetails?.session_participants?.map(participant => (
-                      <div key={participant.id} className="flex items-center space-x-2 p-2 min-w-0">
-                        <span className="text-xs sm:text-sm text-gray-700 truncate">{participant.students.name}</span>
-                      </div>
-                    ))
+                    selectedSessionDetails?.session_participants?.map(participant => {
+                      const attendance = attendanceRecords?.find(record => record.student_id === participant.student_id);
+                      return (
+                        <div key={participant.id} className="flex items-center justify-between p-2 min-w-0">
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <span className="text-xs sm:text-sm text-gray-700 truncate">{participant.students.name}</span>
+                            <Badge className={`font-medium ${getAttendanceBadgeColor(attendance?.status || 'pending')} text-xs sm:text-sm flex-shrink-0`}>
+                              {getAttendanceIcon(attendance?.status || 'pending')}
+                              <span className="ml-1 capitalize">{attendance?.status || 'pending'}</span>
+                            </Badge>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -749,7 +771,7 @@ export function AttendanceManager() {
                   ))
                 )}
               </div>
-              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 flex-wrap gap-2">
+              <div className="flex flex-row justify-end gap-2 pt-4 border-t border-gray-200">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -759,7 +781,7 @@ export function AttendanceManager() {
                       setSelectedSession(null);
                     }
                   }}
-                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
                 >
                   Close
                 </Button>
@@ -771,10 +793,10 @@ export function AttendanceManager() {
                       setSelectedSession(null);
                     }
                   }}
-                  className="font-semibold w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                  style={{ backgroundColor: '#BEA877', color: 'white' }}
+                  className="bg-accent hover:bg-[#8e7a3f] text-white min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
+                  style={{ backgroundColor: '#BEA877' }}
                 >
-                  Save and Close
+                  Save
                 </Button>
               </div>
             </div>

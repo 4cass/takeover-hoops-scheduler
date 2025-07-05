@@ -128,7 +128,7 @@ export function CoachDashboardStats() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white p-4 sm:p-6">
+      <div className="min-h-screen bg-background p-4 sm:p-6">
         <div className="max-w-7xl mx-auto text-center py-8 sm:py-16">
           <Users className="w-12 sm:w-16 h-12 sm:h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-xl sm:text-2xl font-bold text-black mb-3">Loading your dashboard...</h3>

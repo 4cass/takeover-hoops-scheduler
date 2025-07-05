@@ -143,6 +143,42 @@ export type Database = {
         }
         Relationships: []
       }
+      session_coaches: {
+        Row: {
+          coach_id: string
+          created_at: string
+          id: string
+          session_id: string
+        }
+        Insert: {
+          coach_id: string
+          created_at?: string
+          id?: string
+          session_id: string
+        }
+        Update: {
+          coach_id?: string
+          created_at?: string
+          id?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_coaches_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "coaches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_coaches_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       session_participants: {
         Row: {
           id: string
@@ -226,7 +262,7 @@ export type Database = {
       training_sessions: {
         Row: {
           branch_id: string
-          coach_id: string
+          coach_id: string | null
           created_at: string
           date: string
           end_time: string
@@ -239,7 +275,7 @@ export type Database = {
         }
         Insert: {
           branch_id: string
-          coach_id: string
+          coach_id?: string | null
           created_at?: string
           date: string
           end_time: string
@@ -252,7 +288,7 @@ export type Database = {
         }
         Update: {
           branch_id?: string
-          coach_id?: string
+          coach_id?: string | null
           created_at?: string
           date?: string
           end_time?: string
@@ -265,17 +301,17 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_training_sessions_coach"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "coaches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "training_sessions_branch_id_fkey"
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "training_sessions_coach_id_fkey"
-            columns: ["coach_id"]
-            isOneToOne: false
-            referencedRelation: "coaches"
             referencedColumns: ["id"]
           },
         ]
@@ -286,14 +322,23 @@ export type Database = {
     }
     Functions: {
       check_scheduling_conflicts: {
-        Args: {
-          p_date: string
-          p_start_time: string
-          p_end_time: string
-          p_coach_id: string
-          p_student_ids: string[]
-          p_session_id?: string
-        }
+        Args:
+          | {
+              p_date: string
+              p_start_time: string
+              p_end_time: string
+              p_coach_id: string
+              p_student_ids: string[]
+              p_session_id?: string
+            }
+          | {
+              p_date: string
+              p_start_time: string
+              p_end_time: string
+              p_coach_ids: string[]
+              p_student_ids: string[]
+              p_session_id?: string
+            }
         Returns: {
           conflict_type: string
           conflict_details: string

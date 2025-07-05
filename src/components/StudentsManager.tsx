@@ -425,19 +425,19 @@ export function StudentsManager() {
                         />
                       </div>
                     </div>
-                    <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
+                    <div className="flex flex-row justify-end gap-2 pt-4 border-t border-gray-200">
                       <Button
                         type="button"
                         variant="outline"
                         onClick={resetForm}
-                        className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                        className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
                       >
                         Cancel
                       </Button>
                       <Button
                         type="submit"
                         disabled={createMutation.isPending || updateMutation.isPending}
-                        className="bg-green-600 hover:bg-green-700 text-white transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                        className="bg-green-600 hover:bg-green-700 text-white min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
                       >
                         {editingStudent ? "Update" : "Create"}
                       </Button>

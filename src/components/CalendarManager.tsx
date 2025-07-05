@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +7,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar as CalendarIcon, Users, Clock, MapPin, User, ChevronLeft, ChevronRight, Filter, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths, isAfter, parseISO } from "date-fns";
@@ -44,7 +42,6 @@ export function CalendarManager() {
   const { role } = useAuth();
   const isMobile = useIsMobile();
 
-  // If user is a coach, show coach-specific calendar
   if (role === 'coach') {
     return <CoachCalendarManager />;
   }
@@ -56,7 +53,29 @@ export function CalendarManager() {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [showUpcomingSessions, setShowUpcomingSessions] = useState(false);
   const [showPastSessions, setShowPastSessions] = useState(false);
+  const [visibleSessions, setVisibleSessions] = useState(1);
+  const [visibleUpcomingSessions, setVisibleUpcomingSessions] = useState(1);
+  const [visiblePastSessions, setVisiblePastSessions] = useState(1);
   const navigate = useNavigate();
+
+  // Reset visible sessions when modals open/close
+  useEffect(() => {
+    if (selectedDate) {
+      setVisibleSessions(1);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (showUpcomingSessions) {
+      setVisibleUpcomingSessions(1);
+    }
+  }, [showUpcomingSessions]);
+
+  useEffect(() => {
+    if (showPastSessions) {
+      setVisiblePastSessions(1);
+    }
+  }, [showPastSessions]);
 
   const { data: sessions, isLoading } = useQuery({
     queryKey: ['training-sessions', selectedCoach, selectedBranch, filterPackageType, currentMonth],
@@ -246,7 +265,6 @@ export function CalendarManager() {
                   Showing {filteredSessions.length} session{filteredSessions.length === 1 ? '' : 's'}
                 </p>
                 
-                {/* Quick Access Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                   <Button
                     onClick={() => setShowUpcomingSessions(true)}
@@ -373,24 +391,24 @@ export function CalendarManager() {
 
         {/* Sessions Modal */}
         <Dialog open={!!selectedDate} onOpenChange={() => setSelectedDate(null)}>
-          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[85vh] border-2 border-[#181A18] bg-white shadow-lg">
-            <DialogHeader className="space-y-2 pb-4">
-              <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 flex items-center">
-                <Eye className="h-4 w-4 sm:h-5 sm:w-5 mr-2 sm:mr-3 text-accent flex-shrink-0" />
-                <span className="truncate">Sessions on {selectedDate ? format(selectedDate, isMobile ? 'MMM dd, yyyy' : 'EEEE, MMMM dd, yyyy') : ''}</span>
-              </DialogTitle>
-              <DialogDescription className="text-gray-600 text-xs sm:text-sm lg:text-base">
-                View session details for the selected date
-              </DialogDescription>
-            </DialogHeader>
-            
-            <ScrollArea className="max-h-[60vh] pr-2 sm:pr-4">
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[60vh] border-2 border-[#181A18] bg-white shadow-lg p-2 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden flex flex-col">
+            <div className="flex flex-col w-full">
+              <DialogHeader className="space-y-2 pb-4">
+                <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 flex items-center">
+                  <Eye className="h-4 w-4 sm:h-5 sm:w-5 mr-2 sm:mr-3 text-accent flex-shrink-0" />
+                  <span className="truncate">Sessions on {selectedDate ? format(selectedDate, isMobile ? 'MMM dd, yyyy' : 'EEEE, MMMM dd, yyyy') : ''}</span>
+                </DialogTitle>
+                <DialogDescription className="text-gray-600 text-xs sm:text-sm lg:text-base">
+                  View session details for the selected date
+                </DialogDescription>
+              </DialogHeader>
+              
               {selectedDateSessions.length > 0 ? (
-                <div className="space-y-3 sm:space-y-4">
-                  {selectedDateSessions.map(session => (
+                <div className="space-y-2">
+                  {selectedDateSessions.slice(0, visibleSessions).map(session => (
                     <Card key={session.id} className="border border-[#181A18] bg-white hover:shadow-lg transition-all duration-300">
-                      <CardContent className="p-3 sm:p-4 lg:p-6">
-                        <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-6 sm:gap-3 lg:gap-4 sm:items-center">
+                      <CardContent className="p-2">
+                        <div className="space-y-2 sm:grid sm:grid-cols-2 lg:grid-cols-[repeat(5,1fr)_auto] gap-2 sm:items-center">
                           <div className="flex items-center space-x-2 min-w-0">
                             <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-accent flex-shrink-0" />
                             <div className="min-w-0 flex-1">
@@ -433,60 +451,72 @@ export function CalendarManager() {
                             </div>
                           </div>
                           
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-fit flex-shrink-0">
                             <Badge variant={getStatusBadgeVariant(session.status)} className="font-medium px-2 py-1 text-xs sm:text-sm w-fit">
                               {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
                             </Badge>
                             <Button
                               onClick={() => handleAttendanceRedirect(session.id)}
                               size="sm"
-                              className="bg-accent hover:bg-accent/90 text-white font-medium transition-all duration-300 text-xs sm:text-sm w-full sm:w-auto"
+                              className="bg-accent hover:bg-accent/90 text-white font-medium transition-all duration-300 text-xs sm:text-sm min-w-fit w-full sm:w-auto"
                             >
-                              Manage Attendance
+                              Attendance
                             </Button>
                           </div>
                         </div>
                       </CardContent>
                     </Card>
                   ))}
+                  {visibleSessions < selectedDateSessions.length && (
+                    <div className="flex justify-center mt-2">
+                      <Button
+                        onClick={() => setVisibleSessions(prev => prev + 1)}
+                        size="sm"
+                        variant="outline"
+                        className="border-accent text-accent hover:bg-accent hover:text-white text-xs sm:text-sm"
+                      >
+                        Show More
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="text-center py-8 sm:py-12 space-y-3 sm:space-y-4">
-                  <CalendarIcon className="h-12 w-12 sm:h-16 sm:w-16 text-gray-300 mx-auto" />
+                <div className="text-center py-4 space-y-2">
+                  <CalendarIcon className="h-8 w-8 text-gray-300 mx-auto" />
                   <div className="space-y-2">
-                    <p className="text-base sm:text-lg lg:text-xl text-gray-500">
+                    <p className="text-sm sm:text-base text-gray-500">
                       No sessions on this day
                     </p>
-                    <p className="text-gray-400 text-xs sm:text-sm lg:text-base max-w-md mx-auto">
+                    <p className="text-gray-400 text-xs sm:text-sm max-w-md mx-auto">
                       {filterPackageType !== "All" ? `Try adjusting your package type filter or select a different date.` : `No sessions scheduled for this date.`}
                     </p>
                   </div>
                 </div>
               )}
-            </ScrollArea>
+            </div>
           </DialogContent>
         </Dialog>
 
         {/* Upcoming Sessions Modal */}
         <Dialog open={showUpcomingSessions} onOpenChange={setShowUpcomingSessions}>
-          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[85vh] border-2 border-green-200 bg-white shadow-lg">
-            <DialogHeader className="space-y-2 pb-4">
-              <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-green-800 flex items-center">
-                <Clock className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-green-600 flex-shrink-0" />
-                <span className="truncate">Upcoming Sessions ({upcomingSessions.length})</span>
-              </DialogTitle>
-              <DialogDescription className="text-green-600 text-xs sm:text-sm lg:text-base">
-                All scheduled sessions for today and future dates
-              </DialogDescription>
-            </DialogHeader>
-            
-            <ScrollArea className="max-h-[60vh] pr-2 sm:pr-4">
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[60vh] border-2 border-green-200 bg-white shadow-lg p-2 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden flex flex-col">
+            <div className="flex flex-col w-full">
+              <DialogHeader className="space-y-2 pb-4">
+                <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-green-800 flex items-center">
+                  <Clock className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-green-600 flex-shrink-0" />
+                  <span className="truncate">Upcoming Sessions ({upcomingSessions.length})</span>
+                </DialogTitle>
+                <DialogDescription className="text-green-600 text-xs sm:text-sm lg:text-base">
+                  All scheduled sessions for today and future dates
+                </DialogDescription>
+              </DialogHeader>
+              
               {upcomingSessions.length > 0 ? (
-                <div className="space-y-3 sm:space-y-4">
-                  {upcomingSessions.map((session) => (
+                <div className="space-y-2">
+                  {upcomingSessions.slice(0, visibleUpcomingSessions).map((session) => (
                     <Card key={session.id} className="border border-green-200 bg-white hover:shadow-md transition-all duration-200">
-                      <CardContent className="p-3 sm:p-4">
-                        <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-5 sm:gap-3 lg:gap-4 sm:items-center">
+                      <CardContent className="p-2">
+                        <div className="space-y-2 sm:grid sm:grid-cols-2 lg:grid-cols-5 sm:gap-2 sm:items-center">
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-medium text-green-600">Date</p>
                             <p className="font-semibold text-black text-xs sm:text-sm truncate">{format(parseISO(session.date), 'MMM dd, yyyy')}</p>
@@ -512,49 +542,61 @@ export function CalendarManager() {
                                 handleAttendanceRedirect(session.id);
                               }}
                               size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm w-full sm:w-auto"
+                              className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm min-w-fit w-full sm:w-auto"
                             >
-                              Manage Attendance
+                              Attendance
                             </Button>
                           </div>
                         </div>
                       </CardContent>
                     </Card>
                   ))}
+                  {visibleUpcomingSessions < upcomingSessions.length && (
+                    <div className="flex justify-center mt-2">
+                      <Button
+                        onClick={() => setVisibleUpcomingSessions(prev => prev + 1)}
+                        size="sm"
+                        variant="outline"
+                        className="border-green-600 text-green-600 hover:bg-green-600 hover:text-white text-xs sm:text-sm"
+                      >
+                        Show More
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="text-center py-8 sm:py-12 space-y-3 sm:space-y-4">
-                  <Clock className="h-12 w-12 sm:h-16 sm:w-16 text-green-300 mx-auto" />
+                <div className="text-center py-4 space-y-2">
+                  <Clock className="h-8 w-8 text-green-300 mx-auto" />
                   <div className="space-y-2">
-                    <p className="text-base sm:text-lg lg:text-xl text-green-600">No upcoming sessions</p>
-                    <p className="text-green-500 text-xs sm:text-sm lg:text-base">Schedule new training sessions to get started.</p>
+                    <p className="text-sm sm:text-base text-green-600">No upcoming sessions</p>
+                    <p className="text-green-500 text-xs sm:text-sm">Schedule new training sessions to get started.</p>
                   </div>
                 </div>
               )}
-            </ScrollArea>
+            </div>
           </DialogContent>
         </Dialog>
 
         {/* Past Sessions Modal */}
         <Dialog open={showPastSessions} onOpenChange={setShowPastSessions}>
-          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[85vh] border-2 border-gray-200 bg-white shadow-lg">
-            <DialogHeader className="space-y-2 pb-4">
-              <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 flex items-center">
-                <CalendarIcon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-gray-600 flex-shrink-0" />
-                <span className="truncate">Past Sessions ({pastSessions.length})</span>
-              </DialogTitle>
-              <DialogDescription className="text-gray-600 text-xs sm:text-sm lg:text-base">
-                All completed sessions and sessions before today
-              </DialogDescription>
-            </DialogHeader>
-            
-            <ScrollArea className="max-h-[60vh] pr-2 sm:pr-4">
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[60vh] border-2 border-gray-200 bg-white shadow-lg p-2 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden flex flex-col">
+            <div className="flex flex-col w-full">
+              <DialogHeader className="space-y-2 pb-4">
+                <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 flex items-center">
+                  <CalendarIcon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-gray-600 flex-shrink-0" />
+                  <span className="truncate">Past Sessions ({pastSessions.length})</span>
+                </DialogTitle>
+                <DialogDescription className="text-gray-600 text-xs sm:text-sm lg:text-base">
+                  All completed sessions and sessions before today
+                </DialogDescription>
+              </DialogHeader>
+              
               {pastSessions.length > 0 ? (
-                <div className="space-y-3 sm:space-y-4">
-                  {pastSessions.map((session) => (
+                <div className="space-y-2">
+                  {pastSessions.slice(0, visiblePastSessions).map((session) => (
                     <Card key={session.id} className="border border-gray-200 bg-white hover:shadow-md transition-all duration-200">
-                      <CardContent className="p-3 sm:p-4">
-                        <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-5 sm:gap-3 lg:gap-4 sm:items-center">
+                      <CardContent className="p-2">
+                        <div className="space-y-2 sm:grid sm:grid-cols-2 lg:grid-cols-5 sm:gap-2 sm:items-center">
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-medium text-gray-600">Date</p>
                             <p className="font-semibold text-black text-xs sm:text-sm truncate">{format(parseISO(session.date), 'MMM dd, yyyy')}</p>
@@ -580,7 +622,7 @@ export function CalendarManager() {
                                 handleAttendanceRedirect(session.id);
                               }}
                               size="sm"
-                              className="bg-gray-600 hover:bg-gray-700 text-white text-xs sm:text-sm w-full sm:w-auto"
+                              className="bg-gray-600 hover:bg-gray-700 text-white text-xs sm:text-sm min-w-fit w-full sm:w-auto"
                             >
                               View Details
                             </Button>
@@ -589,17 +631,29 @@ export function CalendarManager() {
                       </CardContent>
                     </Card>
                   ))}
+                  {visiblePastSessions < pastSessions.length && (
+                    <div className="flex justify-center mt-2">
+                      <Button
+                        onClick={() => setVisiblePastSessions(prev => prev + 1)}
+                        size="sm"
+                        variant="outline"
+                        className="border-gray-600 text-gray-600 hover:bg-gray-600 hover:text-white text-xs sm:text-sm"
+                      >
+                        Show More
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="text-center py-8 sm:py-12 space-y-3 sm:space-y-4">
-                  <CalendarIcon className="h-12 w-12 sm:h-16 sm:w-16 text-gray-300 mx-auto" />
+                <div className="text-center py-4 space-y-2">
+                  <CalendarIcon className="h-8 w-8 text-gray-300 mx-auto" />
                   <div className="space-y-2">
-                    <p className="text-base sm:text-lg lg:text-xl text-gray-500">No past sessions</p>
-                    <p className="text-gray-400 text-xs sm:text-sm lg:text-base">Completed sessions will appear here.</p>
+                    <p className="text-sm sm:text-base text-gray-500">No past sessions</p>
+                    <p className="text-gray-400 text-xs sm:text-sm">Completed sessions will appear here.</p>
                   </div>
                 </div>
               )}
-            </ScrollArea>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

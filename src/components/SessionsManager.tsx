@@ -99,7 +99,7 @@ export function SessionsManager() {
     coach_id: "",
     notes: "",
     status: "scheduled" as SessionStatus,
-    package_type: "" as "Camp Training" | "Personal Training" | "",
+    package_type: "",
   });
 
   const queryClient = useQueryClient();
@@ -110,7 +110,15 @@ export function SessionsManager() {
       const { data, error } = await supabase
         .from('training_sessions')
         .select(`
-          *,
+          id,
+          date,
+          start_time,
+          end_time,
+          branch_id,
+          coach_id,
+          notes,
+          status,
+          package_type,
           branches (name),
           coaches (name),
           session_participants (
@@ -151,7 +159,7 @@ export function SessionsManager() {
         .order('name');
 
       if (error) throw error;
-      return data as { id: string; name: string; }[];
+      return data as { id: string; name: string }[];
     },
   });
 
@@ -226,19 +234,35 @@ export function SessionsManager() {
         }));
       }
 
-      const createdSessions = [];
+      const createdSessions: TrainingSession[] = [];
       
       // Insert all sessions
       for (const sessionData of sessionsToCreate) {
-        console.log('Creating session for coach:', sessionData.coach_id);
         const { data: sessionResult, error } = await supabase
           .from('training_sessions')
           .insert([sessionData])
-          .select()
+          .select(`
+            id,
+            date,
+            start_time,
+            end_time,
+            branch_id,
+            coach_id,
+            notes,
+            status,
+            package_type,
+            branches (name),
+            coaches (name),
+            session_participants (
+              id,
+              student_id,
+              students (name)
+            )
+          `)
           .single();
         
         if (error) throw error;
-        createdSessions.push(sessionResult);
+        createdSessions.push(sessionResult as TrainingSession);
       }
 
       // Add participants to all created sessions
@@ -287,16 +311,30 @@ export function SessionsManager() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...session }: typeof formData & { id: string }) => {
       if (!session.package_type) throw new Error('Package type is required');
-
-      const coachId = formData.package_type === "Personal Training" ? formData.coach_id : selectedCoaches[0];
-      
-      if (!coachId) throw new Error('At least one coach must be selected');
+      if (!formData.coach_id) throw new Error('Coach must be selected');
 
       const { data, error } = await supabase
         .from('training_sessions')
-        .update({ ...session, coach_id: coachId, package_type: session.package_type || null })
+        .update({ ...session, coach_id: formData.coach_id, package_type: session.package_type || null })
         .eq('id', id)
-        .select()
+        .select(`
+          id,
+          date,
+          start_time,
+          end_time,
+          branch_id,
+          coach_id,
+          notes,
+          status,
+          package_type,
+          branches (name),
+          coaches (name),
+          session_participants (
+            id,
+            student_id,
+            students (name)
+          )
+        `)
         .single();
       
       if (error) throw error;
@@ -332,7 +370,7 @@ export function SessionsManager() {
           );
       }
 
-      return data;
+      return data as TrainingSession;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
@@ -396,16 +434,14 @@ export function SessionsManager() {
       return;
     }
 
-    if (formData.package_type === "Personal Training") {
-      if (!formData.coach_id) {
-        toast.error('Please select a coach');
-        return;
-      }
-    } else if (formData.package_type === "Camp Training") {
-      if (selectedCoaches.length === 0) {
-        toast.error('Please select at least one coach for camp training');
-        return;
-      }
+    if (formData.package_type === "Personal Training" && !formData.coach_id) {
+      toast.error('Please select a coach');
+      return;
+    }
+
+    if (formData.package_type === "Camp Training" && selectedCoaches.length === 0) {
+      toast.error('Please select at least one coach for camp training');
+      return;
     }
 
     if (!formData.date) {
@@ -456,11 +492,7 @@ export function SessionsManager() {
       package_type: session.package_type || "",
     });
     setSelectedStudents(session.session_participants?.map(p => p.student_id) || []);
-    if (session.package_type === "Personal Training") {
-      setSelectedCoaches([]);
-    } else {
-      setSelectedCoaches([session.coach_id]);
-    }
+    setSelectedCoaches(session.package_type === "Camp Training" ? [session.coach_id] : []);
     setIsDialogOpen(true);
   };
 
@@ -571,7 +603,7 @@ export function SessionsManager() {
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-hidden">
-                  <ScrollArea className="max-h-[85vh]">
+                  <ScrollArea className="max-h-[85vh] overflow-y-auto">
                     <div className="p-3 sm:p-4 md:p-5">
                       <DialogHeader className="pb-4">
                         <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
@@ -834,7 +866,7 @@ export function SessionsManager() {
                             style={{ borderColor: '#BEA877' }}
                           />
                         </div>
-                        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4 border-t border-gray-200 flex-wrap">
+                        <div className="flex flex-row justify-end gap-2 pt-4 border-t border-gray-200">
                           {editingSession && (
                             <Button 
                               type="button" 
@@ -846,38 +878,35 @@ export function SessionsManager() {
                                 }
                               }}
                               disabled={deleteMutation.isPending || !formData.branch_id}
-                              className="bg-red-600 text-white hover:bg-red-700 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                              className="bg-red-600 text-white hover:bg-red-700 min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
                             >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete Session
+                              Delete
                             </Button>
                           )}
-                          <div className="flex space-x-3 w-full sm:w-auto flex-wrap gap-2">
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              onClick={resetForm} 
-                              className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                            >
-                              Cancel
-                            </Button>
-                            <Button 
-                              type="submit" 
-                              disabled={
-                                createMutation.isPending || 
-                                updateMutation.isPending || 
-                                !formData.branch_id || 
-                                !formData.package_type || 
-                                (formData.package_type === "Personal Training" && !formData.coach_id) ||
-                                (formData.package_type === "Camp Training" && selectedCoaches.length === 0) ||
-                                !formData.date
-                              }
-                              className="bg-accent hover:bg-[#8e7a3f] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                              style={{ backgroundColor: '#BEA877' }}
-                            >
-                              {editingSession ? 'Update Session' : 'Schedule Session'}
-                            </Button>
-                          </div>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={resetForm} 
+                            className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
+                          >
+                            Close
+                          </Button>
+                          <Button 
+                            type="submit" 
+                            disabled={
+                              createMutation.isPending || 
+                              updateMutation.isPending || 
+                              !formData.branch_id || 
+                              !formData.package_type || 
+                              (formData.package_type === "Personal Training" && !formData.coach_id) ||
+                              (formData.package_type === "Camp Training" && selectedCoaches.length === 0) ||
+                              !formData.date
+                            }
+                            className="bg-accent hover:bg-[#8e7a3f] text-white min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
+                            style={{ backgroundColor: '#BEA877' }}
+                          >
+                            {editingSession ? 'Update' : 'Create'}
+                          </Button>
                         </div>
                       </form>
                     </div>
@@ -1076,6 +1105,14 @@ export function SessionsManager() {
                             className="bg-yellow-600 text-white hover:bg-yellow-700 w-8 sm:w-9 md:w-10 h-8 sm:h-9 md:h-10 p-0 flex items-center justify-center"
                           >
                             <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleManageParticipants(session)}
+                            className="bg-green-600 text-white hover:bg-green-700 w-8 sm:w-9 md:w-10 h-8 sm:h-9 md:h-10 p-0 flex items-center justify-center"
+                          >
+                            <Users className="w-4 h-4" />
                           </Button>
                         </div>
                         {session.notes && (
