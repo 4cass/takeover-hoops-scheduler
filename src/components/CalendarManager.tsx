@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -28,9 +27,9 @@ type TrainingSession = {
   coach_id: string;
   status: SessionStatus;
   package_type: "Camp Training" | "Personal Training" | null;
-  branches: { name: string };
-  coaches: { name: string };
-  session_participants: Array<{ students: { name: string } }>;
+  branches: { name: string } | null;
+  coaches: { name: string } | null;
+  session_participants: Array<{ students: { name: string } | null }>;
 };
 
 const formatTime12Hour = (timeString: string) => {
@@ -405,7 +404,9 @@ export function CalendarManager() {
                             <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-accent flex-shrink-0" />
                             <div className="min-w-0 flex-1">
                               <p className="text-xs sm:text-sm font-medium text-gray-600">Branch</p>
-                              <p className="font-semibold text-black text-xs sm:text-sm truncate">{session.branches.name}</p>
+                              <p className="font-semibold text-black text-xs sm:text-sm truncate">
+                                {session.branches?.name || 'Unknown Branch'}
+                              </p>
                             </div>
                           </div>
                           
@@ -413,7 +414,9 @@ export function CalendarManager() {
                             <User className="h-3 w-3 sm:h-4 sm:w-4 text-accent flex-shrink-0" />
                             <div className="min-w-0 flex-1">
                               <p className="text-xs sm:text-sm font-medium text-gray-600">Coach</p>
-                              <p className="font-semibold text-black text-xs sm:text-sm truncate">{session.coaches.name}</p>
+                              <p className="font-semibold text-black text-xs sm:text-sm truncate">
+                                {session.coaches?.name || 'Unknown Coach'}
+                              </p>
                             </div>
                           </div>
                           
@@ -499,11 +502,15 @@ export function CalendarManager() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-medium text-green-600">Branch</p>
-                            <p className="font-semibold text-black text-xs sm:text-sm truncate">{session.branches.name}</p>
+                            <p className="font-semibold text-black text-xs sm:text-sm truncate">
+                              {session.branches?.name || 'Unknown Branch'}
+                            </p>
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-medium text-green-600">Coach</p>
-                            <p className="font-semibold text-black text-xs sm:text-sm truncate">{session.coaches.name}</p>
+                            <p className="font-semibold text-black text-xs sm:text-sm truncate">
+                              {session.coaches?.name || 'Unknown Coach'}
+                            </p>
                           </div>
                           <div className="flex justify-end">
                             <Button
@@ -567,11 +574,15 @@ export function CalendarManager() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-medium text-gray-600">Branch</p>
-                            <p className="font-semibold text-black text-xs sm:text-sm truncate">{session.branches.name}</p>
+                            <p className="font-semibold text-black text-xs sm:text-sm truncate">
+                              {session.branches?.name || 'Unknown Branch'}
+                            </p>
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-medium text-gray-600">Coach</p>
-                            <p className="font-semibold text-black text-xs sm:text-sm truncate">{session.coaches.name}</p>
+                            <p className="font-semibold text-black text-xs sm:text-sm truncate">
+                              {session.coaches?.name || 'Unknown Coach'}
+                            </p>
                           </div>
                           <div className="flex justify-end">
                             <Button
