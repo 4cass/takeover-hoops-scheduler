@@ -14,7 +14,9 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Database } from "@/integrations/supabase/types";
 
-type Student = Database["public"]["Tables"]["students"]["Row"];
+type Student = Database["public"]["Tables"]["students"]["Row"] & {
+  attended_sessions: number;
+};
 type Branch = Database["public"]["Tables"]["branches"]["Row"];
 type AttendanceRecord = Database["public"]["Tables"]["attendance_records"]["Row"] & {
   training_sessions: Database["public"]["Tables"]["training_sessions"]["Row"] & {
@@ -47,16 +49,37 @@ export function StudentsManager() {
   const { data: students, isLoading } = useQuery({
     queryKey: ["students"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch students
+      const { data: studentsData, error: studentsError } = await supabase
         .from("students")
         .select("*")
         .order("created_at", { ascending: false });
-      if (error) {
-        console.error("students query error:", error);
-        throw error;
+      if (studentsError) {
+        console.error("students query error:", studentsError);
+        throw studentsError;
       }
-      console.log("Fetched students:", data);
-      return data as Student[];
+
+      // Fetch attendance records for all students
+      const { data: attendanceData, error: attendanceError } = await supabase
+        .from("attendance_records")
+        .select("student_id, status");
+      if (attendanceError) {
+        console.error("attendance_records query error:", attendanceError);
+        throw attendanceError;
+      }
+
+      // Count attended sessions for each student
+      const attendanceCountMap: Record<string, number> = {};
+      attendanceData?.forEach((record) => {
+        if (record.status === "present") {
+          attendanceCountMap[record.student_id] = (attendanceCountMap[record.student_id] || 0) + 1;
+        }
+      });
+
+      return (studentsData || []).map(student => ({
+        ...student,
+        attended_sessions: attendanceCountMap[student.id] || 0
+      })) as Student[];
     },
   });
 
@@ -102,6 +125,7 @@ export function StudentsManager() {
         console.error("attendance_records query error:", error);
         throw error;
       }
+      console.log("Fetched attendance records:", data);
       return data as AttendanceRecord[];
     },
     enabled: !!selectedStudent,
@@ -145,7 +169,7 @@ export function StudentsManager() {
           email: student.email,
           phone: student.phone || null,
           sessions: student.sessions,
-          remaining_sessions: student.remaining_sessions,
+          remaining_sessions: student.sessions, // Initialize remaining_sessions to total sessions
           branch_id: student.branch_id,
           package_type: student.package_type,
         }])
@@ -535,7 +559,7 @@ export function StudentsManager() {
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
                   {paginatedStudents.map((student) => {
-                    const attended = (student.sessions || 0) - student.remaining_sessions;
+                    const attended = student.attended_sessions;
                     const total = student.sessions || 0;
                     const progressPercentage = total > 0 ? (attended / total) * 100 : 0;
                     const branch = branches?.find(b => b.id === student.branch_id);
@@ -679,7 +703,7 @@ export function StudentsManager() {
                     <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Branch:</span> {branches?.find(b => b.id === selectedStudent?.branch_id)?.name || "N/A"}</p>
                     <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Package Type:</span> {selectedStudent?.package_type || "N/A"}</p>
                     <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Total Sessions:</span> {selectedStudent?.sessions || 0}</p>
-                    <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Remaining Sessions:</span> {selectedStudent?.remaining_sessions}</p>
+                    <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Attended Sessions:</span> {selectedStudent?.attended_sessions || 0}</p>
                   </div>
                 </div>
               </div>
