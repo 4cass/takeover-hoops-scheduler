@@ -110,6 +110,11 @@ export function AttendanceManager() {
             id,
             student_id,
             students (name)
+          ),
+          session_coaches (
+            id,
+            coach_id,
+            coaches (name)
           )
         `)
         .gte("date", format(pastDate, 'yyyy-MM-dd'))
@@ -122,7 +127,76 @@ export function AttendanceManager() {
       }
       
       console.log("Fetched sessions:", data);
-      return data || [];
+      
+      // Group sessions by unique combination of date, start_time, end_time, branch_id, package_type
+      const groupedSessions = new Map();
+      
+      data?.forEach(session => {
+        const key = `${session.date}-${session.start_time}-${session.end_time}-${session.branch_id}-${session.package_type}`;
+        
+        if (groupedSessions.has(key)) {
+          // Merge coaches and participants
+          const existingSession = groupedSessions.get(key);
+          
+          // Add coaches from session_coaches
+          if (session.session_coaches) {
+            session.session_coaches.forEach(sc => {
+              if (!existingSession.session_coaches.some(esc => esc.coach_id === sc.coach_id)) {
+                existingSession.session_coaches.push(sc);
+              }
+            });
+          }
+          
+          // Add main coach if not already included
+          if (session.coach_id && session.coaches) {
+            const mainCoachExists = existingSession.session_coaches.some(sc => sc.coach_id === session.coach_id);
+            if (!mainCoachExists) {
+              existingSession.session_coaches.push({
+                id: `main-${session.coach_id}`,
+                coach_id: session.coach_id,
+                coaches: session.coaches
+              });
+            }
+          }
+          
+          // Merge participants (avoid duplicates)
+          if (session.session_participants) {
+            session.session_participants.forEach(sp => {
+              if (!existingSession.session_participants.some(esp => esp.student_id === sp.student_id)) {
+                existingSession.session_participants.push(sp);
+              }
+            });
+          }
+        } else {
+          // Initialize session_coaches array
+          const sessionCoaches = [];
+          
+          // Add coaches from session_coaches relation
+          if (session.session_coaches) {
+            sessionCoaches.push(...session.session_coaches);
+          }
+          
+          // Add main coach if not already included
+          if (session.coach_id && session.coaches) {
+            const mainCoachExists = sessionCoaches.some(sc => sc.coach_id === session.coach_id);
+            if (!mainCoachExists) {
+              sessionCoaches.push({
+                id: `main-${session.coach_id}`,
+                coach_id: session.coach_id,
+                coaches: session.coaches
+              });
+            }
+          }
+          
+          groupedSessions.set(key, {
+            ...session,
+            session_coaches: sessionCoaches,
+            session_participants: session.session_participants || []
+          });
+        }
+      });
+      
+      return Array.from(groupedSessions.values());
     },
   });
 
@@ -162,10 +236,31 @@ export function AttendanceManager() {
     queryFn: async () => {
       if (!selectedSession) return [];
       console.log("Fetching attendance for session:", selectedSession);
+      
+      // Get the selected session to find all related sessions (in case of multi-coach camps)
+      const selectedSessionDetails = sessions?.find(s => s.id === selectedSession);
+      if (!selectedSessionDetails) return [];
+      
+      // For camp training sessions, we need to get attendance from all sessions with the same time/date/branch
+      let sessionIds = [selectedSession];
+      
+      if (selectedSessionDetails.package_type === 'Camp Training') {
+        // Find all sessions with same date, time, branch, and package type
+        const relatedSessions = sessions?.filter(s => 
+          s.date === selectedSessionDetails.date &&
+          s.start_time === selectedSessionDetails.start_time &&
+          s.end_time === selectedSessionDetails.end_time &&
+          s.branch_id === selectedSessionDetails.branch_id &&
+          s.package_type === selectedSessionDetails.package_type
+        ) || [];
+        
+        sessionIds = relatedSessions.map(s => s.id);
+      }
+      
       const { data, error } = await supabase
         .from("attendance_records")
         .select("id, session_id, student_id, status, marked_at, students (name)")
-        .eq("session_id", selectedSession)
+        .in("session_id", sessionIds)
         .order("created_at", { ascending: true });
       
       if (error) {
@@ -174,9 +269,21 @@ export function AttendanceManager() {
       }
       
       console.log("Fetched attendance records:", data);
-      return data || [];
+      
+      // Remove duplicates by student_id (keep the first record for each student)
+      const uniqueAttendance = [];
+      const seenStudents = new Set();
+      
+      data?.forEach(record => {
+        if (!seenStudents.has(record.student_id)) {
+          seenStudents.add(record.student_id);
+          uniqueAttendance.push(record);
+        }
+      });
+      
+      return uniqueAttendance;
     },
-    enabled: !!selectedSession,
+    enabled: !!selectedSession && !!sessions,
   });
 
   const selectedSessionDetails = sessions?.find((s) => s.id === selectedSession);
@@ -204,14 +311,31 @@ export function AttendanceManager() {
   });
 
   const filteredSessions = sessions
-    ?.filter((session) =>
-      (session.coaches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase()) ||
-       session.branches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase())) &&
-      (filterPackageType === "All" || session.package_type === filterPackageType) &&
-      (filterSessionStatus === "All" || session.status === filterSessionStatus) &&
-      (branchFilter === "All" || session.branch_id === branchFilter) &&
-      (coachFilter === "All" || session.coach_id === coachFilter)
-    )
+    ?.filter((session) => {
+      // Get coach names for filtering
+      const coachNames = [];
+      if (session.session_coaches && Array.isArray(session.session_coaches)) {
+        session.session_coaches.forEach(sc => {
+          if (sc.coaches && sc.coaches.name) {
+            coachNames.push(sc.coaches.name);
+          }
+        });
+      }
+      
+      const allCoachNames = coachNames.join(' ').toLowerCase();
+      const branchName = session.branches?.name?.toLowerCase() || '';
+      
+      const matchesSearch = allCoachNames.includes(sessionSearchTerm.toLowerCase()) ||
+                           branchName.includes(sessionSearchTerm.toLowerCase());
+      const matchesPackage = filterPackageType === "All" || session.package_type === filterPackageType;
+      const matchesStatus = filterSessionStatus === "All" || session.status === filterSessionStatus;
+      const matchesBranch = branchFilter === "All" || session.branch_id === branchFilter;
+      const matchesCoach = coachFilter === "All" || 
+                          (session.session_coaches && Array.isArray(session.session_coaches) && 
+                           session.session_coaches.some(sc => sc.coach_id === coachFilter));
+      
+      return matchesSearch && matchesPackage && matchesStatus && matchesBranch && matchesCoach;
+    })
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
@@ -453,74 +577,88 @@ export function AttendanceManager() {
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-                  {paginatedSessions.map((session) => (
-                    <Card 
-                      key={session.id} 
-                      className="border-2 transition-all duration-300 hover:shadow-lg rounded-lg border-accent overflow-hidden"
-                      style={{ borderColor: '#BEA877' }}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <Calendar className="w-4 sm:w-5 h-4 sm:h-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                            <h3 className="font-bold text-base sm:text-lg text-gray-900 truncate">
-                              {formatDate(session.date)}
-                            </h3>
+                  {paginatedSessions.map((session) => {
+                    // Get coach names
+                    const coachNames = [];
+                    if (session.session_coaches && Array.isArray(session.session_coaches)) {
+                      session.session_coaches.forEach(sc => {
+                        if (sc.coaches && sc.coaches.name) {
+                          coachNames.push(sc.coaches.name);
+                        }
+                      });
+                    }
+                    
+                    return (
+                      <Card 
+                        key={session.id} 
+                        className="border-2 transition-all duration-300 hover:shadow-lg rounded-lg border-accent overflow-hidden"
+                        style={{ borderColor: '#BEA877' }}
+                      >
+                        <CardHeader className="pb-3">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <Calendar className="w-4 sm:w-5 h-4 sm:h-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              <h3 className="font-bold text-base sm:text-lg text-gray-900 truncate">
+                                {formatDate(session.date)}
+                              </h3>
+                            </div>
+                            <Badge className={`font-medium ${getStatusBadgeColor(session.status)} text-xs sm:text-sm truncate max-w-full`}>
+                              {session.status}
+                            </Badge>
                           </div>
-                          <Badge className={`font-medium ${getStatusBadgeColor(session.status)} text-xs sm:text-sm truncate max-w-full`}>
-                            {session.status}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center space-x-2 text-gray-600 min-w-0">
-                          <Clock className="w-4 h-4 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate">
-                            {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
-                          </span>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Coach:</span> {session.coaches.name}</span>
-                        </div>
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Branch:</span> {session.branches.name}</span>
-                        </div>
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Package:</span> {session.package_type || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center justify-between min-w-0">
+                          <div className="flex items-center space-x-2 text-gray-600 min-w-0">
+                            <Clock className="w-4 h-4 flex-shrink-0" />
+                            <span className="text-xs sm:text-sm truncate">
+                              {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                            </span>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                            <span className="text-xs sm:text-sm truncate">
+                              <span className="font-medium">Coach:</span> {coachNames.join(', ') || 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                            <span className="text-xs sm:text-sm truncate"><span className="font-medium">Branch:</span> {session.branches.name}</span>
+                          </div>
                           <div className="flex items-center space-x-2 min-w-0">
                             <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                            <span className="text-xs sm:text-sm font-medium">{session.session_participants?.length || 0} Players</span>
+                            <span className="text-xs sm:text-sm truncate"><span className="font-medium">Package:</span> {session.package_type || 'N/A'}</span>
                           </div>
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleView(session)}
-                              className="bg-blue-600 text-white hover:bg-blue-700 w-10 h-10 p-0 flex items-center justify-center"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedSession(session.id);
-                                setShowAttendanceModal(true);
-                              }}
-                              className="bg-yellow-600 text-white hover:bg-yellow-700 w-10 h-10 p-0 flex items-center justify-center"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
+                          <div className="flex items-center justify-between min-w-0">
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                              <span className="text-xs sm:text-sm font-medium">{session.session_participants?.length || 0} Players</span>
+                            </div>
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleView(session)}
+                                className="bg-blue-600 text-white hover:bg-blue-700 w-10 h-10 p-0 flex items-center justify-center"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedSession(session.id);
+                                  setShowAttendanceModal(true);
+                                }}
+                                className="bg-yellow-600 text-white hover:bg-yellow-700 w-10 h-10 p-0 flex items-center justify-center"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
 
                 {totalPages > 1 && (
@@ -603,7 +741,7 @@ export function AttendanceManager() {
                   <div className="flex items-center space-x-2 min-w-0">
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Coach: {selectedSessionDetails?.coaches.name || 'N/A'}
+                      Coach: {selectedSessionDetails?.session_coaches?.map(sc => sc.coaches?.name).filter(Boolean).join(', ') || 'N/A'}
                     </span>
                   </div>
                   <div className="flex items-center space-x-2 min-w-0">
@@ -688,10 +826,10 @@ export function AttendanceManager() {
             <div className="space-y-4">
               <div className="p-3 sm:p-4 rounded-lg bg-gray-50 border border-gray-200 overflow-x-auto">
                 <p className="text-xs sm:text-sm text-gray-700 mb-1 truncate">
-                  <span className="font-medium">Coach:</span> {selectedSessionDetails?.coaches.name || 'N/A'}
+                  <span className="font-medium">Coach:</span> {selectedSessionDetails?.session_coaches?.map(sc => sc.coaches?.name).filter(Boolean).join(', ') || 'N/A'}
                 </p>
                 <p className="text-xs sm:text-sm text-gray-700 mb-1 truncate">
-                  <span className="font-medium">Branch:</span> {selectedSessionDetails?.branches.name || 'N/A'}
+                  <span className="font-medium">Branch:</span> {selectedSessionDetails?.branches?.name || 'N/A'}
                 </p>
                 <p className="text-xs sm:text-sm text-gray-700 mb-1 truncate">
                   <span className="font-medium">Package Type:</span> {selectedSessionDetails?.package_type || 'N/A'}
