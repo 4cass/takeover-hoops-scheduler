@@ -30,16 +30,12 @@ type TrainingSession = {
   end_time: string;
   branch_id: string;
   coach_id: string;
-  notes: string | null;
   status: SessionStatus;
   package_type: "Camp Training" | "Personal Training" | null;
+  notes?: string;
   branches: { name: string };
   coaches: { name: string };
-  session_participants: Array<{
-    id: string;
-    student_id: string;
-    students: { name: string };
-  }>;
+  session_participants: Array<{ students: { name: string } }>;
 };
 
 // Helper function to format date for display
@@ -104,7 +100,7 @@ export function SessionsManager() {
 
   const queryClient = useQueryClient();
 
-  const { data: sessions, isLoading, error } = useQuery({
+  const { data: sessions = [], refetch } = useQuery({
     queryKey: ['training-sessions'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -114,8 +110,6 @@ export function SessionsManager() {
           branches (name),
           coaches (name),
           session_participants (
-            id,
-            student_id,
             students (name)
           )
         `)
@@ -455,7 +449,7 @@ export function SessionsManager() {
       status: session.status,
       package_type: session.package_type || "",
     });
-    setSelectedStudents(session.session_participants?.map(p => p.student_id) || []);
+    setSelectedStudents(session.session_participants?.map(p => p.students.name) || []);
     if (session.package_type === "Personal Training") {
       setSelectedCoaches([]);
     } else {
@@ -477,7 +471,7 @@ export function SessionsManager() {
       package_type: session.package_type || "",
       coach_id: session.coach_id,
     }));
-    setSelectedStudents(session.session_participants?.map(p => p.student_id) || []);
+    setSelectedStudents(session.session_participants?.map(p => p.students.name) || []);
     setIsParticipantsDialogOpen(true);
   };
 

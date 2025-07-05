@@ -47,9 +47,7 @@ export function AdminDashboardStats() {
           start_time,
           end_time,
           branches!inner (name),
-          session_coaches!inner (
-            coaches!inner (name)
-          ),
+          coaches!inner (name),
           session_participants (count)
         `)
         .eq('status', 'scheduled')
@@ -85,9 +83,7 @@ export function AdminDashboardStats() {
           .select(`
             id, 
             created_at, 
-            session_coaches!inner (
-              coaches!inner (name)
-            )
+            coaches!inner (name)
           `)
           .eq('status', 'scheduled')
           .order('created_at', { ascending: false })
@@ -109,7 +105,7 @@ export function AdminDashboardStats() {
         ...(sessionsRes.data?.map(item => ({
           id: item.id,
           type: 'session',
-          description: `New session scheduled with ${item.session_coaches[0]?.coaches?.name || 'coach'}`,
+          description: `New session scheduled with ${item.coaches.name}`,
           created_at: item.created_at
         })) || []),
         ...(studentsRes.data?.map(item => ({
@@ -322,7 +318,7 @@ export function AdminDashboardStats() {
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground font-medium">
-                            {session.session_coaches?.[0]?.coaches?.name || 'No coach assigned'}
+                            {session.coaches?.name || 'No coach assigned'}
                           </TableCell>
                           <TableCell className="text-muted-foreground font-medium">{session.branches?.name}</TableCell>
                         </TableRow>
