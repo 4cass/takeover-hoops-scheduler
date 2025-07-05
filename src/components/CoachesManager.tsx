@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -95,22 +96,23 @@ const CoachesManager = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h2 className="text-2xl font-bold">Coaches</h2>
-        <Select
-          value={selectedCoachId || ''}
-          onValueChange={(value) => setSelectedCoachId(value || null)}
-          className="w-full sm:w-64"
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select a coach" />
-          </SelectTrigger>
-          <SelectContent>
-            {coaches.map(coach => (
-              <SelectItem key={coach.id} value={coach.id}>
-                {coach.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="w-full sm:w-64">
+          <Select
+            value={selectedCoachId || ''}
+            onValueChange={(value) => setSelectedCoachId(value || null)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select a coach" />
+            </SelectTrigger>
+            <SelectContent>
+              {coaches.map(coach => (
+                <SelectItem key={coach.id} value={coach.id}>
+                  {coach.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {isLoadingSessions ? (
@@ -135,7 +137,7 @@ const CoachesManager = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4" />
-                      <span>{session.branches.name}</span>
+                      <span>{session.branches?.name}</span>
                     </div>
                   </div>
                 </CardHeader>
@@ -146,7 +148,7 @@ const CoachesManager = () => {
                       <div>
                         <span className="text-muted-foreground">Students: </span>
                         <span>
-                          {session.session_participants.map(p => p.students.name).join(', ')}
+                          {session.session_participants.map(p => p.students?.name).join(', ')}
                         </span>
                       </div>
                     </div>

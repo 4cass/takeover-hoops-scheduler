@@ -85,12 +85,12 @@ const SessionsManager = () => {
         .from('training_sessions')
         .select(`
           *,
-          branches (
+          branches!training_sessions_branch_id_fkey (
             name,
             city
           ),
           session_coaches (
-            coaches (
+            coaches!session_coaches_coach_id_fkey (
               id,
               name,
               email
@@ -98,7 +98,7 @@ const SessionsManager = () => {
           ),
           session_participants (
             student_id,
-            students (
+            students!session_participants_student_id_fkey (
               id,
               name,
               email
@@ -515,7 +515,7 @@ const SessionsManager = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span>{session.branches.name}, {session.branches.city}</span>
+                  <span>{session.branches?.name}, {session.branches?.city}</span>
                 </div>
               </div>
 
@@ -544,7 +544,7 @@ const SessionsManager = () => {
                     <div className="flex flex-wrap gap-1">
                       {session.participants.map((participant, index) => (
                         <span key={participant.student_id} className="text-sm">
-                          {participant.students.name}
+                          {participant.students?.name}
                           {index < session.participants.length - 1 && ', '}
                         </span>
                       ))}

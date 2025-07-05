@@ -62,12 +62,12 @@ const AttendanceManager = () => {
         .from('training_sessions')
         .select(`
           *,
-          branches (
+          branches!training_sessions_branch_id_fkey (
             name,
             city
           ),
           session_coaches (
-            coaches (
+            coaches!session_coaches_coach_id_fkey (
               id,
               name,
               email
@@ -75,7 +75,7 @@ const AttendanceManager = () => {
           ),
           session_participants (
             student_id,
-            students (
+            students!session_participants_student_id_fkey (
               id,
               name,
               email
@@ -86,7 +86,7 @@ const AttendanceManager = () => {
             student_id,
             status,
             marked_at,
-            students (
+            students!attendance_records_student_id_fkey (
               name,
               email
             )
@@ -199,7 +199,7 @@ const AttendanceManager = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  <span>{session.branches.name}, {session.branches.city}</span>
+                  <span>{session.branches?.name}, {session.branches?.city}</span>
                 </div>
               </div>
 

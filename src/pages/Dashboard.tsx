@@ -1,6 +1,5 @@
 
-import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { useState } from 'react';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { DashboardStats } from '@/components/DashboardStats';
@@ -15,24 +14,40 @@ import { CoachAttendanceManager } from '@/components/CoachAttendanceManager';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 const Dashboard = () => {
+  const [activeTab, setActiveTab] = useState('overview');
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'overview':
+        return <DashboardStats />;
+      case 'branches':
+        return <BranchesManager />;
+      case 'coaches':
+        return <CoachesManager />;
+      case 'sessions':
+        return <SessionsManager />;
+      case 'attendance':
+        return <AttendanceManager />;
+      case 'students':
+        return <StudentsManager />;
+      case 'calendar':
+        return <CalendarManager />;
+      case 'coach-calendar':
+        return <CoachCalendarManager />;
+      case 'coach-attendance':
+        return <CoachAttendanceManager />;
+      default:
+        return <DashboardStats />;
+    }
+  };
+
   return (
     <ProtectedRoute>
       <SidebarProvider>
-        <AppSidebar />
+        <AppSidebar activeTab={activeTab} onTabChange={setActiveTab} />
         <SidebarInset>
           <div className="p-6">
-            <Routes>
-              <Route path="/" element={<DashboardStats />} />
-              <Route path="/branches" element={<BranchesManager />} />
-              <Route path="/coaches" element={<CoachesManager />} />
-              <Route path="/sessions" element={<SessionsManager />} />
-              <Route path="/attendance" element={<AttendanceManager />} />
-              <Route path="/students" element={<StudentsManager />} />
-              <Route path="/calendar" element={<CalendarManager />} />
-              <Route path="/coach-calendar" element={<CoachCalendarManager />} />
-              <Route path="/coach-attendance" element={<CoachAttendanceManager />} />
-              <Route path="/coach-attendance/:sessionId" element={<CoachAttendanceManager />} />
-            </Routes>
+            {renderContent()}
           </div>
         </SidebarInset>
       </SidebarProvider>
