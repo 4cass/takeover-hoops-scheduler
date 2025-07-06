@@ -15,7 +15,6 @@ import { format } from "date-fns";
 import { Database } from "@/integrations/supabase/types";
 
 type Student = Database["public"]["Tables"]["students"]["Row"];
-type Student = Database["public"]["Tables"]["students"]["Row"];
 type Branch = Database["public"]["Tables"]["branches"]["Row"];
 type AttendanceRecord = Database["public"]["Tables"]["attendance_records"]["Row"] & {
   training_sessions: Database["public"]["Tables"]["training_sessions"]["Row"] & {
@@ -158,6 +157,7 @@ export function StudentsManager() {
         toast.error(`Failed to fetch attendance records: ${error.message}`);
         throw error;
       }
+      console.log("Fetched attendance records:", data);
       return data as AttendanceRecord[];
     },
     enabled: !!paginatedStudents && paginatedStudents.length > 0,
@@ -191,7 +191,6 @@ export function StudentsManager() {
           email: student.email,
           phone: student.phone || null,
           sessions: student.sessions,
-          remaining_sessions: student.remaining_sessions,
           remaining_sessions: student.remaining_sessions,
           branch_id: student.branch_id,
           package_type: student.package_type,
