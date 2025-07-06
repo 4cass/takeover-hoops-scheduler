@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { format, parseISO, addDays, subDays } from "date-fns";
+import { TimeTrackingButtons } from "./TimeTrackingButtons";
+import { SessionTimeDetails } from "./SessionTimeDetails";
 
 type AttendanceStatus = "present" | "absent" | "pending";
 type SessionStatus = "scheduled" | "completed" | "cancelled" | "all";
@@ -61,7 +63,7 @@ export function CoachAttendanceManager() {
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [packageFilter, setPackageFilter] = useState<"All" | "Camp Training" | "Personal Training">("All");
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
 
   const getStatusVariant = (status: string) => {
@@ -436,6 +438,11 @@ export function CoachAttendanceManager() {
                           <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                           <span className="text-gray-700 truncate">Players: {session.session_participants?.length || 0}</span>
                         </div>
+
+                        {/* Add Time Tracking Buttons for each session card */}
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <TimeTrackingButtons sessionId={session.id} isAdmin={role === 'admin'} />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -508,6 +515,12 @@ export function CoachAttendanceManager() {
                     </Badge>
                   </div>
                 </div>
+
+                {/* Add Session Time Details */}
+                <div className="border-t pt-4">
+                  <SessionTimeDetails sessionId={selectedSessionModal.id} />
+                </div>
+
                 <div className="flex justify-end">
                   <Button
                     onClick={() => handleManageAttendance(selectedSessionModal.id)}
@@ -573,6 +586,14 @@ export function CoachAttendanceManager() {
                   </div>
                 </div>
               </DialogHeader>
+
+              {/* Add Time Tracking Section */}
+              {selectedSession && (
+                <div className="mb-4 sm:mb-6 p-3 sm:p-4 lg:p-6 bg-gray-50 rounded-lg">
+                  <h3 className="text-sm sm:text-base font-semibold text-[#181A18] mb-3">Time Tracking</h3>
+                  <TimeTrackingButtons sessionId={selectedSession} isAdmin={role === 'admin'} />
+                </div>
+              )}
 
               {/* Search Players */}
               <div className="mb-4 sm:mb-6 p-3 sm:p-4 lg:p-6">
