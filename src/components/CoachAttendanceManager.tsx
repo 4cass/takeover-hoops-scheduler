@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
@@ -12,24 +11,10 @@ import { SessionFilters } from "./attendance/SessionFilters";
 import { SessionCard } from "./attendance/SessionCard";
 import { SessionDetailsModal } from "./attendance/SessionDetailsModal";
 import { AttendanceModal } from "./attendance/AttendanceModal";
-
-type AttendanceStatus = "present" | "absent" | "pending";
-type SessionStatus = "scheduled" | "completed" | "cancelled" | "all";
+import { TrainingSession, AttendanceStatus, SessionStatus } from "./attendance/types";
 
 const attendanceStatuses = ["present", "absent", "pending"] as const;
 type AttendanceStatusLiteral = typeof attendanceStatuses[number];
-
-type TrainingSession = {
-  id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  branch_id: string;
-  status: SessionStatus;
-  package_type: "Camp Training" | "Personal Training" | null;
-  branches: { name: string };
-  session_participants: Array<{ students: { name: string } }>;
-};
 
 export function CoachAttendanceManager() {
   const { sessionId } = useParams();

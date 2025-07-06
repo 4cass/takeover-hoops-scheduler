@@ -1,21 +1,9 @@
-
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, MapPin, Users } from "lucide-react";
 import { format } from "date-fns";
 import { TimeTrackingButtons } from "../TimeTrackingButtons";
-
-interface TrainingSession {
-  id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  branch_id: string;
-  status: "scheduled" | "completed" | "cancelled";
-  package_type: "Camp Training" | "Personal Training" | null;
-  branches: { name: string };
-  session_participants: Array<{ students: { name: string } }>;
-}
+import { TrainingSession } from "./types";
 
 interface SessionCardProps {
   session: TrainingSession;

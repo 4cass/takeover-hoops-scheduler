@@ -1,21 +1,9 @@
-
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, MapPin, Users } from "lucide-react";
 import { SessionTimeDetails } from "../SessionTimeDetails";
-
-interface TrainingSession {
-  id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  branch_id: string;
-  status: "scheduled" | "completed" | "cancelled";
-  package_type: "Camp Training" | "Personal Training" | null;
-  branches: { name: string };
-  session_participants: Array<{ students: { name: string } }>;
-}
+import { TrainingSession } from "./types";
 
 interface SessionDetailsModalProps {
   session: TrainingSession | null;
