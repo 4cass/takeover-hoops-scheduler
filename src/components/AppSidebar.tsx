@@ -1,4 +1,3 @@
-
 import { Calendar, Users, MapPin, UserCheck, BookOpen, ClipboardList, Home, LogOut } from "lucide-react";
 import {
   Sidebar,
@@ -58,11 +57,12 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
     <Sidebar className="border-r bg-[#181A18]">
       <SidebarHeader className="p-6 border-b bg-[#181A18] border-[#181A18]">
         <div className="flex items-center gap-3">
-          <div className="w-30 h-30 bg-[#181A18] rounded-lg flex items-center justify-center">
-            <img src="./1.png" alt="Logo" className="h-20 w-20 object-contain" onError={(e) => {
-              // Fallback if image fails to load
-              e.currentTarget.style.display = 'none';
-            }} />
+          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center p-1">
+            <img 
+              src="/lovable-uploads/f403ddf3-4be7-4173-8174-a0b878c4160d.png" 
+              alt="Takeover Basketball Logo" 
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="flex bg-[#181A18] flex-col">
             <h2 className="text-xl font-bold tracking-tight text-white">Takeover Basketball</h2>
