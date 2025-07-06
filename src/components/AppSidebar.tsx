@@ -1,3 +1,4 @@
+
 import { Calendar, Users, MapPin, UserCheck, BookOpen, ClipboardList, Home, LogOut } from "lucide-react";
 import {
   Sidebar,
@@ -57,7 +58,7 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
     <Sidebar className="border-r bg-[#181A18]">
       <SidebarHeader className="p-6 border-b bg-[#181A18] border-[#181A18]">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 flex items-center justify-center">
+          <div className="w-16 h-16 flex items-center justify-center">
             <img 
               src="/lovable-uploads/dcb5b3e4-1037-41ed-bf85-c78cee85066e.png" 
               alt="Takeover Basketball Logo" 
