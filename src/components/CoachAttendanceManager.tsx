@@ -18,6 +18,18 @@ type SessionStatus = "scheduled" | "completed" | "cancelled" | "all";
 const attendanceStatuses = ["present", "absent", "pending"] as const;
 type AttendanceStatusLiteral = typeof attendanceStatuses[number];
 
+type TrainingSession = {
+  id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  branch_id: string;
+  status: SessionStatus;
+  package_type: "Camp Training" | "Personal Training" | null;
+  branches: { name: string };
+  session_participants: Array<{ students: { name: string } }>;
+};
+
 const formatTime12Hour = (timeString: string) => {
   const [hours, minutes] = timeString.split(":").map(Number);
   const period = hours >= 12 ? "PM" : "AM";
@@ -38,20 +50,10 @@ const formatDate = (dateString: string) => {
   }
 };
 
-const formatDateTime = (dateString: string) => {
-  try {
-    const date = parseISO(dateString);
-    return format(date, 'MMM dd, h:mm a');
-  } catch (error) {
-    console.error("Error formatting datetime:", error, "Input:", dateString);
-    return new Date(dateString).toLocaleDateString();
-  }
-};
-
 export function CoachAttendanceManager() {
   const { sessionId } = useParams();
   const [selectedSession, setSelectedSession] = useState<string | null>(sessionId || null);
-  const [selectedSessionModal, setSelectedSessionModal] = useState<any | null>(null);
+  const [selectedSessionModal, setSelectedSessionModal] = useState<TrainingSession | null>(null);
   const [showAttendanceModal, setShowAttendanceModal] = useState(!!sessionId);
   const [searchTerm, setSearchTerm] = useState("");
   const [sessionSearchTerm, setSessionSearchTerm] = useState("");
@@ -99,25 +101,47 @@ export function CoachAttendanceManager() {
         .from('branches')
         .select('id, name')
         .order('name');
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching branches:", error);
+        throw error;
+      }
+      console.log("Fetched branches:", data);
       return data;
     }
   });
 
-  const { data: sessions } = useQuery<any[]>({
+  const { data: sessions } = useQuery<TrainingSession[]>({
     queryKey: ["coach-sessions", coachId, branchFilter, packageFilter, statusFilter, sessionSearchTerm],
     queryFn: async () => {
       if (!coachId) return [];
       console.log("Fetching sessions for coach:", coachId);
       
+      // Fetch session IDs from session_coaches
+      const coachSessionsRes = await supabase
+        .from('session_coaches')
+        .select('session_id')
+        .eq('coach_id', coachId);
+
+      if (coachSessionsRes.error) {
+        console.error("Error fetching coach sessions:", coachSessionsRes.error);
+        throw coachSessionsRes.error;
+      }
+
+      const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
+      console.log("Session IDs from session_coaches:", sessionIds);
+
       const today = new Date();
       const pastDate = subDays(today, 30);
       const futureDate = addDays(today, 30);
       
       let query = supabase
         .from("training_sessions")
-        .select("id, date, start_time, end_time, status, package_type, branches (name), coaches (name)")
-        .eq("coach_id", coachId)
+        .select(`
+          id, date, start_time, end_time, branch_id, status, package_type,
+          branches (name),
+          session_participants (students (name))
+        `)
+        .in("id", sessionIds)
         .gte("date", format(pastDate, 'yyyy-MM-dd'))
         .lte("date", format(futureDate, 'yyyy-MM-dd'));
 
@@ -139,9 +163,38 @@ export function CoachAttendanceManager() {
       }
       
       console.log("Fetched sessions:", data);
-      return data || [];
+      // Map package_type to the correct union type
+      return (data || []).map((session: any) => ({
+        ...session,
+        package_type: session.package_type === "Camp Training"
+          ? "Camp Training"
+          : session.package_type === "Personal Training"
+          ? "Personal Training"
+          : null,
+      })) as TrainingSession[];
     },
     enabled: !!coachId,
+  });
+
+  const { data: sessionCoaches } = useQuery({
+    queryKey: ["session-coaches", selectedSession],
+    queryFn: async () => {
+      if (!selectedSession) return [];
+      console.log("Fetching coaches for session:", selectedSession);
+      const { data, error } = await supabase
+        .from("session_coaches")
+        .select("coach_id, coaches (name)")
+        .eq("session_id", selectedSession);
+      
+      if (error) {
+        console.error("Error fetching session coaches:", error);
+        throw error;
+      }
+      
+      console.log("Fetched session coaches:", data);
+      return data || [];
+    },
+    enabled: !!selectedSession,
   });
 
   const { data: attendanceRecords } = useQuery<any[]>({
@@ -231,7 +284,7 @@ export function CoachAttendanceManager() {
     }
   };
 
-  const handleSessionCardClick = (session: any) => {
+  const handleSessionCardClick = (session: TrainingSession) => {
     setSelectedSessionModal(session);
   };
 
@@ -250,17 +303,6 @@ export function CoachAttendanceManager() {
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
         {/* Header with Back Button */}
         <div className="space-y-3 sm:space-y-4">
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Button
-              onClick={handleBackToCalendar}
-              variant="outline"
-              size="sm"
-              className="border-[#8e7a3f] text-[#8e7a3f] hover:bg-[#8e7a3f] hover:text-white transition-all duration-300"
-            >
-              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              <span className="text-xs sm:text-sm">Back</span>
-            </Button>
-          </div>
           <div className="space-y-2">
             <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-[#181A18] tracking-tight">
               Attendance Management
@@ -372,7 +414,7 @@ export function CoachAttendanceManager() {
                           </span>
                         </div>
                         <Badge variant={getStatusVariant(session.status)} className="text-xs font-medium">
-                          {session.status}
+                          {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
                         </Badge>
                       </div>
                       <div className="space-y-2 text-xs sm:text-sm">
@@ -389,6 +431,10 @@ export function CoachAttendanceManager() {
                         <div className="flex items-center space-x-2">
                           <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                           <span className="text-gray-700 truncate">{session.package_type || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                          <span className="text-gray-700 truncate">Players: {session.session_participants?.length || 0}</span>
                         </div>
                       </div>
                     </CardContent>
@@ -450,6 +496,13 @@ export function CoachAttendanceManager() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <div>
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Players</p>
+                      <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.session_participants?.length || 0}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
                     <Badge variant={getStatusVariant(selectedSessionModal.status)} className="font-medium px-2 sm:px-3 py-1 text-xs sm:text-sm">
                       {selectedSessionModal.status.charAt(0).toUpperCase() + selectedSessionModal.status.slice(1)}
                     </Badge>
@@ -490,8 +543,10 @@ export function CoachAttendanceManager() {
                 <div className="mt-3 sm:mt-4 space-y-2 sm:space-y-3 text-xs sm:text-sm lg:text-base">
                   <div className="flex flex-row gap-4 sm:gap-6">
                     <div className="flex-1 min-w-0 flex items-center gap-2">
-                      <span className="font-medium text-gray-600">Coach:</span>
-                      <span className="text-black truncate">{selectedSessionDetails?.coaches?.name || 'N/A'}</span>
+                      <span className="font-medium text-gray-600">Coaches:</span>
+                      <span className="text-black truncate">
+                        {sessionCoaches?.map(c => c.coaches.name).join(', ') || 'N/A'}
+                      </span>
                     </div>
                     <div className="flex-1 min-w-0 flex items-center gap-2">
                       <span className="font-medium text-gray-600">Branch:</span>
@@ -506,8 +561,14 @@ export function CoachAttendanceManager() {
                     <div className="flex-1 min-w-0 flex items-center gap-2">
                       <span className="font-medium text-gray-600">Status:</span>
                       <Badge variant={getStatusVariant(selectedSessionDetails?.status || '')} className="text-xs sm:text-sm">
-                        {selectedSessionDetails?.status || 'N/A'}
+                        {selectedSessionDetails?.status ? selectedSessionDetails.status.charAt(0).toUpperCase() + selectedSessionDetails.status.slice(1) : 'N/A'}
                       </Badge>
+                    </div>
+                  </div>
+                  <div className="flex flex-row gap-4 sm:gap-6">
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="font-medium text-gray-600">Players:</span>
+                      <span className="text-black truncate">{selectedSessionDetails?.session_participants?.length || 0}</span>
                     </div>
                   </div>
                 </div>

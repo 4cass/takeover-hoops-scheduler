@@ -21,11 +21,9 @@ type TrainingSession = {
   start_time: string;
   end_time: string;
   branch_id: string;
-  coach_id: string;
   status: SessionStatus;
   package_type: "Camp Training" | "Personal Training" | null;
   branches: { name: string };
-  coaches: { name: string };
   session_participants: Array<{ students: { name: string } }>;
 };
 
@@ -60,6 +58,7 @@ export function CoachCalendarManager() {
         console.error("Error fetching coach ID:", error);
         return null;
       }
+      console.log("Coach ID:", coach?.id);
       return coach?.id;
     },
     enabled: !!user?.id,
@@ -69,17 +68,31 @@ export function CoachCalendarManager() {
     queryKey: ['coach-training-sessions', coachId, selectedBranch, filterPackageType, currentMonth],
     queryFn: async () => {
       if (!coachId) return [];
+      // Fetch session IDs from session_coaches
+      const coachSessionsRes = await supabase
+        .from('session_coaches')
+        .select('session_id')
+        .eq('coach_id', coachId);
+
+      if (coachSessionsRes.error) {
+        console.error("Error fetching coach sessions:", coachSessionsRes.error);
+        throw coachSessionsRes.error;
+      }
+
+      const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
+      console.log("Session IDs from session_coaches:", sessionIds);
+
       let query = supabase
         .from('training_sessions')
         .select(`
-          id, date, start_time, end_time, branch_id, coach_id, status, package_type,
+          id, date, start_time, end_time, branch_id, status, package_type,
           branches (name),
-          coaches (name),
           session_participants (
             students (name)
           )
         `)
-        .eq('coach_id', coachId)
+        .in('id', sessionIds)
+        .eq('status', 'scheduled')
         .gte('date', format(startOfMonth(currentMonth), 'yyyy-MM-dd'))
         .lte('date', format(endOfMonth(currentMonth), 'yyyy-MM-dd'));
 
@@ -88,7 +101,11 @@ export function CoachCalendarManager() {
       }
 
       const { data, error } = await query.order('date', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching sessions:", error);
+        throw error;
+      }
+      console.log("Sessions result:", data);
       return data as TrainingSession[];
     },
     enabled: !!coachId
@@ -102,6 +119,7 @@ export function CoachCalendarManager() {
         .select('id, name')
         .order('name');
       if (error) throw error;
+      console.log("Branches:", data);
       return data;
     }
   });
@@ -120,7 +138,7 @@ export function CoachCalendarManager() {
     switch (status) {
       case 'scheduled': return 'bg-blue-500 text-white border-blue-500';
       case 'completed': return 'bg-green-500 text-white border-green-500';
-      case 'cancelled': return 'bg-red-500 text-white border-red-500';
+      case 'cancelled': return 'bg-Red-500 text-white border-Red-500';
       default: return 'bg-gray-500 text-white border-gray-500';
     }
   };

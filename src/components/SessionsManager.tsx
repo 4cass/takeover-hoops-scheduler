@@ -29,12 +29,15 @@ type TrainingSession = {
   start_time: string;
   end_time: string;
   branch_id: string;
-  coach_id: string;
   notes: string | null;
   status: SessionStatus;
   package_type: "Camp Training" | "Personal Training" | null;
   branches: { name: string };
-  coaches: { name: string };
+  session_coaches: Array<{
+    id: string;
+    coach_id: string;
+    coaches: { name: string };
+  }>;
   session_participants: Array<{
     id: string;
     student_id: string;
@@ -42,7 +45,7 @@ type TrainingSession = {
   }>;
 };
 
-// Helper function to format date for display
+// Helper functions
 const formatDisplayDate = (dateString: string) => {
   try {
     const date = parseISO(dateString);
@@ -53,7 +56,6 @@ const formatDisplayDate = (dateString: string) => {
   }
 };
 
-// Helper function to format time for display
 const formatDisplayTime = (timeString: string) => {
   try {
     const today = new Date().toISOString().split('T')[0];
@@ -66,7 +68,6 @@ const formatDisplayTime = (timeString: string) => {
   }
 };
 
-// Helper function to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
   const today = new Date();
   const year = today.getFullYear();
@@ -96,7 +97,6 @@ export function SessionsManager() {
     start_time: "",
     end_time: "",
     branch_id: "",
-    coach_id: "",
     notes: "",
     status: "scheduled" as SessionStatus,
     package_type: "",
@@ -115,12 +115,15 @@ export function SessionsManager() {
           start_time,
           end_time,
           branch_id,
-          coach_id,
           notes,
           status,
           package_type,
           branches (name),
-          coaches (name),
+          session_coaches (
+            id,
+            coach_id,
+            coaches (name)
+          ),
           session_participants (
             id,
             student_id,
@@ -182,153 +185,56 @@ export function SessionsManager() {
   const createMutation = useMutation({
     mutationFn: async (session: typeof formData) => {
       if (!session.package_type) throw new Error('Package type is required');
+      if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
 
-      let sessionsToCreate = [];
+      // Validate student session limits
+      const invalidStudents = selectedStudents
+        .map(studentId => students?.find(s => s.id === studentId))
+        .filter(student => student && student.remaining_sessions <= 0);
+      
+      if (invalidStudents.length > 0) {
+        throw new Error(
+          `The following students have no remaining sessions: ${invalidStudents
+            .map(s => s!.name)
+            .join(', ')}. Please increase their session count.`
+        );
+      }
 
-      if (formData.package_type === "Personal Training") {
-        if (!formData.coach_id) throw new Error('Coach must be selected for Personal Training');
-        
-        // Check for conflicts
+      // Check for conflicts for all selected coaches
+      for (const coachId of selectedCoaches) {
         const { data: conflicts } = await supabase
-          .from('training_sessions')
-          .select('id')
-          .eq('coach_id', formData.coach_id)
-          .eq('date', session.date)
-          .lte('start_time', session.end_time)
-          .gte('end_time', session.start_time);
+          .from('session_coaches')
+          .select('session_id, training_sessions!inner(date, start_time, end_time)')
+          .eq('coach_id', coachId)
+          .eq('training_sessions.date', session.date)
+          .lte('training_sessions.start_time', session.end_time)
+          .gte('training_sessions.end_time', session.start_time);
 
         if (conflicts && conflicts.length > 0) {
-          const coachName = coaches?.find(c => c.id === formData.coach_id)?.name;
+          const coachName = coaches?.find(c => c.id === coachId)?.name;
           throw new Error(`Coach ${coachName} is already scheduled for a session on this date/time.`);
         }
-
-        sessionsToCreate.push({
-          ...session,
-          coach_id: formData.coach_id,
-          package_type: session.package_type
-        });
-      } else if (formData.package_type === "Camp Training") {
-        if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected for Camp Training');
-        
-        // Check for conflicts for all selected coaches
-        for (const coachId of selectedCoaches) {
-          const { data: conflicts } = await supabase
-            .from('training_sessions')
-            .select('id')
-            .eq('coach_id', coachId)
-            .eq('date', session.date)
-            .lte('start_time', session.end_time)
-            .gte('end_time', session.start_time);
-
-          if (conflicts && conflicts.length > 0) {
-            const coachName = coaches?.find(c => c.id === coachId)?.name;
-            throw new Error(`Coach ${coachName} is already scheduled for a session on this date/time.`);
-          }
-        }
-
-        // Create separate sessions for each coach in camp training
-        sessionsToCreate = selectedCoaches.map(coachId => ({
-          ...session,
-          coach_id: coachId,
-          package_type: session.package_type
-        }));
       }
 
-      const createdSessions: TrainingSession[] = [];
-      
-      // Insert all sessions
-      for (const sessionData of sessionsToCreate) {
-        const { data: sessionResult, error } = await supabase
-          .from('training_sessions')
-          .insert([sessionData])
-          .select(`
-            id,
-            date,
-            start_time,
-            end_time,
-            branch_id,
-            coach_id,
-            notes,
-            status,
-            package_type,
-            branches (name),
-            coaches (name),
-            session_participants (
-              id,
-              student_id,
-              students (name)
-            )
-          `)
-          .single();
-        
-        if (error) throw error;
-        createdSessions.push(sessionResult as TrainingSession);
-      }
-
-      // Add participants to all created sessions
-      if (selectedStudents.length > 0) {
-        for (const session of createdSessions) {
-          const { error: participantsError } = await supabase
-            .from('session_participants')
-            .insert(
-              selectedStudents.map(studentId => ({
-                session_id: session.id,
-                student_id: studentId
-              }))
-            );
-          
-          if (participantsError) throw participantsError;
-
-          const { error: attendanceError } = await supabase
-            .from('attendance_records')
-            .insert(
-              selectedStudents.map(studentId => ({
-                session_id: session.id,
-                student_id: studentId,
-                status: 'pending' as const
-              }))
-            );
-          
-          if (attendanceError) throw attendanceError;
-        }
-      }
-
-      return createdSessions;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      const sessionCount = data.length;
-      const coachCount = formData.package_type === "Camp Training" ? selectedCoaches.length : 1;
-      toast.success(`${sessionCount} training session${sessionCount > 1 ? 's' : ''} created successfully for ${coachCount} coach${coachCount > 1 ? 'es' : ''}`);
-      resetForm();
-    },
-    onError: (error) => {
-      toast.error('Failed to create session: ' + error.message);
-    }
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, ...session }: typeof formData & { id: string }) => {
-      if (!session.package_type) throw new Error('Package type is required');
-      if (!formData.coach_id) throw new Error('Coach must be selected');
-
-      const { data, error } = await supabase
+      // Create a single session
+      const { data: sessionResult, error: sessionError } = await supabase
         .from('training_sessions')
-        .update({ ...session, coach_id: formData.coach_id, package_type: session.package_type || null })
-        .eq('id', id)
+        .insert([{ ...session }])
         .select(`
           id,
           date,
           start_time,
           end_time,
           branch_id,
-          coach_id,
           notes,
           status,
           package_type,
           branches (name),
-          coaches (name),
+          session_coaches (
+            id,
+            coach_id,
+            coaches (name)
+          ),
           session_participants (
             id,
             student_id,
@@ -337,15 +243,174 @@ export function SessionsManager() {
         `)
         .single();
       
-      if (error) throw error;
+      if (sessionError) {
+        console.error('Session creation error:', sessionError);
+        throw sessionError;
+      }
 
+      const createdSession = sessionResult as TrainingSession;
+
+      // Insert session_coaches entries
+      if (selectedCoaches.length > 0) {
+        const { error: coachesError } = await supabase
+          .from('session_coaches')
+          .insert(
+            selectedCoaches.map(coachId => ({
+              session_id: createdSession.id,
+              coach_id: coachId
+            }))
+          );
+
+        if (coachesError) {
+          console.error('Session coaches insert error:', coachesError);
+          throw coachesError;
+        }
+      }
+
+      // Add participants
+      if (selectedStudents.length > 0) {
+        const { error: participantsError } = await supabase
+          .from('session_participants')
+          .insert(
+            selectedStudents.map(studentId => ({
+              session_id: createdSession.id,
+              student_id: studentId
+            }))
+          );
+        
+        if (participantsError) {
+          console.error('Session participants insert error:', participantsError);
+          throw participantsError;
+        }
+
+        const { error: attendanceError } = await supabase
+          .from('attendance_records')
+          .insert(
+            selectedStudents.map(studentId => ({
+              session_id: createdSession.id,
+              student_id: studentId,
+              status: 'pending' as const
+            }))
+          );
+        
+        if (attendanceError) {
+          console.error('Attendance records insert error:', attendanceError);
+          throw attendanceError;
+        }
+      }
+
+      return createdSession;
+    },
+    onSuccess: (data) => {
+      console.log('Created session:', data);
+      queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success(`Training session created successfully with ${selectedCoaches.length} coach${selectedCoaches.length > 1 ? 'es' : ''}`);
+      resetForm();
+    },
+    onError: (error) => {
+      console.error('Create mutation error:', error);
+      toast.error('Failed to create session: ' + error.message);
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, ...session }: typeof formData & { id: string }) => {
+      if (!session.package_type) throw new Error('Package type is required');
+      if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
+
+      // Validate student session limits
+      const invalidStudents = selectedStudents
+        .map(studentId => students?.find(s => s.id === studentId))
+        .filter(student => student && student.remaining_sessions <= 0);
+      
+      if (invalidStudents.length > 0) {
+        throw new Error(
+          `The following students have no remaining sessions: ${invalidStudents
+            .map(s => s!.name)
+            .join(', ')}. Please increase their session count.`
+        );
+      }
+
+      // Check for conflicts
+      for (const coachId of selectedCoaches) {
+        const { data: conflicts } = await supabase
+          .from('session_coaches')
+          .select('session_id, training_sessions!inner(date, start_time, end_time)')
+          .eq('coach_id', coachId)
+          .eq('training_sessions.date', session.date)
+          .lte('training_sessions.start_time', session.end_time)
+          .gte('training_sessions.end_time', session.start_time)
+          .neq('session_id', id);
+
+        if (conflicts && conflicts.length > 0) {
+          const coachName = coaches?.find(c => c.id === coachId)?.name;
+          throw new Error(`Coach ${coachName} is already scheduled for another session on this date/time.`);
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('training_sessions')
+        .update({ ...session })
+        .eq('id', id)
+        .select(`
+          id,
+          date,
+          start_time,
+          end_time,
+          branch_id,
+          notes,
+          status,
+          package_type,
+          branches (name),
+          session_coaches (
+            id,
+            coach_id,
+            coaches (name)
+          ),
+          session_participants (
+            id,
+            student_id,
+            students (name)
+          )
+        `)
+        .single();
+      
+      if (error) {
+        console.error('Session update error:', error);
+        throw error;
+      }
+
+      // Update session_coaches
+      await supabase
+        .from('session_coaches')
+        .delete()
+        .eq('session_id', id);
+
+      if (selectedCoaches.length > 0) {
+        const { error: coachesError } = await supabase
+          .from('session_coaches')
+          .insert(
+            selectedCoaches.map(coachId => ({
+              session_id: id,
+              coach_id: coachId
+            }))
+          );
+
+        if (coachesError) {
+          console.error('Session coaches update error:', coachesError);
+          throw coachesError;
+        }
+      }
+
+      // Update participants
       await supabase
         .from('session_participants')
         .delete()
         .eq('session_id', id);
 
       if (selectedStudents.length > 0) {
-        await supabase
+        const { error: participantsError } = await supabase
           .from('session_participants')
           .insert(
             selectedStudents.map(studentId => ({
@@ -354,12 +419,17 @@ export function SessionsManager() {
             }))
           );
 
+        if (participantsError) {
+          console.error('Session participants update error:', participantsError);
+          throw participantsError;
+        }
+
         await supabase
           .from('attendance_records')
           .delete()
           .eq('session_id', id);
 
-        await supabase
+        const { error: attendanceError } = await supabase
           .from('attendance_records')
           .insert(
             selectedStudents.map(studentId => ({
@@ -368,36 +438,82 @@ export function SessionsManager() {
               status: 'pending' as const
             }))
           );
+
+        if (attendanceError) {
+          console.error('Attendance records update error:', attendanceError);
+          throw attendanceError;
+        }
       }
 
       return data as TrainingSession;
     },
     onSuccess: () => {
+      console.log('Updated session, invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
       toast.success('Training session updated successfully');
       resetForm();
     },
     onError: (error) => {
+      console.error('Update mutation error:', error);
       toast.error('Failed to update session: ' + error.message);
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      // Delete related records in session_participants
+      const { error: participantsError } = await supabase
+        .from('session_participants')
+        .delete()
+        .eq('session_id', id);
+      
+      if (participantsError) {
+        console.error('Session participants delete error:', participantsError);
+        throw new Error(`Failed to delete session participants: ${participantsError.message}`);
+      }
+
+      // Delete related records in session_coaches
+      const { error: coachesError } = await supabase
+        .from('session_coaches')
+        .delete()
+        .eq('session_id', id);
+      
+      if (coachesError) {
+        console.error('Session coaches delete error:', coachesError);
+        throw new Error(`Failed to delete session coaches: ${coachesError.message}`);
+      }
+
+      // Delete related records in attendance_records
+      const { error: attendanceError } = await supabase
+        .from('attendance_records')
+        .delete()
+        .eq('session_id', id);
+      
+      if (attendanceError) {
+        console.error('Attendance records delete error:', attendanceError);
+        throw new Error(`Failed to delete attendance records: ${attendanceError.message}`);
+      }
+
+      // Delete the session
+      const { error: sessionError } = await supabase
         .from('training_sessions')
         .delete()
         .eq('id', id);
       
-      if (error) throw error;
+      if (sessionError) {
+        console.error('Session delete error:', sessionError);
+        throw new Error(`Failed to delete session: ${sessionError.message}`);
+      }
     },
     onSuccess: () => {
+      console.log('Deleted session and related records, invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Training session deleted successfully');
       setCurrentPage(1);
     },
     onError: (error) => {
+      console.error('Delete mutation error:', error);
       toast.error('Failed to delete session: ' + error.message);
     }
   });
@@ -408,7 +524,6 @@ export function SessionsManager() {
       start_time: "",
       end_time: "",
       branch_id: "",
-      coach_id: "",
       notes: "",
       status: "scheduled" as SessionStatus,
       package_type: "",
@@ -434,13 +549,8 @@ export function SessionsManager() {
       return;
     }
 
-    if (formData.package_type === "Personal Training" && !formData.coach_id) {
-      toast.error('Please select a coach');
-      return;
-    }
-
-    if (formData.package_type === "Camp Training" && selectedCoaches.length === 0) {
-      toast.error('Please select at least one coach for camp training');
+    if (selectedCoaches.length === 0) {
+      toast.error('Please select at least one coach');
       return;
     }
 
@@ -454,16 +564,28 @@ export function SessionsManager() {
       return;
     }
 
-    // Check for conflicts
-    const coachesToCheck = formData.package_type === "Personal Training" ? [formData.coach_id] : selectedCoaches;
+    // Validate student session limits
+    const invalidStudents = selectedStudents
+      .map(studentId => students?.find(s => s.id === studentId))
+      .filter(student => student && student.remaining_sessions <= 0);
     
+    if (invalidStudents.length > 0) {
+      toast.error(
+        `The following students have no remaining sessions: ${invalidStudents
+          .map(s => s!.name)
+          .join(', ')}. Please increase their session count in the Players Manager.`
+      );
+      return;
+    }
+
+    // Check for conflicts
     const hasConflict = sessions?.some(session =>
-      coachesToCheck.includes(session.coach_id) &&
       session.date === formData.date &&
       (
         (formData.start_time < session.end_time) &&
         (formData.end_time > session.start_time)
       ) &&
+      selectedCoaches.some(coachId => session.session_coaches.some(sc => sc.coach_id === coachId)) &&
       (!editingSession || editingSession.id !== session.id)
     );
 
@@ -486,13 +608,12 @@ export function SessionsManager() {
       start_time: session.start_time,
       end_time: session.end_time,
       branch_id: session.branch_id,
-      coach_id: session.coach_id,
       notes: session.notes || "",
       status: session.status,
       package_type: session.package_type || "",
     });
     setSelectedStudents(session.session_participants?.map(p => p.student_id) || []);
-    setSelectedCoaches(session.package_type === "Camp Training" ? [session.coach_id] : []);
+    setSelectedCoaches(session.session_coaches?.map(sc => sc.coach_id) || []);
     setIsDialogOpen(true);
   };
 
@@ -507,26 +628,19 @@ export function SessionsManager() {
       ...prev,
       branch_id: session.branch_id,
       package_type: session.package_type || "",
-      coach_id: session.coach_id,
     }));
     setSelectedStudents(session.session_participants?.map(p => p.student_id) || []);
     setIsParticipantsDialogOpen(true);
   };
 
   const handleCoachToggle = (coachId: string) => {
-    if (formData.package_type === "Personal Training") {
-      setFormData(prev => ({ ...prev, coach_id: coachId }));
-      setSelectedCoaches([]);
-    } else if (formData.package_type === "Camp Training") {
-      setSelectedCoaches(prev => {
-        if (prev.includes(coachId)) {
-          return prev.filter(id => id !== coachId);
-        } else {
-          return [...prev, coachId];
-        }
-      });
-      setFormData(prev => ({ ...prev, coach_id: "" }));
-    }
+    setSelectedCoaches(prev => {
+      if (prev.includes(coachId)) {
+        return prev.filter(id => id !== coachId);
+      } else {
+        return [...prev, coachId];
+      }
+    });
   };
 
   const getStatusBadgeColor = (status: string) => {
@@ -540,11 +654,11 @@ export function SessionsManager() {
 
   const filteredSessions = sessions
     ?.filter((session) =>
-      (session.coaches.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (session.session_coaches.some(sc => sc.coaches.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
        session.branches.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterPackageType === "All" || session.package_type === filterPackageType) &&
       (branchFilter === "All" || session.branch_id === branchFilter) &&
-      (coachFilter === "All" || session.coach_id === coachFilter)
+      (coachFilter === "All" || session.session_coaches.some(sc => sc.coach_id === coachFilter))
     )
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
@@ -623,7 +737,7 @@ export function SessionsManager() {
                             <Select 
                               value={formData.branch_id} 
                               onValueChange={(value) => {
-                                setFormData(prev => ({ ...prev, branch_id: value, package_type: "", coach_id: "" }));
+                                setFormData(prev => ({ ...prev, branch_id: value, package_type: "" }));
                                 setSelectedStudents([]);
                                 setSelectedCoaches([]);
                               }}
@@ -648,7 +762,7 @@ export function SessionsManager() {
                             <Select
                               value={formData.package_type}
                               onValueChange={(value: "Camp Training" | "Personal Training") => {
-                                setFormData(prev => ({ ...prev, package_type: value, coach_id: "" }));
+                                setFormData(prev => ({ ...prev, package_type: value }));
                                 setSelectedStudents([]);
                                 setSelectedCoaches([]);
                               }}
@@ -667,68 +781,39 @@ export function SessionsManager() {
                         <div className="flex flex-col space-y-2 min-w-0">
                           <Label htmlFor="coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
                             <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                            {formData.package_type === "Camp Training" ? "Select Coaches (Multiple)" : "Assigned Coach"}
+                            Select Coaches
                           </Label>
-                          {formData.package_type === "Personal Training" ? (
-                            <Select 
-                              value={formData.coach_id} 
-                              onValueChange={(value) => {
-                                setFormData(prev => ({ ...prev, coach_id: value }));
-                                setSelectedCoaches([]);
-                              }}
-                              disabled={!formData.package_type || coachesLoading}
-                            >
-                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                                <SelectValue placeholder={
-                                  coachesLoading ? "Loading coaches..." : 
-                                  coachesError ? "Error loading coaches" : 
-                                  formData.package_type ? "Select coach" : "Select package type first"
-                                } />
-                              </SelectTrigger>
-                              <SelectContent>
+                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                            {coachesLoading ? (
+                              <p className="text-xs sm:text-sm text-gray-600">Loading coaches...</p>
+                            ) : coachesError ? (
+                              <p className="text-xs sm:text-sm text-red-600">Error loading coaches: {(coachesError as Error).message}</p>
+                            ) : coaches?.length === 0 ? (
+                              <p className="text-xs sm:text-sm text-gray-600">No coaches available.</p>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {coaches?.map(coach => (
-                                  <SelectItem key={coach.id} value={coach.id} className="text-xs sm:text-sm">
-                                    {coach.name}
-                                  </SelectItem>
+                                  <div key={coach.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      id={`coach-${coach.id}`}
+                                      checked={selectedCoaches.includes(coach.id)}
+                                      onChange={() => handleCoachToggle(coach.id)}
+                                      className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                      style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                      disabled={formData.package_type === "Personal Training" && selectedCoaches.length === 1 && !selectedCoaches.includes(coach.id)}
+                                    />
+                                    <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                                      {coach.name}
+                                    </Label>
+                                  </div>
                                 ))}
-                              </SelectContent>
-                            </Select>
-                          ) : formData.package_type === "Camp Training" ? (
-                            <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
-                              {coachesLoading ? (
-                                <p className="text-xs sm:text-sm text-gray-600">Loading coaches...</p>
-                              ) : coachesError ? (
-                                <p className="text-xs sm:text-sm text-red-600">Error loading coaches: {(coachesError as Error).message}</p>
-                              ) : coaches?.length === 0 ? (
-                                <p className="text-xs sm:text-sm text-gray-600">No coaches available.</p>
-                              ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {coaches?.map(coach => (
-                                    <div key={coach.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
-                                      <input
-                                        type="checkbox"
-                                        id={`coach-${coach.id}`}
-                                        checked={selectedCoaches.includes(coach.id)}
-                                        onChange={() => handleCoachToggle(coach.id)}
-                                        className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                        style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                                      />
-                                      <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
-                                        {coach.name}
-                                      </Label>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <p className="text-xs text-gray-600 mt-2">
-                                Selected: {selectedCoaches.length} coach{selectedCoaches.length === 1 ? '' : 'es'}
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="border-2 rounded-lg p-3 text-center text-gray-500 text-xs sm:text-sm" style={{ borderColor: '#181A18' }}>
-                              Please select a package type first
-                            </div>
-                          )}
+                              </div>
+                            )}
+                            <p className="text-xs text-gray-600 mt-2">
+                              Selected: {selectedCoaches.length} coach{selectedCoaches.length === 1 ? '' : 'es'}
+                            </p>
+                          </div>
                           {coachesError && (
                             <p className="text-xs sm:text-sm text-red-600 mt-1">Error loading coaches: {(coachesError as Error).message}</p>
                           )}
@@ -830,6 +915,12 @@ export function SessionsManager() {
                                         id={student.id}
                                         checked={selectedStudents.includes(student.id)}
                                         onChange={(e) => {
+                                          if (student.remaining_sessions <= 0) {
+                                            toast.error(
+                                              `${student.name} has no remaining sessions. Please increase their session count in the Players Manager.`
+                                            );
+                                            return;
+                                          }
                                           if (e.target.checked) {
                                             setSelectedStudents(prev => [...prev, student.id]);
                                           } else {
@@ -838,8 +929,14 @@ export function SessionsManager() {
                                         }}
                                         className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
                                         style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                        disabled={student.remaining_sessions <= 0}
                                       />
-                                      <Label htmlFor={student.id} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                                      <Label 
+                                        htmlFor={student.id} 
+                                        className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
+                                          student.remaining_sessions <= 0 ? 'text-gray-400' : ''
+                                        }`}
+                                      >
                                         {student.name} ({student.remaining_sessions} sessions left)
                                       </Label>
                                     </div>
@@ -898,9 +995,10 @@ export function SessionsManager() {
                               updateMutation.isPending || 
                               !formData.branch_id || 
                               !formData.package_type || 
-                              (formData.package_type === "Personal Training" && !formData.coach_id) ||
-                              (formData.package_type === "Camp Training" && selectedCoaches.length === 0) ||
-                              !formData.date
+                              selectedCoaches.length === 0 ||
+                              !formData.date ||
+                              !formData.start_time ||
+                              !formData.end_time
                             }
                             className="bg-accent hover:bg-[#8e7a3f] text-white min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
                             style={{ backgroundColor: '#BEA877' }}
@@ -1030,7 +1128,7 @@ export function SessionsManager() {
               <div className="text-center py-10 sm:py-12 md:py-16">
                 <Calendar className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 mx-auto mb-4 text-gray-400" />
                 <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 mb-2">
-                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? `No sessions found` : "No Training Sessions"}
+                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? 'No sessions found' : "No Training Sessions"}
                 </h3>
                 <p className="text-gray-600 text-xs sm:text-sm md:text-base mb-4">
                   {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? "Try adjusting your search or filter." : "Get started by scheduling your first training session"}
@@ -1075,7 +1173,9 @@ export function SessionsManager() {
                       <CardContent className="space-y-3">
                         <div className="flex items-center space-x-2 min-w-0">
                           <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Coach:</span> {session.coaches.name}</span>
+                          <span className="text-xs sm:text-sm truncate">
+                            <span className="font-medium">Coaches:</span> {session.session_coaches.length > 0 ? session.session_coaches.map(sc => sc.coaches.name).join(', ') : 'No coaches assigned'}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-2 min-w-0">
                           <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
@@ -1201,7 +1301,7 @@ export function SessionsManager() {
                   <div className="flex items-center space-x-2 min-w-0">
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Coach: {selectedSession?.coaches.name || 'N/A'}
+                      Coaches: {selectedSession?.session_coaches.length > 0 ? selectedSession.session_coaches.map(sc => sc.coaches.name).join(', ') : 'No coaches assigned'}
                     </span>
                   </div>
                   <div className="flex items-center space-x-2 min-w-0">
@@ -1271,7 +1371,7 @@ export function SessionsManager() {
                     <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'N/A'}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
-                    <span className="font-medium">Coach:</span> {selectedSession?.coaches.name || 'N/A'}
+                    <span className="font-medium">Coaches:</span> {selectedSession?.session_coaches.length > 0 ? selectedSession.session_coaches.map(sc => sc.coaches.name).join(', ') : 'No coaches assigned'}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-600">
                     Currently selected: {selectedStudents.length} players
@@ -1298,6 +1398,12 @@ export function SessionsManager() {
                             id={`participant-${student.id}`}
                             checked={selectedStudents.includes(student.id)}
                             onChange={(e) => {
+                              if (student.remaining_sessions <= 0) {
+                                toast.error(
+                                  `${student.name} has no remaining sessions. Please increase their session count in the Players Manager.`
+                                );
+                                return;
+                              }
                               if (e.target.checked) {
                                 setSelectedStudents(prev => [...prev, student.id]);
                               } else {
@@ -1306,8 +1412,14 @@ export function SessionsManager() {
                             }}
                             className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
                             style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                            disabled={student.remaining_sessions <= 0}
                           />
-                          <Label htmlFor={`participant-${student.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                          <Label 
+                            htmlFor={`participant-${student.id}`} 
+                            className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
+                              student.remaining_sessions <= 0 ? 'text-gray-400' : ''
+                            }`}
+                          >
                             {student.name} ({student.remaining_sessions} sessions left)
                           </Label>
                         </div>
@@ -1328,13 +1440,27 @@ export function SessionsManager() {
                   onClick={async () => {
                     if (!selectedSession) return;
 
+                    // Validate student session limits
+                    const invalidStudents = selectedStudents
+                      .map(studentId => students?.find(s => s.id === studentId))
+                      .filter(student => student && student.remaining_sessions <= 0);
+                    
+                    if (invalidStudents.length > 0) {
+                      toast.error(
+                        `The following students have no remaining sessions: ${invalidStudents
+                          .map(s => s!.name)
+                          .join(', ')}. Please increase their session count in the Players Manager.`
+                      );
+                      return;
+                    }
+
                     await supabase
                       .from('session_participants')
                       .delete()
                       .eq('session_id', selectedSession.id);
                     
                     if (selectedStudents.length > 0) {
-                      await supabase
+                      const { error: participantsError } = await supabase
                         .from('session_participants')
                         .insert(
                           selectedStudents.map(studentId => ({
@@ -1343,12 +1469,18 @@ export function SessionsManager() {
                           }))
                         );
 
+                      if (participantsError) {
+                        console.error('Participants update error:', participantsError);
+                        toast.error('Failed to update participants: ' + participantsError.message);
+                        return;
+                      }
+
                       await supabase
                         .from('attendance_records')
                         .delete()
                         .eq('session_id', selectedSession.id);
 
-                      await supabase
+                      const { error: attendanceError } = await supabase
                         .from('attendance_records')
                         .insert(
                           selectedStudents.map(studentId => ({
@@ -1357,6 +1489,12 @@ export function SessionsManager() {
                             status: 'pending' as const
                           }))
                         );
+
+                      if (attendanceError) {
+                        console.error('Attendance update error:', attendanceError);
+                        toast.error('Failed to update attendance: ' + attendanceError.message);
+                        return;
+                      }
                     }
 
                     queryClient.invalidateQueries({ queryKey: ['training-sessions'] });

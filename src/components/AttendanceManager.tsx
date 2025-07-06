@@ -27,6 +27,27 @@ const attendanceStatuses = ["present", "absent", "pending"] as const;
 
 type AttendanceStatusLiteral = typeof attendanceStatuses[number];
 
+type TrainingSession = {
+  id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  status: SessionStatus;
+  package_type: "Camp Training" | "Personal Training" | null;
+  branch_id: string;
+  branches: { name: string };
+  session_coaches: Array<{
+    id: string;
+    coach_id: string;
+    coaches: { name: string };
+  }>;
+  session_participants: Array<{
+    id: string;
+    student_id: string;
+    students: { name: string };
+  }>;
+};
+
 const formatTime12Hour = (timeString: string) => {
   try {
     const [hours, minutes] = timeString.split(":").map(Number);
@@ -84,7 +105,7 @@ export function AttendanceManager() {
     }
   }, [sessionIdFromUrl]);
 
-  const { data: sessions } = useQuery<any[]>({
+  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useQuery<TrainingSession[]>({
     queryKey: ["sessions"],
     queryFn: async () => {
       console.log("Fetching all sessions for admin");
@@ -96,16 +117,19 @@ export function AttendanceManager() {
       const { data, error } = await supabase
         .from("training_sessions")
         .select(`
-          id, 
-          date, 
-          start_time, 
-          end_time, 
-          status, 
-          package_type, 
-          branch_id, 
-          coach_id, 
-          branches (name), 
-          coaches (name),
+          id,
+          date,
+          start_time,
+          end_time,
+          status,
+          package_type,
+          branch_id,
+          branches (name),
+          session_coaches (
+            id,
+            coach_id,
+            coaches (name)
+          ),
           session_participants (
             id,
             student_id,
@@ -118,15 +142,27 @@ export function AttendanceManager() {
       
       if (error) {
         console.error("Error fetching sessions:", error);
+        toast.error(`Failed to fetch sessions: ${error.message}`);
         throw error;
       }
       
-      console.log("Fetched sessions:", data);
-      return data || [];
+      // Map package_type to the correct literal type
+      const mappedData = (data || []).map((session: any) => ({
+        ...session,
+        package_type:
+          session.package_type === "Camp Training"
+            ? "Camp Training"
+            : session.package_type === "Personal Training"
+            ? "Personal Training"
+            : null,
+      })) as TrainingSession[];
+      
+      console.log("Fetched sessions:", mappedData);
+      return mappedData;
     },
   });
 
-  const { data: branches } = useQuery({
+  const { data: branches, isLoading: branchesLoading, error: branchesError } = useQuery({
     queryKey: ['branches-select'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -134,13 +170,17 @@ export function AttendanceManager() {
         .select('id, name')
         .order('name');
       
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching branches:", error);
+        toast.error(`Failed to fetch branches: ${error.message}`);
+        throw error;
+      }
       console.log('Fetched branches:', data);
       return data;
     }
   });
 
-  const { data: coaches } = useQuery({
+  const { data: coaches, isLoading: coachesLoading, error: coachesError } = useQuery({
     queryKey: ['coaches-select'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -149,7 +189,8 @@ export function AttendanceManager() {
         .order('name');
 
       if (error) {
-        console.error('coaches query error:', error);
+        console.error('Error fetching coaches:', error);
+        toast.error(`Failed to fetch coaches: ${error.message}`);
         throw error;
       }
       console.log('Fetched coaches:', data);
@@ -157,7 +198,7 @@ export function AttendanceManager() {
     },
   });
 
-  const { data: attendanceRecords } = useQuery<any[]>({
+  const { data: attendanceRecords, isLoading: attendanceLoading, error: attendanceError } = useQuery<any[]>({
     queryKey: ["attendance", selectedSession],
     queryFn: async () => {
       if (!selectedSession) return [];
@@ -170,6 +211,7 @@ export function AttendanceManager() {
       
       if (error) {
         console.error("Error fetching attendance:", error);
+        toast.error(`Failed to fetch attendance records: ${error.message}`);
         throw error;
       }
       
@@ -199,18 +241,18 @@ export function AttendanceManager() {
     },
     onError: (error) => {
       console.error("Attendance update failed:", error);
-      toast.error("Failed to update attendance");
+      toast.error("Failed to update attendance: " + (error as Error).message);
     },
   });
 
   const filteredSessions = sessions
     ?.filter((session) =>
-      (session.coaches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase()) ||
+      (session.session_coaches.some(sc => sc.coaches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase())) ||
        session.branches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase())) &&
       (filterPackageType === "All" || session.package_type === filterPackageType) &&
       (filterSessionStatus === "All" || session.status === filterSessionStatus) &&
       (branchFilter === "All" || session.branch_id === branchFilter) &&
-      (coachFilter === "All" || session.coach_id === coachFilter)
+      (coachFilter === "All" || session.session_coaches.some(sc => sc.coach_id === coachFilter))
     )
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
@@ -266,18 +308,30 @@ export function AttendanceManager() {
     }
   };
 
-  const handleView = (session: any) => {
+  const handleView = (session: TrainingSession) => {
     setSelectedSession(session.id);
     setShowViewModal(true);
   };
 
-  if (!sessions) {
+  if (sessionsLoading) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
           <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Loading attendance...</h3>
           <p className="text-sm sm:text-base md:text-lg text-gray-600">Please wait while we fetch the session data.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (sessionsError) {
+    return (
+      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
+        <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
+          <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Error loading sessions</h3>
+          <p className="text-sm sm:text-base md:text-lg text-gray-600">Failed to load sessions. Please try again later.</p>
         </div>
       </div>
     );
@@ -481,7 +535,9 @@ export function AttendanceManager() {
                       <CardContent className="space-y-3">
                         <div className="flex items-center space-x-2 min-w-0">
                           <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Coach:</span> {session.coaches.name}</span>
+                          <span className="text-xs sm:text-sm truncate">
+                            <span className="font-medium">Coaches:</span> {session.session_coaches.length > 0 ? session.session_coaches.map(sc => sc.coaches.name).join(', ') : 'No coaches assigned'}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-2 min-w-0">
                           <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
@@ -603,7 +659,9 @@ export function AttendanceManager() {
                   <div className="flex items-center space-x-2 min-w-0">
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Coach: {selectedSessionDetails?.coaches.name || 'N/A'}
+                      Coaches: {selectedSessionDetails?.session_coaches.length > 0 
+                        ? selectedSessionDetails.session_coaches.map(sc => sc.coaches.name).join(', ') 
+                        : 'No coaches assigned'}
                     </span>
                   </div>
                   <div className="flex items-center space-x-2 min-w-0">
@@ -637,7 +695,11 @@ export function AttendanceManager() {
                   </div>
                 </div>
                 <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
-                  {selectedSessionDetails?.session_participants?.length === 0 ? (
+                  {attendanceLoading ? (
+                    <p className="text-xs sm:text-sm text-gray-600">Loading participants...</p>
+                  ) : attendanceError ? (
+                    <p className="text-xs sm:text-sm text-red-600">Error loading participants: {(attendanceError as Error).message}</p>
+                  ) : selectedSessionDetails?.session_participants?.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
                   ) : (
                     selectedSessionDetails?.session_participants?.map(participant => {
@@ -688,7 +750,9 @@ export function AttendanceManager() {
             <div className="space-y-4">
               <div className="p-3 sm:p-4 rounded-lg bg-gray-50 border border-gray-200 overflow-x-auto">
                 <p className="text-xs sm:text-sm text-gray-700 mb-1 truncate">
-                  <span className="font-medium">Coach:</span> {selectedSessionDetails?.coaches.name || 'N/A'}
+                  <span className="font-medium">Coaches:</span> {selectedSessionDetails?.session_coaches.length > 0 
+                    ? selectedSessionDetails.session_coaches.map(sc => sc.coaches.name).join(', ') 
+                    : 'No coaches assigned'}
                 </p>
                 <p className="text-xs sm:text-sm text-gray-700 mb-1 truncate">
                   <span className="font-medium">Branch:</span> {selectedSessionDetails?.branches.name || 'N/A'}
@@ -735,7 +799,11 @@ export function AttendanceManager() {
                 </div>
               </div>
               <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
-                {filteredAttendanceRecords.length === 0 ? (
+                {attendanceLoading ? (
+                  <p className="text-center text-gray-600 py-4 text-xs sm:text-sm">Loading attendance records...</p>
+                ) : attendanceError ? (
+                  <p className="text-center text-red-600 py-4 text-xs sm:text-sm">Error loading attendance: {(attendanceError as Error).message}</p>
+                ) : filteredAttendanceRecords.length === 0 ? (
                   <p className="text-center text-gray-600 py-4 text-xs sm:text-sm">
                     {searchTerm ? "No players found." : "No players registered for this session."}
                   </p>

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar, Users, CheckCircle, Clock, TrendingUp, Activity, UserCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, startOfDay } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
 
 type RecentActivity = {
@@ -25,18 +25,70 @@ export function CoachDashboardStats() {
     queryKey: ['coach-dashboard-stats', coachData?.id],
     queryFn: async () => {
       console.log("Fetching coach stats for ID:", coachData?.id);
-      if (!coachData?.id) return { sessions: 0 };
+      if (!coachData?.id) return { sessions: 0, attendedSessions: 0 };
 
-      const sessionsRes = await supabase
+      // Fetch session IDs from session_coaches
+      const coachSessionsRes = await supabase
+        .from('session_coaches')
+        .select('session_id')
+        .eq('coach_id', coachData.id);
+
+      if (coachSessionsRes.error) {
+        console.error("Error fetching coach sessions:", coachSessionsRes.error);
+        throw coachSessionsRes.error;
+      }
+
+      const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
+      console.log("Session IDs from session_coaches:", sessionIds);
+
+      // Fetch sessions
+      const sessionRes = await supabase
         .from('training_sessions')
         .select('id')
-        .eq('coach_id', coachData.id)
+        .in('id', sessionIds)
         .eq('status', 'scheduled');
 
-      console.log("Sessions result:", sessionsRes);
+      if (sessionRes.error) {
+        console.error("Error fetching sessions:", sessionRes.error);
+        throw sessionRes.error;
+      }
+
+      console.log("Sessions result:", sessionRes.data);
+
+      // Fetch student IDs from session_participants
+      const participantsRes = await supabase
+        .from('session_participants')
+        .select('student_id')
+        .in('session_id', sessionIds);
+
+      if (participantsRes.error) {
+        console.error("Error fetching participants:", participantsRes.error);
+        throw participantsRes.error;
+      }
+
+      const studentIds = participantsRes.data?.map(p => p.student_id) || [];
+      console.log("Student IDs:", studentIds);
+
+      // Fetch student data
+      const studentsRes = await supabase
+        .from('students')
+        .select('sessions, remaining_sessions')
+        .in('id', studentIds);
+
+      if (studentsRes.error) {
+        console.error("Error fetching students:", studentsRes.error);
+        throw studentsRes.error;
+      }
+
+      console.log("Students result:", studentsRes.data);
+
+      const attendedSessions = studentsRes.data?.reduce((total, student) => {
+        return total + ((student.sessions || 0) - (student.remaining_sessions || 0));
+      }, 0) || 0;
 
       return {
-        sessions: sessionsRes.data?.length || 0
+        sessions: sessionRes.data?.length || 0,
+        attendedSessions
       };
     },
     enabled: !!coachData?.id && !loading
@@ -47,6 +99,23 @@ export function CoachDashboardStats() {
     queryFn: async () => {
       if (!coachData?.id) return [];
 
+      const today = startOfDay(new Date()).toISOString();
+      console.log("Fetching upcoming sessions with date filter >= ", today);
+
+      // Fetch session IDs from session_coaches
+      const coachSessionsRes = await supabase
+        .from('session_coaches')
+        .select('session_id')
+        .eq('coach_id', coachData.id);
+
+      if (coachSessionsRes.error) {
+        console.error("Error fetching coach sessions:", coachSessionsRes.error);
+        throw coachSessionsRes.error;
+      }
+
+      const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
+      console.log("Session IDs for upcoming sessions:", sessionIds);
+
       const { data, error } = await supabase
         .from('training_sessions')
         .select(`
@@ -54,12 +123,14 @@ export function CoachDashboardStats() {
           date,
           start_time,
           end_time,
-          branches!inner (name),
-          session_participants (count)
+          branches (name),
+          session_participants (
+            students (id, remaining_sessions)
+          )
         `)
-        .eq('coach_id', coachData.id)
+        .in('id', sessionIds)
         .eq('status', 'scheduled')
-        .gte('date', new Date().toISOString().slice(0, 10))
+        .gte('date', today)
         .order('date', { ascending: true })
         .limit(5);
 
@@ -67,7 +138,7 @@ export function CoachDashboardStats() {
         console.error("Error fetching upcoming sessions:", error);
         throw error;
       }
-      
+
       console.log("Upcoming sessions:", data);
       return data || [];
     },
@@ -79,6 +150,20 @@ export function CoachDashboardStats() {
     queryFn: async () => {
       if (!coachData?.id) return [];
 
+      // Fetch session IDs from session_coaches
+      const coachSessionsRes = await supabase
+        .from('session_coaches')
+        .select('session_id')
+        .eq('coach_id', coachData.id);
+
+      if (coachSessionsRes.error) {
+        console.error("Error fetching coach sessions:", coachSessionsRes.error);
+        throw coachSessionsRes.error;
+      }
+
+      const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
+      console.log("Session IDs for recent activity:", sessionIds);
+
       const [attendanceRes, sessionsRes] = await Promise.all([
         supabase
           .from('attendance_records')
@@ -87,22 +172,31 @@ export function CoachDashboardStats() {
             created_at,
             students!inner (name),
             training_sessions!inner (
-              date,
-              coach_id
+              id,
+              date
             )
           `)
-          .eq('training_sessions.coach_id', coachData.id)
+          .in('session_id', sessionIds)
           .eq('status', 'present')
           .order('created_at', { ascending: false })
           .limit(5),
         supabase
           .from('training_sessions')
           .select('id, created_at')
-          .eq('coach_id', coachData.id)
+          .in('id', sessionIds)
           .eq('status', 'scheduled')
           .order('created_at', { ascending: false })
           .limit(5)
       ]);
+
+      if (attendanceRes.error) {
+        console.error("Error fetching attendance records:", attendanceRes.error);
+        throw attendanceRes.error;
+      }
+      if (sessionsRes.error) {
+        console.error("Error fetching recent sessions:", sessionsRes.error);
+        throw sessionsRes.error;
+      }
 
       const activities: RecentActivity[] = [
         ...(attendanceRes.data?.map(item => ({
@@ -145,6 +239,14 @@ export function CoachDashboardStats() {
       icon: Calendar,
       color: "text-accent",
       bgGradient: "from-accent/10 to-accent/5",
+      borderColor: "border-foreground"
+    },
+    {
+      title: "Total Attended Sessions",
+      value: stats?.attendedSessions || 0,
+      icon: CheckCircle,
+      color: "text-green-600",
+      bgGradient: "from-green-50 to-green-25",
       borderColor: "border-foreground"
     }
   ];
@@ -196,7 +298,7 @@ export function CoachDashboardStats() {
                       {stat.title}
                     </CardTitle>
                     <div className="p-2 rounded-lg bg-accent/10 shadow-sm group-hover:scale-110 transition-transform duration-300">
-                      <IconComponent className="h-4 sm:h-5 w-4 sm:w-5" style={{ color: '#BEA877' }} />
+                      <IconComponent className={`h-4 sm:h-5 w-4 sm:w-5 ${stat.color}`} style={stat.color === "text-accent" ? { color: '#BEA877' } : {}} />
                     </div>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 pt-0">
@@ -283,30 +385,35 @@ export function CoachDashboardStats() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {upcomingSessions.map((session, index) => (
-                        <TableRow 
-                          key={session.id} 
-                          className={`
-                            hover:bg-accent/5 transition-colors border-b border-muted/20
-                            ${index % 2 === 0 ? 'bg-background' : 'bg-muted/10'}
-                          `}
-                        >
-                          <TableCell className="py-3 sm:py-4 px-3 sm:px-4">
-                            <div className="font-semibold text-foreground text-sm">
-                              {format(new Date(session.date), 'MMM dd, yyyy')}
-                            </div>
-                            <div className="text-xs sm:text-sm text-accent font-medium" style={{ color: '#BEA877' }}>
-                              {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground font-medium text-sm px-3 sm:px-4">{session.branches?.name}</TableCell>
-                          <TableCell className="px-3 sm:px-4">
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-accent/10 text-accent" style={{ backgroundColor: '#BEA8771A', color: '#BEA877' }}>
-                              {session.session_participants?.[0]?.count || 0} players
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {upcomingSessions.map((session, index) => {
+                        const activeParticipants = session.session_participants?.filter(
+                          p => (p.students?.remaining_sessions || 0) > 0
+                        ).length || 0;
+                        return (
+                          <TableRow 
+                            key={session.id} 
+                            className={`
+                              hover:bg-accent/5 transition-colors border-b border-muted/20
+                              ${index % 2 === 0 ? 'bg-background' : 'bg-muted/10'}
+                            `}
+                          >
+                            <TableCell className="py-3 sm:py-4 px-3 sm:px-4">
+                              <div className="font-semibold text-foreground text-sm">
+                                {format(new Date(session.date), 'MMM dd, yyyy')}
+                              </div>
+                              <div className="text-xs sm:text-sm text-accent font-medium" style={{ color: '#BEA877' }}>
+                                {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground font-medium text-sm px-3 sm:px-4">{session.branches?.name || 'N/A'}</TableCell>
+                            <TableCell className="px-3 sm:px-4">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-accent/10 text-accent" style={{ backgroundColor: '#BEA8771A', color: '#BEA877' }}>
+                                {activeParticipants} players
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
