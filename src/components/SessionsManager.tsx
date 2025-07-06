@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import type { Database } from "@/integrations/supabase/types";
-import { Badge, Calendar, Clock, Eye, MapPin, Plus, Trash2, User, Users, Filter, Search, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { Calendar, Clock, Eye, MapPin, Plus, Trash2, User, Users, Filter, Search, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 
 type SessionStatus = Database['public']['Enums']['session_status'];
 
@@ -74,6 +74,16 @@ const getTodayDate = () => {
   const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+// Updated function to return styles for status text
+const getStatusStyles = (status: string) => {
+  switch (status) {
+    case 'scheduled': return 'bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-md';
+    case 'completed': return 'bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded-md';
+    case 'cancelled': return 'bg-red-50 text-red-700 border border-red-200 px-2 py-1 rounded-md';
+    default: return 'bg-gray-50 text-gray-700 border border-gray-200 px-2 py-1 rounded-md';
+  }
 };
 
 export function SessionsManager() {
@@ -643,15 +653,6 @@ export function SessionsManager() {
     });
   };
 
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'scheduled': return 'bg-blue-50 text-blue-700 border border-blue-200';
-      case 'completed': return 'bg-green-50 text-green-700 border border-green-200';
-      case 'cancelled': return 'bg-red-50 text-red-700 border border-red-200';
-      default: return 'bg-gray-50 text-gray-700 border border-gray-200';
-    }
-  };
-
   const filteredSessions = sessions
     ?.filter((session) =>
       (session.session_coaches.some(sc => sc.coaches.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -1159,9 +1160,9 @@ export function SessionsManager() {
                               {formatDisplayDate(session.date)}
                             </h3>
                           </div>
-                          <Badge className={`font-medium ${getStatusBadgeColor(session.status)} text-xs sm:text-sm px-2 py-1 truncate max-w-full`}>
+                          <span className={`font-medium text-xs sm:text-sm ${getStatusStyles(session.status)} truncate max-w-full capitalize`}>
                             {session.status}
-                          </Badge>
+                          </span>
                         </div>
                         <div className="flex items-center space-x-2 text-gray-600 min-w-0">
                           <Clock className="w-4 h-4 flex-shrink-0" />
