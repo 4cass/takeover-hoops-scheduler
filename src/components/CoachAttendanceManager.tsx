@@ -10,7 +10,7 @@ import { CheckCircle, XCircle, Clock, Calendar, MapPin, Users, Filter, Search } 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { format, parseISO, addDays, subDays } from "date-fns";
+import { format, parseISO, addDays, subDays, parse } from "date-fns";
 
 type AttendanceStatus = "present" | "absent" | "pending";
 type SessionStatus = "scheduled" | "completed" | "cancelled" | "all";
@@ -36,14 +36,30 @@ type TrainingSession = {
   package_type: "Camp Training" | "Personal Training" | null;
   branches: { name: string };
   session_participants: Array<{ students: { name: string } }>;
-  coach_session_times: Array<CoachSessionTime>;
 };
 
-const formatTime12Hour = (timeString: string) => {
-  const [hours, minutes] = timeString.split(":").map(Number);
-  const period = hours >= 12 ? "PM" : "AM";
-  const displayHours = hours % 12 || 12;
-  return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
+const formatTime12Hour = (time: string | null | undefined, date: string | null | undefined): string => {
+  if (!time || !date) return "N/A";
+  try {
+    const timeFormats = ["HH:mm:ss", "HH:mm"];
+    let parsedTime: Date | null = null;
+    for (const format of timeFormats) {
+      try {
+        parsedTime = parse(time, format, new Date(date));
+        if (!isNaN(parsedTime.getTime())) {
+          break;
+        }
+      } catch {
+        // Try next format
+      }
+    }
+    if (!parsedTime || isNaN(parsedTime.getTime())) {
+      return "Invalid time";
+    }
+    return format(parsedTime, "h:mm a");
+  } catch {
+    return "Invalid time";
+  }
 };
 
 const formatDate = (dateString: string) => {
@@ -60,7 +76,7 @@ const formatDate = (dateString: string) => {
 };
 
 const formatDateTime = (dateTime: string | null): string => {
-  if (!dateTime) return 'Not recorded';
+  if (!dateTime) return 'N/A';
   try {
     return format(parseISO(dateTime), 'MMM dd, yyyy hh:mm a');
   } catch (error) {
@@ -158,8 +174,7 @@ export function CoachAttendanceManager() {
         .select(`
           id, date, start_time, end_time, branch_id, status, package_type,
           branches (name),
-          session_participants (students (name)),
-          coach_session_times (id, session_id, coach_id, time_in, time_out)
+          session_participants (students (name))
         `)
         .in("id", sessionIds)
         .gte("date", format(pastDate, 'yyyy-MM-dd'))
@@ -202,7 +217,10 @@ export function CoachAttendanceManager() {
       console.log("Fetching coaches for session:", selectedSession);
       const { data, error } = await supabase
         .from("session_coaches")
-        .select("coach_id, coaches (name)")
+        .select(`
+          coach_id,
+          coaches (name)
+        `)
         .eq("session_id", selectedSession);
       
       if (error) {
@@ -211,6 +229,27 @@ export function CoachAttendanceManager() {
       }
       
       console.log("Fetched session coaches:", data);
+      return data || [];
+    },
+    enabled: !!selectedSession,
+  });
+
+  const { data: coachSessionTimes } = useQuery({
+    queryKey: ["coach-session-times", selectedSession],
+    queryFn: async () => {
+      if (!selectedSession) return [];
+      console.log("Fetching coach session times for session:", selectedSession);
+      const { data, error } = await supabase
+        .from("coach_session_times")
+        .select("id, session_id, coach_id, time_in, time_out")
+        .eq("session_id", selectedSession);
+      
+      if (error) {
+        console.error("Error fetching coach session times:", error);
+        throw error;
+      }
+      
+      console.log("Fetched coach session times:", data);
       return data || [];
     },
     enabled: !!selectedSession,
@@ -281,6 +320,7 @@ export function CoachAttendanceManager() {
 
       // Invalidate cache
       await queryClient.invalidateQueries({ queryKey: ["coach-attendance", sessionId, coachId] });
+      await queryClient.invalidateQueries({ queryKey: ["coach-session-times", sessionId] });
 
       // Check for existing record
       const { data: existingRecords, error: fetchError } = await supabase
@@ -357,6 +397,7 @@ export function CoachAttendanceManager() {
       toast.success(`${variables.field === 'time_in' ? 'Time In' : 'Time Out'} recorded successfully`);
       queryClient.setQueryData(["coach-attendance", variables.sessionId, coachId], data);
       queryClient.invalidateQueries({ queryKey: ["coach-attendance", variables.sessionId, coachId] });
+      queryClient.invalidateQueries({ queryKey: ["coach-session-times", variables.sessionId] });
       queryClient.invalidateQueries({ queryKey: ["coach-sessions", coachId, branchFilter, packageFilter, statusFilter, sessionSearchTerm] });
     },
     onError: (error, variables) => {
@@ -576,7 +617,7 @@ export function CoachAttendanceManager() {
                         <div className="flex items-center space-x-2">
                           <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                           <span className="text-gray-700 font-medium">
-                            {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                            {formatTime12Hour(session.start_time, session.date)} - {formatTime12Hour(session.end_time, session.date)}
                           </span>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -631,7 +672,7 @@ export function CoachAttendanceManager() {
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Time</p>
                       <p className="font-semibold text-black text-sm sm:text-base">
-                        {formatTime12Hour(selectedSessionModal.start_time)} - {formatTime12Hour(selectedSessionModal.end_time)}
+                        {formatTime12Hour(selectedSessionModal.start_time, selectedSessionModal.date)} - {formatTime12Hour(selectedSessionModal.end_time, selectedSessionModal.date)}
                       </p>
                     </div>
                   </div>
@@ -690,7 +731,7 @@ export function CoachAttendanceManager() {
                 Manage Attendance
                 {selectedSessionDetails && (
                   <span className="text-xs sm:text-sm font-normal ml-2">
-                    - {formatDate(selectedSessionDetails.date)} at {formatTime12Hour(selectedSessionDetails.start_time)}
+                    - {formatDate(selectedSessionDetails.date)} at {formatTime12Hour(selectedSessionDetails.start_time, selectedSessionDetails.date)}
                   </span>
                 )}
               </DialogTitle>
@@ -769,7 +810,7 @@ export function CoachAttendanceManager() {
                       ) : (
                         <div className="space-y-4">
                           {sessionCoaches?.map((sc) => {
-                            const coachTime = selectedSessionDetails?.coach_session_times?.find((cst) => cst.coach_id === sc.coach_id);
+                            console.log(`Checking coach: ${sc.coaches.name}, coach_id: ${sc.coach_id}, matches auth coach: ${sc.coach_id === coachId}`);
                             return (
                               <div key={sc.coach_id} className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200">
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
@@ -780,7 +821,7 @@ export function CoachAttendanceManager() {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => selectedSession && updateCoachAttendance.mutate({ sessionId: selectedSession, field: 'time_in' })}
-                                        disabled={updateCoachAttendance.isPending || !!coachTime?.time_in}
+                                        disabled={updateCoachAttendance.isPending || !!coachAttendance?.time_in}
                                         className="bg-green-600 text-white hover:bg-green-700 flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm"
                                       >
                                         Time In
@@ -789,7 +830,7 @@ export function CoachAttendanceManager() {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => selectedSession && updateCoachAttendance.mutate({ sessionId: selectedSession, field: 'time_out' })}
-                                        disabled={updateCoachAttendance.isPending || !!coachTime?.time_out || !coachTime?.time_in}
+                                        disabled={updateCoachAttendance.isPending || !!coachAttendance?.time_out || !coachAttendance?.time_in}
                                         className="bg-red-600 text-white hover:bg-red-700 flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm"
                                       >
                                         Time Out
@@ -800,11 +841,15 @@ export function CoachAttendanceManager() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                                   <div>
                                     <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time In:</span>
-                                    <span className="text-xs sm:text-sm font-medium">{formatDateTime(coachTime?.time_in)}</span>
+                                    <span className="text-xs sm:text-sm font-medium">
+                                      {sc.coach_id === coachId ? formatDateTime(coachAttendance?.time_in) : 'Restricted: Only you can view your own time records'}
+                                    </span>
                                   </div>
                                   <div>
                                     <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time Out:</span>
-                                    <span className="text-xs sm:text-sm font-medium">{formatDateTime(coachTime?.time_out)}</span>
+                                    <span className="text-xs sm:text-sm font-medium">
+                                      {sc.coach_id === coachId ? formatDateTime(coachAttendance?.time_out) : 'Restricted: Only you can view your own time records'}
+                                    </span>
                                   </div>
                                 </div>
                               </div>

@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
-import { format, addDays, subDays, parseISO, format as formatDateFns } from "date-fns";
+import { format, addDays, subDays, parse, parseISO, format as formatDateFns } from "date-fns";
 import { CoachAttendanceManager } from "./CoachAttendanceManager";
 import { Database } from "@/integrations/supabase/types";
 
@@ -82,10 +82,30 @@ interface UpdateAttendanceVariables {
 }
 
 // Utility functions
-const formatTime12Hour = (time: string | null | undefined): string => {
-  if (!time) return "N/A";
+const formatTime12Hour = (time: string | null | undefined, date: string | null | undefined): string => {
+  if (!time || !date) return "N/A";
   try {
-    return formatDateFns(parseISO(time), "h:mm a");
+    // Combine date and time to create a parseable datetime string
+    // Handle time formats like HH:mm:ss or HH:mm
+    const timeFormats = ["HH:mm:ss", "HH:mm"];
+    let parsedTime: Date | null = null;
+
+    for (const format of timeFormats) {
+      try {
+        parsedTime = parse(time, format, new Date(date));
+        if (!isNaN(parsedTime.getTime())) {
+          break;
+        }
+      } catch {
+        // Try next format
+      }
+    }
+
+    if (!parsedTime || isNaN(parsedTime.getTime())) {
+      return "Invalid time";
+    }
+
+    return formatDateFns(parsedTime, "h:mm a");
   } catch {
     return "Invalid time";
   }
@@ -704,7 +724,7 @@ export function AttendanceManager() {
                         <div className="flex items-center space-x-2 text-gray-600 min-w-0">
                           <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500 flex-shrink-0" />
                           <span className="text-xs sm:text-sm md:text-base truncate">
-                            {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
+                            {formatTime12Hour(session.start_time, session.date)} - {formatTime12Hour(session.end_time, session.date)}
                           </span>
                         </div>
                       </CardHeader>
@@ -730,12 +750,11 @@ export function AttendanceManager() {
                             <span className="font-medium">Package:</span> {session.package_type || "N/A"}
                           </span>
                         </div>
-                        <div className="flex items-center space-x-2 min-w-0">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center space-x-2 min-w-0">
                             <Users className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500 flex-shrink-0" />
                             <span className="text-xs sm:text-sm md:text-base font-medium truncate">{session.session_participants?.length || 0} Players</span>
                           </div>
-                        <div className="flex items-center justify-end flex-wrap gap-2">
-                          
                           <div className="flex space-x-2">
                             <Button
                               variant="outline"
@@ -829,7 +848,7 @@ export function AttendanceManager() {
                     <span className="text-xs sm:text-sm font-medium text-gray-700">
                       Time:{" "}
                       {selectedSessionDetails
-                        ? `${formatTime12Hour(selectedSessionDetails.start_time)} - ${formatTime12Hour(selectedSessionDetails.end_time)}`
+                        ? `${formatTime12Hour(selectedSessionDetails.start_time, selectedSessionDetails.date)} - ${formatTime12Hour(selectedSessionDetails.end_time, selectedSessionDetails.date)}`
                         : "N/A"}
                     </span>
                   </div>
@@ -944,7 +963,7 @@ export function AttendanceManager() {
                 Manage Attendance
                 {selectedSessionDetails && (
                   <span className="text-xs sm:text-sm font-normal ml-2">
-                    - {formatDate(selectedSessionDetails.date)} at {formatTime12Hour(selectedSessionDetails.start_time)}
+                    - {formatDate(selectedSessionDetails.date)} at {formatTime12Hour(selectedSessionDetails.start_time, selectedSessionDetails.date)}
                   </span>
                 )}
               </DialogTitle>
