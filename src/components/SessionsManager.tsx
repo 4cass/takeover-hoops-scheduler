@@ -23,6 +23,15 @@ type Student = {
   package_type: string | null;
 };
 
+type CoachSessionTime = {
+  id: string;
+  session_id: string;
+  coach_id: string;
+  time_in: string | null;
+  time_out: string | null;
+  coaches: { name: string } | null;
+};
+
 type TrainingSession = {
   id: string;
   date: string;
@@ -43,6 +52,7 @@ type TrainingSession = {
     student_id: string;
     students: { name: string };
   }>;
+  coach_session_times: Array<CoachSessionTime>;
 };
 
 // Helper functions
@@ -65,6 +75,16 @@ const formatDisplayTime = (timeString: string) => {
   } catch (error) {
     console.error('Error formatting display time:', error);
     return 'Invalid Time';
+  }
+};
+
+const formatDateTime = (dateTime: string | null): string => {
+  if (!dateTime) return 'Not recorded';
+  try {
+    return format(parseISO(dateTime), 'MMM dd, yyyy hh:mm a');
+  } catch (error) {
+    console.error('Error formatting date-time:', error);
+    return 'Invalid Date/Time';
   }
 };
 
@@ -138,6 +158,14 @@ export function SessionsManager() {
             id,
             student_id,
             students (name)
+          ),
+          coach_session_times (
+            id,
+            session_id,
+            coach_id,
+            time_in,
+            time_out,
+            coaches (name)
           )
         `)
         .order('date', { ascending: false });
@@ -249,6 +277,14 @@ export function SessionsManager() {
             id,
             student_id,
             students (name)
+          ),
+          coach_session_times (
+            id,
+            session_id,
+            coach_id,
+            time_in,
+            time_out,
+            coaches (name)
           )
         `)
         .single();
@@ -382,6 +418,14 @@ export function SessionsManager() {
             id,
             student_id,
             students (name)
+          ),
+          coach_session_times (
+            id,
+            session_id,
+            coach_id,
+            time_in,
+            time_out,
+            coaches (name)
           )
         `)
         .single();
@@ -1275,56 +1319,37 @@ export function SessionsManager() {
             <DialogHeader className="pb-4">
               <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">Session Details</DialogTitle>
               <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                View details of the selected training session
+                View all details for the selected training session
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50 overflow-x-auto">
                 <div className="space-y-2 min-w-0">
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <Calendar className="w-4 h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Date: {selectedSession ? formatDisplayDate(selectedSession.date) : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Time: {selectedSession ? `${formatDisplayTime(selectedSession.start_time)} - ${formatDisplayTime(selectedSession.end_time)}` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Branch: {selectedSession?.branches.name || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Coaches: {selectedSession?.session_coaches.length > 0 ? selectedSession.session_coaches.map(sc => sc.coaches.name).join(', ') : 'No coaches assigned'}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      Package: {selectedSession?.package_type || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700">
-                      Players: {selectedSession?.session_participants?.length || 0}
-                    </span>
-                  </div>
-                  {selectedSession?.notes && (
-                    <div className="flex items-start space-x-2 min-w-0">
-                      <Eye className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                      <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        Notes: {selectedSession.notes}
-                      </span>
-                    </div>
-                  )}
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Session Date:</span>{' '}
+                    {selectedSession?.date ? formatDisplayDate(selectedSession.date) : 'Invalid Date'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Time:</span>{' '}
+                    {selectedSession?.start_time && selectedSession?.end_time
+                      ? `${formatDisplayTime(selectedSession.start_time)} - ${formatDisplayTime(selectedSession.end_time)}`
+                      : 'Invalid Time'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Branch:</span> {selectedSession?.branches.name || 'N/A'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Coaches:</span>{' '}
+                    {selectedSession?.session_coaches.length > 0
+                      ? selectedSession.session_coaches.map(sc => sc.coaches.name).join(', ')
+                      : 'No coaches assigned'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'N/A'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-700 truncate">
+                    <span className="font-medium">Status:</span> {selectedSession?.status || 'N/A'}
+                  </p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -1333,14 +1358,55 @@ export function SessionsManager() {
                   {selectedSession?.session_participants?.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
                   ) : (
-                    selectedSession?.session_participants?.map(participant => (
-                      <div key={participant.id} className="flex items-center space-x-2 p-2 min-w-0">
-                        <span className="text-xs sm:text-sm text-gray-700 truncate">{participant.students.name}</span>
-                      </div>
-                    ))
+                    <ul className="space-y-2">
+                      {selectedSession?.session_participants?.map(participant => (
+                        <li key={participant.id} className="text-xs sm:text-sm text-gray-700 truncate">
+                          {participant.students.name}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label className="text-xs sm:text-sm font-medium text-gray-700">Coach Attendance Records</Label>
+                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                  {selectedSession?.session_coaches?.length === 0 ? (
+                    <p className="text-xs sm:text-sm text-gray-600">No coaches assigned.</p>
+                  ) : (
+                    selectedSession?.session_coaches?.map((sc) => {
+                      const coachTime = selectedSession.coach_session_times?.find((cst) => cst.coach_id === sc.coach_id);
+                      return (
+                        <div key={sc.id} className="bg-white rounded-lg p-3 border border-gray-200 mb-2 last:mb-0">
+                          <div className="flex flex-col space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs sm:text-sm font-medium text-gray-700">{sc.coaches.name}</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2 bg-gray-50 rounded-lg">
+                              <div>
+                                <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time In:</span>
+                                <span className="text-xs sm:text-sm font-medium">{formatDateTime(coachTime?.time_in)}</span>
+                              </div>
+                              <div>
+                                <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time Out:</span>
+                                <span className="text-xs sm:text-sm font-medium">{formatDateTime(coachTime?.time_out)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+              {selectedSession?.notes && (
+                <div className="space-y-2">
+                  <Label className="text-xs sm:text-sm font-medium text-gray-700">Session Notes</Label>
+                  <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50">
+                    <p className="text-xs sm:text-sm text-gray-700">{selectedSession.notes}</p>
+                  </div>
+                </div>
+              )}
               <div className="flex justify-end pt-4 border-t border-gray-200">
                 <Button
                   variant="outline"

@@ -82,6 +82,10 @@ export function CoachCalendarManager() {
       const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
       console.log("Session IDs from session_coaches:", sessionIds);
 
+      // Fetch sessions from 6 months before current month to 1 month after
+      const startDate = subMonths(startOfMonth(currentMonth), 6);
+      const endDate = addMonths(endOfMonth(currentMonth), 1);
+
       let query = supabase
         .from('training_sessions')
         .select(`
@@ -92,9 +96,8 @@ export function CoachCalendarManager() {
           )
         `)
         .in('id', sessionIds)
-        .eq('status', 'scheduled')
-        .gte('date', format(startOfMonth(currentMonth), 'yyyy-MM-dd'))
-        .lte('date', format(endOfMonth(currentMonth), 'yyyy-MM-dd'));
+        .gte('date', format(startDate, 'yyyy-MM-dd'))
+        .lte('date', format(endDate, 'yyyy-MM-dd'));
 
       if (selectedBranch !== "all") {
         query = query.eq('branch_id', selectedBranch);
@@ -138,9 +141,48 @@ export function CoachCalendarManager() {
     switch (status) {
       case 'scheduled': return 'bg-blue-500 text-white border-blue-500';
       case 'completed': return 'bg-green-500 text-white border-green-500';
-      case 'cancelled': return 'bg-Red-500 text-white border-Red-500';
+      case 'cancelled': return 'bg-red-500 text-white border-red-500';
       default: return 'bg-gray-500 text-white border-gray-500';
     }
+  };
+
+  const getDayStatusColor = (daySessions: TrainingSession[]) => {
+    if (daySessions.some(session => session.status === 'scheduled')) {
+      return {
+        bg: 'bg-blue-50',
+        border: 'border-blue-500',
+        hoverBg: 'hover:bg-blue-100',
+        hoverBorder: 'hover:border-blue-600',
+        dot: 'bg-blue-500',
+        text: 'text-black'
+      };
+    } else if (daySessions.some(session => session.status === 'completed')) {
+      return {
+        bg: 'bg-green-50',
+        border: 'border-green-500',
+        hoverBg: 'hover:bg-green-100',
+        hoverBorder: 'hover:border-green-600',
+        dot: 'bg-green-500',
+        text: 'text-black'
+      };
+    } else if (daySessions.some(session => session.status === 'cancelled')) {
+      return {
+        bg: 'bg-red-50',
+        border: 'border-red-500',
+        hoverBg: 'hover:bg-red-100',
+        hoverBorder: 'hover:border-red-600',
+        dot: 'bg-red-500',
+        text: 'text-black'
+      };
+    }
+    return {
+      bg: 'bg-white',
+      border: 'border-gray-200',
+      hoverBg: 'hover:bg-gray-50',
+      hoverBorder: '',
+      dot: '',
+      text: 'text-gray-700'
+    };
   };
 
   const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
@@ -163,8 +205,7 @@ export function CoachCalendarManager() {
   }) || [];
 
   const pastSessions = filteredSessions.filter(session => {
-    const sessionDate = parseISO(session.date);
-    return session.status === 'completed' || isBefore(sessionDate, todayDateOnly);
+    return session.status === 'completed';
   }) || [];
 
   const handleAttendanceRedirect = (sessionId: string) => {
@@ -312,6 +353,7 @@ export function CoachCalendarManager() {
                   const daySessions = filteredSessions.filter(session => isSameDay(parseISO(session.date), day)) || [];
                   const isToday = isSameDay(day, new Date());
                   const hasSessions = daySessions.length > 0;
+                  const statusColor = getDayStatusColor(daySessions);
                   
                   return (
                     <button
@@ -323,7 +365,7 @@ export function CoachCalendarManager() {
                         ${isToday 
                           ? 'bg-[#8e7a3f] border-[#8e7a3f] text-white'
                           : hasSessions
-                            ? 'bg-green-50 border-green-500 text-black hover:border-green-600 hover:bg-green-100'
+                            ? `${statusColor.bg} ${statusColor.border} ${statusColor.text} ${statusColor.hoverBg} ${statusColor.hoverBorder}`
                             : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                         }
                       `}
@@ -336,7 +378,7 @@ export function CoachCalendarManager() {
                           <div className="text-xs font-bold opacity-90 truncate">
                             {daySessions.length}
                           </div>
-                          <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full absolute top-1 right-1"></div>
+                          <div className={`w-2 h-2 sm:w-3 sm:h-3 ${statusColor.dot} rounded-full absolute top-1 right-1`}></div>
                         </div>
                       )}
                     </button>
@@ -347,8 +389,16 @@ export function CoachCalendarManager() {
               {/* Legend */}
               <div className="mt-3 sm:mt-4 lg:mt-6 flex flex-wrap gap-2 sm:gap-3 lg:gap-4 justify-center text-xs sm:text-sm">
                 <div className="flex items-center gap-1 sm:gap-2">
+                  <div className="w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full"></div>
+                  <span className="text-gray-600 font-bold">Scheduled</span>
+                </div>
+                <div className="flex items-center gap-1 sm:gap-2">
                   <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full"></div>
-                  <span className="text-gray-600 font-bold">Has Sessions</span>
+                  <span className="text-gray-600 font-bold">Completed</span>
+                </div>
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <div className="w-2 h-2 sm:w-3 sm:h-3 bg-red-500 rounded-full"></div>
+                  <span className="text-gray-600 font-bold">Cancelled</span>
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2">
                   <div className="w-2 h-2 sm:w-3 sm:h-3 bg-[#8e7a3f] rounded-full"></div>
@@ -520,10 +570,10 @@ export function CoachCalendarManager() {
             <DialogHeader>
               <DialogTitle className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center">
                 <CalendarIcon className="h-5 sm:h-6 w-5 sm:w-6 mr-3 text-gray-600" />
-                Past Sessions ({pastSessions.length})
+                Completed Sessions ({pastSessions.length})
               </DialogTitle>
               <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
-                All completed sessions and sessions before today
+                All completed sessions
               </DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-[60vh] pr-4">
@@ -575,7 +625,7 @@ export function CoachCalendarManager() {
               ) : (
                 <div className="text-center py-8 sm:py-12">
                   <CalendarIcon className="h-12 sm:h-16 w-12 sm:w-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-lg sm:text-xl text-gray-500 mb-2 font-bold">No past sessions</p>
+                  <p className="text-lg sm:text-xl text-gray-500 mb-2 font-bold">No completed sessions</p>
                   <p className="text-gray-400 text-sm sm:text-base font-bold">Completed sessions will appear here.</p>
                 </div>
               )}
