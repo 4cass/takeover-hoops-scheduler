@@ -359,6 +359,19 @@ export function SessionsManager() {
       toast.error('Failed to create session: ' + error.message);
     }
   });
+const handleSelectAllStudents = (selectAll: boolean) => {
+  if (!students) return;
+
+  const eligibleIds = students
+    .filter(student => student.remaining_sessions > 0)
+    .map(student => student.id);
+
+  if (selectAll) {
+    setSelectedStudents(eligibleIds);
+  } else {
+    setSelectedStudents(prev => prev.filter(id => !eligibleIds.includes(id)));
+  }
+};
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...session }: typeof formData & { id: string }) => {
@@ -937,62 +950,85 @@ export function SessionsManager() {
                           </div>
                         </div>
                         <div className="flex flex-col space-y-2 min-w-0">
-                          <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                            <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                            Select Players ({selectedStudents.length} selected)
-                          </Label>
-                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
-                            {formData.branch_id && formData.package_type ? (
-                              studentsLoading ? (
-                                <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
-                              ) : studentsError ? (
-                                <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
-                              ) : students?.length === 0 ? (
-                                <p className="text-xs sm:text-sm text-gray-600">
-                                  No students available for this branch and package type combination.
-                                </p>
-                              ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {students?.map(student => (
-                                    <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
-                                      <input
-                                        type="checkbox"
-                                        id={student.id}
-                                        checked={selectedStudents.includes(student.id)}
-                                        onChange={(e) => {
-                                          if (student.remaining_sessions <= 0) {
-                                            toast.error(
-                                              `${student.name} has no remaining sessions. Please increase their session count in the Players Manager.`
-                                            );
-                                            return;
-                                          }
-                                          if (e.target.checked) {
-                                            setSelectedStudents(prev => [...prev, student.id]);
-                                          } else {
-                                            setSelectedStudents(prev => prev.filter(id => id !== student.id));
-                                          }
-                                        }}
-                                        className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                        style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                                        disabled={student.remaining_sessions <= 0}
-                                      />
-                                      <Label 
-                                        htmlFor={student.id} 
-                                        className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
-                                          student.remaining_sessions <= 0 ? 'text-gray-400' : ''
-                                        }`}
-                                      >
-                                        {student.name} ({student.remaining_sessions} sessions left)
-                                      </Label>
-                                    </div>
-                                  ))}
-                                </div>
-                              )
-                            ) : (
-                              <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
-                            )}
-                          </div>
-                        </div>
+  <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+    <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+    Select Players ({selectedStudents.length} selected)
+  </Label>
+
+  <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+    {formData.branch_id && formData.package_type ? (
+      studentsLoading ? (
+        <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
+      ) : studentsError ? (
+        <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
+      ) : students?.length === 0 ? (
+        <p className="text-xs sm:text-sm text-gray-600">
+          No students available for this branch and package type combination.
+        </p>
+      ) : (
+        <>
+          {/* Select All */}
+          <div className="flex items-center space-x-2 mb-2 p-2 rounded-md hover:bg-white transition-colors">
+            <input
+              type="checkbox"
+              id="select-all-students"
+              checked={
+                students.filter(s => s.remaining_sessions > 0).every(s => selectedStudents.includes(s.id)) &&
+                students.filter(s => s.remaining_sessions > 0).length > 0
+              }
+              onChange={(e) => handleSelectAllStudents(e.target.checked)}
+              className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+              style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+            />
+            <Label htmlFor="select-all-students" className="text-xs sm:text-sm cursor-pointer">
+              Select All Players
+            </Label>
+          </div>
+
+          {/* Players List */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {students.map(student => (
+              <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                <input
+                  type="checkbox"
+                  id={student.id}
+                  checked={selectedStudents.includes(student.id)}
+                  onChange={(e) => {
+                    if (student.remaining_sessions <= 0) {
+                      toast.error(
+                        `${student.name} has no remaining sessions. Please increase their session count in the Players Manager.`
+                      );
+                      return;
+                    }
+                    if (e.target.checked) {
+                      setSelectedStudents(prev => [...prev, student.id]);
+                    } else {
+                      setSelectedStudents(prev => prev.filter(id => id !== student.id));
+                    }
+                  }}
+                  className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                  style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                  disabled={student.remaining_sessions <= 0}
+                />
+                <Label
+                  htmlFor={student.id}
+                  className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
+                    student.remaining_sessions <= 0 ? 'text-gray-400' : ''
+                  }`}
+                >
+                  {student.name} ({student.remaining_sessions} sessions left)
+                </Label>
+              </div>
+            ))}
+          </div>
+        </>
+      )
+    ) : (
+      <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
+    )}
+  </div>
+</div>
+
                         <div className="flex flex-col space-y-2 min-w-0">
                           <Label htmlFor="notes" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
                             <Eye className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
