@@ -154,11 +154,11 @@ export function CreateSessionModal({ open, onOpenChange, onSessionCreated }: Cre
 
       if (coachesError) throw coachesError;
 
-      // Create attendance records
+      // Create attendance records with proper type casting
       const attendanceInserts = selectedStudents.map(studentId => ({
         session_id: session.id,
         student_id: studentId,
-        status: 'pending'
+        status: 'pending' as const
       }));
 
       const { error: attendanceError } = await supabase
