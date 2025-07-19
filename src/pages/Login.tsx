@@ -1,4 +1,5 @@
- import { useState } from "react";
+
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -18,6 +19,12 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Alert confirmation for account creation
+    if (isSignUp && !window.confirm("Are you sure you want to create a new account with this email address?")) {
+      return;
+    }
+    
     setLoading(true);
 
     try {

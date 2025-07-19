@@ -62,6 +62,12 @@ export default function ForgotPassword() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Alert confirmation before sending reset email
+    if (!window.confirm("Are you sure you want to send a password reset email to this address?")) {
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -84,6 +90,11 @@ export default function ForgotPassword() {
 
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Alert confirmation before password reset
+    if (!window.confirm("Are you sure you want to reset your password? You will need to log in again with the new password.")) {
+      return;
+    }
     
     if (newPassword !== confirmPassword) {
       toast.error("Passwords do not match");
@@ -205,7 +216,11 @@ export default function ForgotPassword() {
           <div className="flex items-center justify-center mt-6 pt-4 border-t border-border">
             <Button
               variant="ghost"
-              onClick={() => navigate("/login")}
+              onClick={() => {
+                if (window.confirm("Are you sure you want to go back to login?")) {
+                  navigate("/login");
+                }
+              }}
               className="flex items-center gap-2 text-secondary hover:text-accent hover:bg-muted transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />

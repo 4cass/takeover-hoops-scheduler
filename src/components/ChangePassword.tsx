@@ -17,6 +17,11 @@ export function ChangePassword() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Alert confirmation before password change
+    if (!window.confirm("Are you sure you want to change your password? You will need to log in again with the new password.")) {
+      return;
+    }
+    
     if (newPassword !== confirmPassword) {
       toast.error("New passwords don't match");
       return;
