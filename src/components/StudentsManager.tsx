@@ -1,4 +1,4 @@
-import { useState, Component, ErrorInfo } from "react";
+import { useState, useEffect, Component, ErrorInfo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,6 +73,12 @@ export function StudentsManager() {
 
   const queryClient = useQueryClient();
 
+  // Clear packages cache on mount to prevent stale data
+  useEffect(() => {
+    console.log("Clearing packages cache on mount");
+    queryClient.removeQueries({ queryKey: ["packages"] });
+  }, [queryClient]);
+
   const { data: students, isLoading: studentsLoading, error: studentsError } = useQuery({
     queryKey: ["students"],
     queryFn: async () => {
@@ -116,14 +122,19 @@ export function StudentsManager() {
       const { data, error } = await supabase
         .from("packages")
         .select("name")
+        .eq("is_active", true)
         .order("name");
       if (error) {
         console.error("packages query error:", error);
         toast.error(`Failed to fetch packages: ${error.message}`);
         throw error;
       }
-      console.log("Fetched packages:", data);
-      return data.map((pkg: { name: string }) => pkg.name) as string[];
+      console.log("Raw packages data:", data);
+      const packageNames = Array.isArray(data)
+        ? [...new Set(data.map((pkg: { name: string }) => pkg.name).filter((name: string) => name && typeof name === 'string'))]
+        : [];
+      console.log("Processed package names:", packageNames);
+      return packageNames as string[];
     },
   });
 
@@ -194,6 +205,18 @@ export function StudentsManager() {
 
   const handleRecordsPageChange = (page: number) => {
     setRecordsCurrentPage(page);
+  };
+
+  const getPaginationRange = (current: number, total: number) => {
+    const maxPages = 3;
+    let start = Math.max(1, current - 1);
+    let end = Math.min(total, start + maxPages - 1);
+
+    if (end - start + 1 < maxPages) {
+      start = Math.max(1, end - maxPages + 1);
+    }
+
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   };
 
   const createMutation = useMutation({
@@ -464,11 +487,17 @@ export function StudentsManager() {
                             <SelectValue placeholder="Select Package Type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {packages?.map((packageType) => (
-                              <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
-                                {packageType}
+                            {packages?.length > 0 ? (
+                              packages.map((packageType) => (
+                                <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
+                                  {packageType}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="none" disabled className="text-xs sm:text-sm">
+                                No packages available
                               </SelectItem>
-                            ))}
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -583,11 +612,17 @@ export function StudentsManager() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="All" className="text-xs sm:text-sm">All Package Types</SelectItem>
-                        {packages?.map((packageType) => (
-                          <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
-                            {packageType}
+                        {packages?.length > 0 ? (
+                          packages.map((packageType) => (
+                            <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
+                              {packageType}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled className="text-xs sm:text-sm">
+                            No packages available
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -642,7 +677,7 @@ export function StudentsManager() {
                               <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
                               <span className="text-xs sm:text-sm truncate"><span className="font-medium">Branch:</span> {branch?.name || 'N/A'}</span>
                             </div>
-                            <div className="flex items-center space-x-2 min opacity-100-w-0">
+                            <div className="flex items-center space-x-2 min-w-0">
                               <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
                               <span className="text-xs sm:text-sm truncate"><span className="font-medium">Sessions:</span> {usedSessions} of {total} attended</span>
                             </div>
@@ -697,7 +732,7 @@ export function StudentsManager() {
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </Button>
-                      {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                      {getPaginationRange(currentPage, totalPages).map((page) => (
                         <Button
                           key={page}
                           variant={currentPage === page ? "default" : "outline"}
@@ -831,7 +866,7 @@ export function StudentsManager() {
                           >
                             <ChevronLeft className="w-4 h-4" />
                           </Button>
-                          {Array.from({ length: recordsTotalPages }, (_, index) => index + 1).map((page) => (
+                          {getPaginationRange(recordsCurrentPage, recordsTotalPages).map((page) => (
                             <Button
                               key={page}
                               variant={recordsCurrentPage === page ? "default" : "outline"}

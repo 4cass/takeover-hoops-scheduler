@@ -238,8 +238,6 @@ export type Database = {
           id: string
           is_active: boolean | null
           name: string
-          price: number
-          session_count: number
         }
         Insert: {
           created_at?: string | null
@@ -247,8 +245,6 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name: string
-          price: number
-          session_count: number
         }
         Update: {
           created_at?: string | null
@@ -256,8 +252,6 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string
-          price?: number
-          session_count?: number
         }
         Relationships: []
       }

@@ -67,7 +67,7 @@ export function PackagesManager() {
     );
   }
 
-  const { data: packages, isLoading, error } = useQuery<Package[], Error>({
+  const { data: packages = [], isLoading, error } = useQuery<Package[], Error>({
     queryKey: ["packages"],
     queryFn: async () => {
       console.log("Fetching from packages table...");
@@ -77,16 +77,22 @@ export function PackagesManager() {
         .eq("is_active", true)
         .order("created_at", { ascending: false });
       if (error) {
-        console.error("Supabase error:", error);
+        console.error("Supabase error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
         throw new Error(error.message);
       }
       console.log("Packages data:", data);
-      return data;
+      return data ?? [];
     },
   });
 
-  const filteredPackages = packages?.filter((pkg) =>
-    pkg.name.toLowerCase().includes(searchTerm.toLowerCase())
+  // Add null check for pkg.name in filter
+  const filteredPackages = packages.filter((pkg) =>
+    pkg.name?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   const totalPages = Math.ceil(filteredPackages.length / itemsPerPage);
@@ -102,11 +108,9 @@ export function PackagesManager() {
     mutationFn: async (pkg: FormData) => {
       console.log("Creating package:", pkg);
       const insertData: PackageInsert = {
-          name: pkg.name,
-          description: pkg.description || null,
-          is_active: true,
-          price: 0,
-          session_count: 0
+        name: pkg.name,
+        description: pkg.description || null,
+        is_active: true,
       };
       const { data, error } = await supabase
         .from("packages")
@@ -198,8 +202,8 @@ export function PackagesManager() {
   const handleEdit = (pkg: Package) => {
     setEditingPackage(pkg);
     setFormData({
-      name: pkg.name,
-      description: pkg.description || "",
+      name: pkg.name ?? "",
+      description: pkg.description ?? "",
     });
     setIsDialogOpen(true);
   };
@@ -346,9 +350,9 @@ export function PackagesManager() {
                   <CardHeader className="pb-3">
                     <div className="flex items-center space-x-2 min-w-0">
                       <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-white font-semibold text-sm" style={{ backgroundColor: '#BEA877' }}>
-                        {pkg.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
+                        {(pkg.name ?? "N/A").split(" ").map((n) => n[0]).join("").toUpperCase()}
                       </div>
-                      <h3 className="font-bold text-base sm:text-lg text-gray-900 truncate">{pkg.name}</h3>
+                      <h3 className="font-bold text-base sm:text-lg text-gray-900 truncate">{pkg.name ?? "Unnamed Package"}</h3>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
