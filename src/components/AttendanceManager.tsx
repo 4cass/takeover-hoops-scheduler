@@ -51,7 +51,7 @@ interface TrainingSession {
   start_time: string;
   end_time: string;
   status: SessionStatus;
-  package_type: "Camp Training" | "Personal Training" | null;
+  package_type: string | null;
   branch_id: string;
   branches: { name: string };
   session_coaches: Array<{
@@ -140,7 +140,7 @@ export function AttendanceManager() {
   const [selectedSession, setSelectedSession] = useState<string | null>(sessionIdFromUrl);
   const [searchTerm, setSearchTerm] = useState("");
   const [sessionSearchTerm, setSessionSearchTerm] = useState("");
-  const [filterPackageType, setFilterPackageType] = useState<"All" | "Camp Training" | "Personal Training">("All");
+  const [filterPackageType, setFilterPackageType] = useState<string>("All");
   const [filterSessionStatus, setFilterSessionStatus] = useState<"All" | SessionStatus>("All");
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [coachFilter, setCoachFilter] = useState<string>("All");
@@ -209,19 +209,7 @@ export function AttendanceManager() {
         throw error;
       }
 
-      return (data || []).map((session: any) => ({
-        ...session,
-        package_type:
-          session.package_type === "Camp Training"
-            ? "Camp Training"
-            : session.package_type === "Personal Training"
-            ? "Personal Training"
-            : null,
-        coach_session_times: session.coach_session_times.map((cst: any) => ({
-          ...cst,
-          coaches: cst.coaches ? { name: cst.coaches.name } : null,
-        })),
-      })) as TrainingSession[];
+      return (data || []) as TrainingSession[];
     },
   });
 
@@ -256,6 +244,23 @@ export function AttendanceManager() {
         throw error;
       }
       return (data || []) as Coach[];
+    },
+  });
+
+  const { data: packages, isLoading: packagesLoading, error: packagesError } = useQuery<string[], Error>({
+    queryKey: ["packages"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("packages")
+        .select("name")
+        .order("name");
+
+      if (error) {
+        console.error("Error fetching packages:", error);
+        toast.error(`Failed to fetch packages: ${error.message}`);
+        throw error;
+      }
+      return (data || []).map((pkg: { name: string }) => pkg.name) as string[];
     },
   });
 
@@ -527,7 +532,7 @@ export function AttendanceManager() {
     setShowViewModal(true);
   };
 
-  if (sessionsLoading || branchesLoading || coachesLoading) {
+  if (sessionsLoading || branchesLoading || coachesLoading || packagesLoading) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
@@ -539,7 +544,7 @@ export function AttendanceManager() {
     );
   }
 
-  if (sessionsError || branchesError || coachesError) {
+  if (sessionsError || branchesError || coachesError || packagesError) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
@@ -604,15 +609,18 @@ export function AttendanceManager() {
                   </Label>
                   <Select
                     value={filterPackageType}
-                    onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setFilterPackageType(value)}
+                    onValueChange={(value: string) => setFilterPackageType(value)}
                   >
                     <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: "#BEA877" }}>
                       <SelectValue placeholder="Select package type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All" className="text-xs sm:text-sm">All Sessions</SelectItem>
-                      <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
-                      <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
+                      {packages?.map((pkg) => (
+                        <SelectItem key={pkg} value={pkg} className="text-xs sm:text-sm">
+                          {pkg}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
