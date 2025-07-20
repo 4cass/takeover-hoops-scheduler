@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -13,7 +12,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths, isAfter, parseISO } from "date-fns";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/context/AuthContext";
-import { toast } from "sonner";
 
 type SessionStatus = Database['public']['Enums']['session_status'];
 
@@ -24,7 +22,7 @@ type TrainingSession = {
   end_time: string;
   branch_id: string;
   status: SessionStatus;
-  package_type: string | null;
+  package_type: "Camp Training" | "Personal Training" | null;
   branches: { name: string };
   session_participants: Array<{ students: { name: string } }>;
 };
@@ -40,7 +38,7 @@ export function CoachCalendarManager() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
-  const [filterPackageType, setFilterPackageType] = useState<string>("All");
+  const [filterPackageType, setFilterPackageType] = useState<"All" | "Camp Training" | "Personal Training">("All");
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [showUpcomingSessions, setShowUpcomingSessions] = useState(false);
   const [showPastSessions, setShowPastSessions] = useState(false);
@@ -66,55 +64,11 @@ export function CoachCalendarManager() {
     enabled: !!user?.id,
   });
 
-  const { data: branches } = useQuery({
-    queryKey: ['branches-select'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('branches')
-        .select('id, name')
-        .order('name');
-      if (error) {
-        console.error("Error fetching branches:", error);
-        throw error;
-      }
-      console.log("Branches:", data);
-      return data;
-    }
-  });
-
-  const { data: packages = [], error: packagesError } = useQuery<string[], Error>({
-    queryKey: ["packages"],
-    queryFn: async () => {
-      console.log("Fetching packages...");
-      const { data, error } = await supabase
-        .from("packages")
-        .select("name")
-        .order("name");
-      
-      if (error) {
-        console.error("Error fetching packages:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw error;
-      }
-      
-      const packageNames = data?.map((pkg: { name: string }) => pkg.name) || [];
-      console.log("Fetched packages:", packageNames);
-      return packageNames;
-    },
-  });
-
-  if (packagesError) {
-    toast.error("Failed to load package types. Please try again or contact support.");
-  }
-
-  const { data: sessions = [], isLoading } = useQuery<TrainingSession[], Error>({
+  const { data: sessions, isLoading } = useQuery({
     queryKey: ['coach-training-sessions', coachId, selectedBranch, filterPackageType, currentMonth],
     queryFn: async () => {
       if (!coachId) return [];
+      // Fetch session IDs from session_coaches
       const coachSessionsRes = await supabase
         .from('session_coaches')
         .select('session_id')
@@ -128,6 +82,7 @@ export function CoachCalendarManager() {
       const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
       console.log("Session IDs from session_coaches:", sessionIds);
 
+      // Fetch sessions from 6 months before current month to 1 month after
       const startDate = subMonths(startOfMonth(currentMonth), 6);
       const endDate = addMonths(endOfMonth(currentMonth), 1);
 
@@ -147,9 +102,6 @@ export function CoachCalendarManager() {
       if (selectedBranch !== "all") {
         query = query.eq('branch_id', selectedBranch);
       }
-      if (filterPackageType !== "All") {
-        query = query.eq('package_type', filterPackageType);
-      }
 
       const { data, error } = await query.order('date', { ascending: true });
       if (error) {
@@ -157,17 +109,28 @@ export function CoachCalendarManager() {
         throw error;
       }
       console.log("Sessions result:", data);
-      return data?.map((session: any) => ({
-        ...session,
-        package_type: session.package_type || null,
-      })) || [];
+      return data as TrainingSession[];
     },
     enabled: !!coachId
   });
 
-  const filteredSessions = sessions.filter((session) =>
-    filterPackageType === "All" || session.package_type === filterPackageType
-  ) || [];
+  const { data: branches } = useQuery({
+    queryKey: ['branches-select'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      console.log("Branches:", data);
+      return data;
+    }
+  });
+
+  const filteredSessions = sessions
+    ?.filter((session) =>
+      filterPackageType === "All" || session.package_type === filterPackageType
+    ) || [];
 
   const daysInMonth = eachDayOfInterval({
     start: startOfMonth(currentMonth),
@@ -242,8 +205,7 @@ export function CoachCalendarManager() {
   }) || [];
 
   const pastSessions = filteredSessions.filter(session => {
-    const sessionDate = parseISO(session.date);
-    return isBefore(sessionDate, todayDateOnly) || session.status === 'completed';
+    return session.status === 'completed';
   }) || [];
 
   const handleAttendanceRedirect = (sessionId: string) => {
@@ -309,24 +271,15 @@ export function CoachCalendarManager() {
                   <label className="text-xs sm:text-sm font-bold text-gray-700">Package Type</label>
                   <Select
                     value={filterPackageType}
-                    onValueChange={setFilterPackageType}
+                    onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setFilterPackageType(value)}
                   >
                     <SelectTrigger className="border-2 border-[#8e7a3f] focus:border-[#8e7a3f] focus:ring-[#8e7a3f]/20 rounded-lg text-xs sm:text-sm py-2 h-8 sm:h-10">
                       <SelectValue placeholder="Select package type" />
                     </SelectTrigger>
                     <SelectContent className="bg-white border-2 border-[#8e7a3f] z-50">
                       <SelectItem value="All">All Sessions</SelectItem>
-                      {packages.length > 0 ? (
-                        packages.map(packageType => (
-                          <SelectItem key={packageType} value={packageType}>
-                            {packageType}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="none" disabled>
-                          No package types available
-                        </SelectItem>
-                      )}
+                      <SelectItem value="Camp Training">Camp Training</SelectItem>
+                      <SelectItem value="Personal Training">Personal Training</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -335,6 +288,7 @@ export function CoachCalendarManager() {
                 <p className="text-xs sm:text-sm text-gray-600 font-bold">
                   Showing {filteredSessions.length} session{filteredSessions.length === 1 ? '' : 's'}
                 </p>
+                {/* Quick Access Buttons */}
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   <Button
                     onClick={() => setShowUpcomingSessions(true)}
@@ -361,6 +315,7 @@ export function CoachCalendarManager() {
             {/* Calendar Grid */}
             <div className="border-2 border-[#181A18] rounded-xl p-3 sm:p-4 lg:p-6 bg-white shadow-lg">
               
+              {/* Calendar Navigation */}
               <div className="flex justify-between items-center mb-4 sm:mb-6">
                 <Button
                   onClick={handlePrevMonth}
@@ -383,6 +338,7 @@ export function CoachCalendarManager() {
                 </Button>
               </div>
               
+              {/* Days of Week Header */}
               <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-3 sm:mb-4">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                   <div key={day} className="text-center py-2 sm:py-3 bg-[#181A18] text-white font-bold rounded-lg text-xs sm:text-sm">
@@ -391,6 +347,7 @@ export function CoachCalendarManager() {
                 ))}
               </div>
               
+              {/* Calendar Days */}
               <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {daysInMonth.map(day => {
                   const daySessions = filteredSessions.filter(session => isSameDay(parseISO(session.date), day)) || [];
@@ -429,6 +386,7 @@ export function CoachCalendarManager() {
                 })}
               </div>
               
+              {/* Legend */}
               <div className="mt-3 sm:mt-4 lg:mt-6 flex flex-wrap gap-2 sm:gap-3 lg:gap-4 justify-center text-xs sm:text-sm">
                 <div className="flex items-center gap-1 sm:gap-2">
                   <div className="w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full"></div>
@@ -451,6 +409,7 @@ export function CoachCalendarManager() {
           </CardContent>
         </Card>
 
+        {/* Date Sessions Modal */}
         <Dialog open={!!selectedDate} onOpenChange={() => setSelectedDate(null)}>
           <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl border-2 border-[#181A18] bg-white shadow-lg overflow-x-hidden max-h-[90vh]">
             <DialogHeader>
@@ -469,6 +428,7 @@ export function CoachCalendarManager() {
                     <Card key={session.id} className="border border-[#181A18] bg-white hover:shadow-lg transition-all duration-300">
                       <CardContent className="p-3 sm:p-4 lg:p-6">
                         <div className="space-y-4">
+                          {/* Session Information Grid */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                             <div className="flex items-center space-x-2 min-w-0">
                               <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
@@ -502,6 +462,7 @@ export function CoachCalendarManager() {
                             </div>
                           </div>
                           
+                          {/* Status and Action Section */}
                           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2 border-t border-gray-100">
                             <Badge variant={session.status as "scheduled" | "completed" | "cancelled"} className="font-bold px-3 py-1 text-xs">
                               {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
@@ -534,6 +495,7 @@ export function CoachCalendarManager() {
           </DialogContent>
         </Dialog>
 
+        {/* Upcoming Sessions Modal */}
         <Dialog open={showUpcomingSessions} onOpenChange={setShowUpcomingSessions}>
           <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-6xl max-h-[80vh] border-2 border-green-200 bg-white shadow-lg overflow-x-hidden">
             <DialogHeader>
@@ -602,15 +564,16 @@ export function CoachCalendarManager() {
           </DialogContent>
         </Dialog>
 
+        {/* Past Sessions Modal */}
         <Dialog open={showPastSessions} onOpenChange={setShowPastSessions}>
           <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-6xl max-h-[80vh] border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden">
             <DialogHeader>
               <DialogTitle className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center">
                 <CalendarIcon className="h-5 sm:h-6 w-5 sm:w-6 mr-3 text-gray-600" />
-                Past Sessions ({pastSessions.length})
+                Completed Sessions ({pastSessions.length})
               </DialogTitle>
               <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
-                All completed or past sessions
+                All completed sessions
               </DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-[60vh] pr-4">
@@ -662,8 +625,8 @@ export function CoachCalendarManager() {
               ) : (
                 <div className="text-center py-8 sm:py-12">
                   <CalendarIcon className="h-12 sm:h-16 w-12 sm:w-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-lg sm:text-xl text-gray-500 mb-2 font-bold">No past or completed sessions</p>
-                  <p className="text-gray-400 text-sm sm:text-base font-bold">Past or completed sessions will appear here.</p>
+                  <p className="text-lg sm:text-xl text-gray-500 mb-2 font-bold">No completed sessions</p>
+                  <p className="text-gray-400 text-sm sm:text-base font-bold">Completed sessions will appear here.</p>
                 </div>
               )}
             </ScrollArea>

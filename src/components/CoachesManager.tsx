@@ -24,12 +24,6 @@ type Branch = {
   name: string;
 };
 
-type Package = {
-  id: string;
-  name: string;
-  is_active: boolean;
-};
-
 type SessionRecord = {
   training_sessions: any;
   coach_id: string;
@@ -43,6 +37,11 @@ type SessionRecord = {
   session_participants: { students: { name: string } }[];
   session_coaches: { coach_id: string; coaches: { name: string } | null }[];
 };
+
+const PACKAGE_TYPES = [
+  "Personal Training",
+  "Camp Training"
+];
 
 const formatTime12Hour = (timeString: string) => {
   const [hours, minutes] = timeString.split(":").map(Number);
@@ -133,56 +132,11 @@ export function CoachesManager() {
     },
   });
 
-  const { data: packages, isLoading: packagesLoading, error: packagesError } = useQuery({
-    queryKey: ["packages"],
-    queryFn: async () => {
-      console.log("Fetching packages...");
-      const { data, error } = await supabase
-        .from("packages")
-        .select("name")
-        .eq("is_active", true)
-        .order("name");
-      if (error) {
-        console.error("packages query error:", error);
-        toast.error(`Failed to fetch packages: ${error.message}`);
-        throw error;
-      }
-      console.log("Fetched packages:", data);
-      return data as Package[];
-    },
-  });
-
-  const { data: coachPackageTypes, isLoading: coachPackageTypesLoading } = useQuery({
-    queryKey: ["coach_package_types", coaches?.map(c => c.id) || []],
-    queryFn: async () => {
-      if (!coaches || coaches.length === 0) return [];
-      console.log("Fetching coach package types...");
-      const { data, error } = await supabase
-        .from("session_coaches")
-        .select(`
-          coach_id,
-          training_sessions (package_type)
-        `)
-        .in("coach_id", coaches.map(c => c.id));
-      if (error) {
-        console.error("coach_package_types query error:", error);
-        toast.error(`Failed to fetch coach package types: ${error.message}`);
-        throw error;
-      }
-      console.log("Fetched coach package types:", data);
-      return data as { coach_id: string; training_sessions: { package_type: string | null } }[];
-    },
-    enabled: !!coaches && coaches.length > 0,
-  });
-
-  const filteredCoaches = coaches?.filter((coach) => {
-    const matchesSearch = coach.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesPackageType = coachPackageTypeFilter === "All" ||
-      coachPackageTypes?.some(
-        (cpt) => cpt.coach_id === coach.id && cpt.training_sessions?.package_type === coachPackageTypeFilter
-      );
-    return matchesSearch && matchesPackageType;
-  }) || [];
+  const filteredCoaches = coaches?.filter((coach) =>
+    coach.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (branchFilter === "All" || true) && // Branch filter not applied to coaches directly
+    (coachPackageTypeFilter === "All" || true) // Package type filter not applied to coaches directly
+  ) || [];
 
   const totalPages = Math.ceil(filteredCoaches.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -340,7 +294,7 @@ export function CoachesManager() {
     phone: "",
   });
 
-  if (coachesLoading || branchesLoading || packagesLoading) {
+  if (coachesLoading || branchesLoading) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
@@ -352,14 +306,14 @@ export function CoachesManager() {
     );
   }
 
-  if (coachesError || branchesError || packagesError) {
+  if (coachesError || branchesError) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
           <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Error loading coaches</h3>
           <p className="text-sm sm:text-base md:text-lg text-gray-600">
-            Failed to load data: {(coachesError || branchesError || packagesError)?.message || 'Unknown error'}. Please try again later.
+            Failed to load data: {(coachesError || branchesError)?.message || 'Unknown error'}. Please try again later.
           </p>
         </div>
       </div>
@@ -497,28 +451,6 @@ export function CoachesManager() {
                       />
                     </div>
                   </div>
-                  <div className="space-y-2 flex flex-col min-w-0">
-                    <Label htmlFor="filter-coach-package-type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      <Users className="w-4 h-4 mr-2 text-accent" style={{ color: '#BEA877' }} />
-                      Package Type
-                    </Label>
-                    <Select
-                      value={coachPackageTypeFilter}
-                      onValueChange={(value) => setCoachPackageTypeFilter(value)}
-                    >
-                      <SelectTrigger className="border-2 focus:border-accent rounded-lg py-2 text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                        <SelectValue placeholder="Select Package Type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="All" className="text-xs sm:text-sm">All Package Types</SelectItem>
-                        {packages?.map((pkg) => (
-                          <SelectItem key={pkg.name} value={pkg.name} className="text-xs sm:text-sm">
-                            {pkg.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
                 <p className="text-xs sm:text-sm text-gray-600 mt-3">
                   Showing {filteredCoaches.length} coach{filteredCoaches.length === 1 ? '' : 'es'}
@@ -529,10 +461,10 @@ export function CoachesManager() {
                 <div className="text-center py-12 sm:py-16">
                   <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 mb-2">
-                    {searchTerm || coachPackageTypeFilter !== "All" ? "No coaches found" : "No coaches"}
+                    {searchTerm ? "No coaches found" : "No coaches"}
                   </h3>
                   <p className="text-xs sm:text-sm md:text-base text-gray-600 mb-6">
-                    {(searchTerm || coachPackageTypeFilter !== "All") ? "Try adjusting your search or filters." : "Add a new coach to get started."}
+                    {searchTerm ? "Try adjusting your search." : "Add a new coach to get started."}
                   </p>
                 </div>
               ) : (
@@ -708,9 +640,9 @@ export function CoachesManager() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="All" className="text-xs sm:text-sm">All Package Types</SelectItem>
-                          {packages?.map((pkg) => (
-                            <SelectItem key={pkg.name} value={pkg.name} className="text-xs sm:text-sm">
-                              {pkg.name}
+                          {PACKAGE_TYPES.map((packageType) => (
+                            <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
+                              {packageType}
                             </SelectItem>
                           ))}
                         </SelectContent>

@@ -33,7 +33,7 @@ type TrainingSession = {
   end_time: string;
   branch_id: string;
   status: SessionStatus;
-  package_type: string | null;
+  package_type: "Camp Training" | "Personal Training" | null;
   branches: { name: string };
   session_participants: Array<{ students: { name: string } }>;
 };
@@ -94,7 +94,7 @@ export function CoachAttendanceManager() {
   const [sessionSearchTerm, setSessionSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<SessionStatus>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
-  const [packageFilter, setPackageFilter] = useState<string>("All");
+  const [packageFilter, setPackageFilter] = useState<"All" | "Camp Training" | "Personal Training">("All");
   const [activeTab, setActiveTab] = useState<"coaches" | "players">("coaches");
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -145,42 +145,6 @@ export function CoachAttendanceManager() {
       return data;
     }
   });
-
-  const { data: packages, error: packagesError } = useQuery<string[], Error>({
-    queryKey: ["packages"],
-    queryFn: async () => {
-      console.log("Attempting to fetch packages from 'packages' table...");
-      const { data, error } = await supabase
-        .from("packages")
-        .select("name")
-        .order("name");
-      
-      if (error) {
-        console.error("Error fetching packages:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw error;
-      }
-      
-      if (!data || data.length === 0) {
-        console.warn("Packages table is empty or no data returned:", data);
-        return [];
-      }
-      
-      const packageNames = data.map((pkg: { name: string }) => pkg.name);
-      console.log("Fetched package names:", packageNames);
-      return packageNames;
-    },
-  });
-
-  // Handle package query error with toast
-  if (packagesError) {
-    console.error("Packages query failed:", packagesError);
-    toast.error("Failed to load package types. Please check your database permissions or table schema.");
-  }
 
   const { data: sessions } = useQuery<TrainingSession[]>({
     queryKey: ["coach-sessions", coachId, branchFilter, packageFilter, statusFilter, sessionSearchTerm],
@@ -236,22 +200,15 @@ export function CoachAttendanceManager() {
       console.log("Fetched sessions:", data);
       return (data || []).map((session: any) => ({
         ...session,
-        package_type: session.package_type || null,
+        package_type: session.package_type === "Camp Training"
+          ? "Camp Training"
+          : session.package_type === "Personal Training"
+          ? "Personal Training"
+          : null,
       })) as TrainingSession[];
     },
     enabled: !!coachId,
   });
-
-  const filteredSessions = sessions
-    ?.filter((session) => {
-      const matchesSearch = session.branches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase());
-      return matchesSearch;
-    })
-    .sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      return dateB - dateA;
-    }) || [];
 
   const { data: sessionCoaches } = useQuery({
     queryKey: ["session-coaches", selectedSession],
@@ -472,6 +429,17 @@ export function CoachAttendanceManager() {
   });
 
   const selectedSessionDetails = sessions?.find((s) => s.id === selectedSession);
+  const filteredSessions = sessions
+    ?.filter((session) => {
+      const matchesSearch = session.branches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase());
+      return matchesSearch;
+    })
+    .sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateB - dateA;
+    }) || [];
+
   const filteredAttendanceRecords = attendanceRecords?.filter((record) =>
     record.students.name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
@@ -578,24 +546,15 @@ export function CoachAttendanceManager() {
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Package Type</label>
                     <Select
                       value={packageFilter}
-                      onValueChange={(value: string) => setPackageFilter(value)}
+                      onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setPackageFilter(value)}
                     >
                       <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#BEA877' }}>
                         <SelectValue placeholder="Select package type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="All">All Packages</SelectItem>
-                        {packages && packages.length > 0 ? (
-                          packages.map((packageType: string) => (
-                            <SelectItem key={packageType} value={packageType}>
-                              {packageType}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="none" disabled>
-                            No package types available
-                          </SelectItem>
-                        )}
+                        <SelectItem value="All">All Sessions</SelectItem>
+                        <SelectItem value="Camp Training">Camp Training</SelectItem>
+                        <SelectItem value="Personal Training">Personal Training</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

@@ -23,8 +23,6 @@ const menuItems = [
   { title: "Players", icon: Users, value: "students", allowedRoles: ['admin'] },
   { title: "Coaches", icon: BookOpen, value: "coaches", allowedRoles: ['admin'] },
   { title: "Branches", icon: MapPin, value: "branches", allowedRoles: ['admin'] },
-  { title: "Packages", icon: MapPin, value: "packages", allowedRoles: ['admin'] },
-
 ];
 
 interface AppSidebarProps {

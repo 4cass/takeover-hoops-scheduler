@@ -11,7 +11,6 @@ import { CoachAttendanceManager } from "@/components/CoachAttendanceManager";
 import { StudentsManager } from "@/components/StudentsManager";
 import { CoachesManager } from "@/components/CoachesManager";
 import { BranchesManager } from "@/components/BranchesManager";
-import { PackagesManager } from "@/components/PackagesManager";
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Settings } from "lucide-react";
@@ -79,7 +78,6 @@ export default function Dashboard() {
     path.includes("/dashboard/students") ? "students" :
     path.includes("/dashboard/coaches") ? "coaches" :
     path.includes("/dashboard/branches") ? "branches" :
-    path.includes("/dashboard/packages") ? "packages" :
     "overview";
 
   return (
@@ -126,7 +124,6 @@ export default function Dashboard() {
                   <Route path="students" element={<StudentsManager />} />
                   <Route path="coaches" element={<CoachesManager />} />
                   <Route path="branches" element={<BranchesManager />} />
-                  <Route path="packages" element={<PackagesManager />} />
                 </>
               )}
               
@@ -137,7 +134,6 @@ export default function Dashboard() {
                   <Route path="students" element={<Navigate to="/dashboard" replace />} />
                   <Route path="coaches" element={<Navigate to="/dashboard" replace />} />
                   <Route path="branches" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="packages" element={<Navigate to="/dashboard" replace />} />
                 </>
               )}
             </Routes>

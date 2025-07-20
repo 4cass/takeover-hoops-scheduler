@@ -124,6 +124,32 @@ export type Database = {
         }
         Relationships: []
       }
+      coach_availability: {
+        Row: {
+          coach_id: string
+          day_of_week: Database["public"]["Enums"]["day_of_week"]
+          id: string
+        }
+        Insert: {
+          coach_id: string
+          day_of_week: Database["public"]["Enums"]["day_of_week"]
+          id?: string
+        }
+        Update: {
+          coach_id?: string
+          day_of_week?: Database["public"]["Enums"]["day_of_week"]
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_availability_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "coaches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coach_session_times: {
         Row: {
           coach_id: string
@@ -176,6 +202,7 @@ export type Database = {
           email: string
           id: string
           name: string
+          package_type: string | null
           phone: string | null
           role: string
           updated_at: string
@@ -186,6 +213,7 @@ export type Database = {
           email: string
           id?: string
           name: string
+          package_type?: string | null
           phone?: string | null
           role?: string
           updated_at?: string
@@ -196,33 +224,10 @@ export type Database = {
           email?: string
           id?: string
           name?: string
+          package_type?: string | null
           phone?: string | null
           role?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      packages: {
-        Row: {
-          created_at: string | null
-          description: string | null
-          id: string
-          is_active: boolean | null
-          name: string
-        }
-        Insert: {
-          created_at?: string | null
-          description?: string | null
-          id?: string
-          is_active?: boolean | null
-          name: string
-        }
-        Update: {
-          created_at?: string | null
-          description?: string | null
-          id?: string
-          is_active?: boolean | null
-          name?: string
         }
         Relationships: []
       }

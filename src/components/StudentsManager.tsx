@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, ErrorInfo } from "react";
+import { useState, Component, ErrorInfo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,11 @@ class StudentsErrorBoundary extends Component<{ children: React.ReactNode }, { h
   }
 }
 
+const PACKAGE_TYPES = [
+  "Camp Training",
+  "Personal Training"
+];
+
 export function StudentsManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRecordsDialogOpen, setIsRecordsDialogOpen] = useState(false);
@@ -72,12 +77,6 @@ export function StudentsManager() {
   const itemsPerPage = 6;
 
   const queryClient = useQueryClient();
-
-  // Clear packages cache on mount to prevent stale data
-  useEffect(() => {
-    console.log("Clearing packages cache on mount");
-    queryClient.removeQueries({ queryKey: ["packages"] });
-  }, [queryClient]);
 
   const { data: students, isLoading: studentsLoading, error: studentsError } = useQuery({
     queryKey: ["students"],
@@ -115,30 +114,6 @@ export function StudentsManager() {
     },
   });
 
-  const { data: packages, isLoading: packagesLoading, error: packagesError } = useQuery({
-    queryKey: ["packages"],
-    queryFn: async () => {
-      console.log("Fetching packages...");
-      const { data, error } = await supabase
-        .from("packages")
-        .select("name")
-        .eq("is_active", true)
-        .order("name");
-      if (error) {
-        console.error("packages query error:", error);
-        toast.error(`Failed to fetch packages: ${error.message}`);
-        throw error;
-      }
-      console.log("Raw packages data:", data);
-      const packageNames = Array.isArray(data)
-        ? [...new Set(data.map((pkg: { name: string }) => pkg.name).filter((name: string) => name && typeof name === 'string'))]
-        : [];
-      console.log("Processed package names:", packageNames);
-      return packageNames as string[];
-    },
-  });
-
-  // Moved filtering and pagination logic before useQuery for attendanceRecords
   const filteredStudents = students?.filter((student) =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
     (branchFilter === "All" || student.branch_id === branchFilter) &&
@@ -205,18 +180,6 @@ export function StudentsManager() {
 
   const handleRecordsPageChange = (page: number) => {
     setRecordsCurrentPage(page);
-  };
-
-  const getPaginationRange = (current: number, total: number) => {
-    const maxPages = 3;
-    let start = Math.max(1, current - 1);
-    let end = Math.min(total, start + maxPages - 1);
-
-    if (end - start + 1 < maxPages) {
-      start = Math.max(1, end - maxPages + 1);
-    }
-
-    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   };
 
   const createMutation = useMutation({
@@ -355,7 +318,7 @@ export function StudentsManager() {
     }
   };
 
-  if (studentsLoading || branchesLoading || packagesLoading) {
+  if (studentsLoading || branchesLoading) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
@@ -367,14 +330,14 @@ export function StudentsManager() {
     );
   }
 
-  if (studentsError || branchesError || packagesError) {
+  if (studentsError || branchesError) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
           <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Error loading players</h3>
           <p className="text-sm sm:text-base md:text-lg text-gray-600">
-            Failed to load data: {(studentsError || branchesError || packagesError)?.message || 'Unknown error'}. Please try again later.
+            Failed to load data: {(studentsError || branchesError)?.message || 'Unknown error'}. Please try again later.
           </p>
         </div>
       </div>
@@ -487,17 +450,11 @@ export function StudentsManager() {
                             <SelectValue placeholder="Select Package Type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {packages?.length > 0 ? (
-                              packages.map((packageType) => (
-                                <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
-                                  {packageType}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="none" disabled className="text-xs sm:text-sm">
-                                No packages available
+                            {PACKAGE_TYPES.map((packageType) => (
+                              <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
+                                {packageType}
                               </SelectItem>
-                            )}
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -612,17 +569,11 @@ export function StudentsManager() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="All" className="text-xs sm:text-sm">All Package Types</SelectItem>
-                        {packages?.length > 0 ? (
-                          packages.map((packageType) => (
-                            <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
-                              {packageType}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="none" disabled className="text-xs sm:text-sm">
-                            No packages available
+                        {PACKAGE_TYPES.map((packageType) => (
+                          <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
+                            {packageType}
                           </SelectItem>
-                        )}
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -732,7 +683,7 @@ export function StudentsManager() {
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </Button>
-                      {getPaginationRange(currentPage, totalPages).map((page) => (
+                      {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
                         <Button
                           key={page}
                           variant={currentPage === page ? "default" : "outline"}
@@ -866,7 +817,7 @@ export function StudentsManager() {
                           >
                             <ChevronLeft className="w-4 h-4" />
                           </Button>
-                          {getPaginationRange(recordsCurrentPage, recordsTotalPages).map((page) => (
+                          {Array.from({ length: recordsTotalPages }, (_, index) => index + 1).map((page) => (
                             <Button
                               key={page}
                               variant={recordsCurrentPage === page ? "default" : "outline"}

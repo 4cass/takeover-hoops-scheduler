@@ -17,7 +17,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 
 type SessionStatus = Database['public']['Enums']['session_status'];
-type Package = Database['public']['Tables']['packages']['Row'];
 
 type TrainingSession = {
   id: string;
@@ -25,7 +24,7 @@ type TrainingSession = {
   start_time: string;
   end_time: string;
   status: SessionStatus;
-  package_type: string | null;
+  package_type: "Camp Training" | "Personal Training" | null;
   branch_id: string;
   branches: { name: string } | null;
   session_coaches: Array<{
@@ -93,30 +92,11 @@ export function CalendarManager() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedCoach, setSelectedCoach] = useState<string>("all");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
-  const [filterPackageType, setFilterPackageType] = useState<string>("All");
+  const [filterPackageType, setFilterPackageType] = useState<"All" | "Camp Training" | "Personal Training">("All");
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [showUpcomingSessions, setShowUpcomingSessions] = useState(false);
   const [showPastSessions, setShowPastSessions] = useState(false);
   const navigate = useNavigate();
-
-  // Fetch packages
-  const { data: packages, error: packagesError } = useQuery<Package[], Error>({
-    queryKey: ['packages-select'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('packages')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      if (error) {
-        console.error("Error fetching packages:", error);
-        toast.error(`Failed to fetch packages: ${error.message}`);
-        throw error;
-      }
-      console.log('Fetched packages:', data);
-      return data || [];
-    },
-  });
 
   const { data: sessions, isLoading, error: sessionsError } = useQuery({
     queryKey: ['training-sessions', selectedCoach, selectedBranch, filterPackageType, currentMonth],
@@ -152,9 +132,6 @@ export function CalendarManager() {
       }
       if (selectedBranch !== "all") {
         query = query.eq('branch_id', selectedBranch);
-      }
-      if (filterPackageType !== "All") {
-        query = query.eq('package_type', filterPackageType);
       }
 
       const { data, error } = await query.order('date', { ascending: true });
@@ -270,14 +247,14 @@ export function CalendarManager() {
     navigate(`/dashboard/attendance?sessionId=${sessionId}`);
   };
 
-  if (sessionsError || packagesError) {
+  if (sessionsError) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
           <CalendarIcon className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Error loading calendar</h3>
           <p className="text-sm sm:text-base md:text-lg text-gray-600">
-            Failed to load data: {(sessionsError as Error)?.message || (packagesError as Error)?.message || 'Unknown error'}. Please try again later.
+            Failed to load sessions: {(sessionsError as Error).message || 'Unknown error'}. Please try again later.
           </p>
         </div>
       </div>
@@ -366,20 +343,15 @@ export function CalendarManager() {
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Package Type</label>
                     <Select
                       value={filterPackageType}
-                      onValueChange={(value: string) => setFilterPackageType(value)}
+                      onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setFilterPackageType(value)}
                     >
                       <SelectTrigger className="border-2 border-accent focus:border-accent focus:ring-accent/20 rounded-lg text-xs sm:text-sm h-9 sm:h-10" style={{ borderColor: '#BEA877' }}>
                         <SelectValue placeholder="Select package type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="All" className="text-xs sm:text-sm">All Packages</SelectItem>
-                        {packages && packages.length > 0 ? (
-                          packages.map(packageItem => (
-                            <SelectItem key={packageItem.id} value={packageItem.name} className="text-xs sm:text-sm">{packageItem.name}</SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="none" disabled className="text-xs sm:text-sm">No packages available</SelectItem>
-                        )}
+                        <SelectItem value="All" className="text-xs sm:text-sm">All Sessions</SelectItem>
+                        <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
+                        <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
