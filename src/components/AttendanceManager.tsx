@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
 import { format, addDays, subDays, parse, parseISO, format as formatDateFns } from "date-fns";
-import { CoachAttendanceManager } from "./CoachAttendanceManager";
 import { Database } from "@/integrations/supabase/types";
 
 type AttendanceStatus = "present" | "absent" | "pending";
@@ -57,7 +56,7 @@ interface TrainingSession {
   session_coaches: Array<{
     id: string;
     coach_id: string;
-    coaches: { name: string };
+    coaches: { name: string } | null;
   }>;
   session_participants: Array<{
     id: string;
@@ -81,12 +80,9 @@ interface UpdateAttendanceVariables {
   status: AttendanceStatus;
 }
 
-// Utility functions
 const formatTime12Hour = (time: string | null | undefined, date: string | null | undefined): string => {
   if (!time || !date) return "N/A";
   try {
-    // Combine date and time to create a parseable datetime string
-    // Handle time formats like HH:mm:ss or HH:mm
     const timeFormats = ["HH:mm:ss", "HH:mm"];
     let parsedTime: Date | null = null;
 
@@ -135,9 +131,8 @@ export function AttendanceManager() {
   const sessionIdFromUrl = searchParams.get("sessionId");
   const queryClient = useQueryClient();
 
-  // Moved useState for activeTab to the top to ensure consistent hook order
   const [activeTab, setActiveTab] = useState<'coaches' | 'players'>('coaches');
-  const [selectedSession, setSelectedSession] = useState<string | null>(sessionIdFromUrl);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sessionSearchTerm, setSessionSearchTerm] = useState("");
   const [filterPackageType, setFilterPackageType] = useState<string>("All");
@@ -149,37 +144,13 @@ export function AttendanceManager() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [currentCoachId, setCurrentCoachId] = useState<string | null>(null);
+
   const itemsPerPage = 6;
 
-  useEffect(() => {
-    if (sessionIdFromUrl) {
-      setSelectedSession(sessionIdFromUrl);
-      setShowAttendanceModal(true);
-    }
-  }, [sessionIdFromUrl]);
-
-  useEffect(() => {
-    const fetchCoachId = async () => {
-      if (user) {
-        const { data, error } = await supabase
-          .from("coaches")
-          .select("id")
-          .eq("auth_id", user.id)
-          .single();
-        if (error) {
-          console.error("Error fetching coach ID:", error);
-          toast.error("Failed to fetch coach ID");
-          return;
-        }
-        setCurrentCoachId(data.id);
-      }
-    };
-    fetchCoachId();
-  }, [user]);
-
-  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useQuery<TrainingSession[], Error>({
-    queryKey: ["sessions"],
-    queryFn: async () => {
+  // Fetch sessions with explicit array type and gcTime
+  const { data: sessions = [], isLoading: sessionsLoading, error: sessionsError } = useQuery({
+    queryKey: ["sessions", "attendance"],
+    queryFn: async (): Promise<TrainingSession[]> => {
       const today = new Date();
       const pastDate = subDays(today, 30);
       const futureDate = addDays(today, 30);
@@ -209,13 +180,59 @@ export function AttendanceManager() {
         throw error;
       }
 
-      return (data || []) as TrainingSession[];
+      return (data ?? []) as TrainingSession[];
     },
+    staleTime: 0,
+    gcTime: 0, // Replaced cacheTime with gcTime
   });
 
-  const { data: branches, isLoading: branchesLoading, error: branchesError } = useQuery<Branch[], Error>({
+  // Handle sessionIdFromUrl with explicit type checking
+  useEffect(() => {
+    if (sessionIdFromUrl) {
+      if (sessions.length > 0) {
+        const sessionExists = sessions.some((s) => s.id === sessionIdFromUrl);
+        if (sessionExists) {
+          setSelectedSession(sessionIdFromUrl);
+          setShowAttendanceModal(true);
+        } else {
+          toast.error("Session not found");
+          setSelectedSession(null);
+          setShowAttendanceModal(false);
+        }
+      } else {
+        toast.error("No sessions available");
+        setSelectedSession(null);
+        setShowAttendanceModal(false);
+      }
+    } else {
+      setSelectedSession(null);
+      setShowAttendanceModal(false);
+    }
+  }, [sessionIdFromUrl, sessions]);
+
+  useEffect(() => {
+    const fetchCoachId = async () => {
+      if (user) {
+        const { data, error } = await supabase
+          .from("coaches")
+          .select("id")
+          .eq("auth_id", user.id)
+          .single();
+        if (error) {
+          console.error("Error fetching coach ID:", error);
+          toast.error("Failed to fetch coach ID");
+          return;
+        }
+        setCurrentCoachId(data.id);
+      }
+    };
+    fetchCoachId();
+  }, [user]);
+
+  // Fetch branches with explicit array type and gcTime
+  const { data: branches = [], isLoading: branchesLoading, error: branchesError } = useQuery({
     queryKey: ["branches-select"],
-    queryFn: async () => {
+    queryFn: async (): Promise<Branch[]> => {
       const { data, error } = await supabase
         .from("branches")
         .select("id, name")
@@ -226,13 +243,15 @@ export function AttendanceManager() {
         toast.error(`Failed to fetch branches: ${error.message}`);
         throw error;
       }
-      return (data || []) as Branch[];
+      return (data ?? []) as Branch[];
     },
+    gcTime: 0, // Replaced cacheTime with gcTime
   });
 
-  const { data: coaches, isLoading: coachesLoading, error: coachesError } = useQuery<Coach[], Error>({
+  // Fetch coaches with explicit array type and gcTime
+  const { data: coaches = [], isLoading: coachesLoading, error: coachesError } = useQuery({
     queryKey: ["coaches-select"],
-    queryFn: async () => {
+    queryFn: async (): Promise<Coach[]> => {
       const { data, error } = await supabase
         .from("coaches")
         .select("id, name, auth_id, role")
@@ -243,13 +262,15 @@ export function AttendanceManager() {
         toast.error(`Failed to fetch coaches: ${error.message}`);
         throw error;
       }
-      return (data || []) as Coach[];
+      return (data ?? []) as Coach[];
     },
+    gcTime: 0, // Replaced cacheTime with gcTime
   });
 
-  const { data: packages, isLoading: packagesLoading, error: packagesError } = useQuery<string[], Error>({
+  // Fetch packages with explicit array type and gcTime
+  const { data: packages = [], isLoading: packagesLoading, error: packagesError } = useQuery({
     queryKey: ["packages"],
-    queryFn: async () => {
+    queryFn: async (): Promise<string[]> => {
       const { data, error } = await supabase
         .from("packages")
         .select("name")
@@ -260,13 +281,15 @@ export function AttendanceManager() {
         toast.error(`Failed to fetch packages: ${error.message}`);
         throw error;
       }
-      return (data || []).map((pkg: { name: string }) => pkg.name) as string[];
+      return (data ?? []).map((pkg: { name: string }) => pkg.name) as string[];
     },
+    gcTime: 0, // Replaced cacheTime with gcTime
   });
 
-  const { data: attendanceRecords, isLoading: attendanceLoading, error: attendanceError } = useQuery<AttendanceRecord[], Error>({
+  // Fetch attendance records with explicit array type
+  const { data: attendanceRecords = [], isLoading: attendanceLoading, error: attendanceError } = useQuery({
     queryKey: ["attendance", selectedSession],
-    queryFn: async () => {
+    queryFn: async (): Promise<AttendanceRecord[]> => {
       if (!selectedSession) return [];
       const { data, error } = await supabase
         .from("attendance_records")
@@ -287,7 +310,7 @@ export function AttendanceManager() {
         throw error;
       }
 
-      return (data || []) as AttendanceRecord[];
+      return (data ?? []) as AttendanceRecord[];
     },
     enabled: !!selectedSession,
   });
@@ -357,7 +380,7 @@ export function AttendanceManager() {
       return { ...data, coaches: data.coaches || null } as CoachSessionTime;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions", "attendance"] });
       queryClient.invalidateQueries({ queryKey: ["activity-logs"] });
       toast.success("Successfully timed in");
     },
@@ -406,7 +429,7 @@ export function AttendanceManager() {
       return { ...data, coaches: data.coaches || null } as CoachSessionTime;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions", "attendance"] });
       queryClient.invalidateQueries({ queryKey: ["activity-logs"] });
       toast.success("Successfully timed out");
     },
@@ -440,7 +463,7 @@ export function AttendanceManager() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions", "attendance"] });
       toast.success("Coach time updated");
     },
     onError: (error) => {
@@ -449,23 +472,21 @@ export function AttendanceManager() {
     },
   });
 
-  const selectedSessionDetails = sessions?.find((s) => s.id === selectedSession);
+  const selectedSessionDetails = sessions.find((s) => s.id === selectedSession) ?? null;
 
-  const filteredSessions = sessions
-    ?.filter(
-      (session) =>
-        (session.session_coaches.some((sc) => sc.coaches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase())) ||
-          session.branches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase())) &&
-        (filterPackageType === "All" || session.package_type === filterPackageType) &&
-        (filterSessionStatus === "All" || session.status === filterSessionStatus) &&
-        (branchFilter === "All" || session.branch_id === branchFilter) &&
-        (coachFilter === "All" || session.session_coaches.some((sc) => sc.coach_id === coachFilter))
-    )
-    .sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      return sortOrder === "Newest to Oldest" ? dateB - dateA : dateA - dateB;
-    }) || [];
+  const filteredSessions = sessions.filter(
+    (session) =>
+      (session.session_coaches.some((sc) => sc.coaches?.name.toLowerCase().includes(sessionSearchTerm.toLowerCase()) || false) ||
+        session.branches.name.toLowerCase().includes(sessionSearchTerm.toLowerCase())) &&
+      (filterPackageType === "All" || session.package_type === filterPackageType) &&
+      (filterSessionStatus === "All" || session.status === filterSessionStatus) &&
+      (branchFilter === "All" || session.branch_id === branchFilter) &&
+      (coachFilter === "All" || session.session_coaches.some((sc) => sc.coach_id === coachFilter))
+  ).sort((a, b) => {
+    const dateA = new Date(a.date).getTime();
+    const dateB = new Date(b.date).getTime();
+    return sortOrder === "Newest to Oldest" ? dateB - dateA : dateA - dateB;
+  });
 
   const totalPages = Math.ceil(filteredSessions.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -476,9 +497,9 @@ export function AttendanceManager() {
     setCurrentPage(page);
   };
 
-  const filteredAttendanceRecords = attendanceRecords?.filter((record) =>
+  const filteredAttendanceRecords = attendanceRecords.filter((record) =>
     record.students.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  );
 
   const presentCount = filteredAttendanceRecords.filter((r) => r.status === "present").length;
   const absentCount = filteredAttendanceRecords.filter((r) => r.status === "absent").length;
@@ -616,7 +637,7 @@ export function AttendanceManager() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All" className="text-xs sm:text-sm">All Sessions</SelectItem>
-                      {packages?.map((pkg) => (
+                      {packages.map((pkg) => (
                         <SelectItem key={pkg} value={pkg} className="text-xs sm:text-sm">
                           {pkg}
                         </SelectItem>
@@ -635,7 +656,7 @@ export function AttendanceManager() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All" className="text-xs sm:text-sm">All Branches</SelectItem>
-                      {branches?.map((branch) => (
+                      {branches.map((branch) => (
                         <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
                           {branch.name}
                         </SelectItem>
@@ -654,7 +675,7 @@ export function AttendanceManager() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All" className="text-xs sm:text-sm">All Coaches</SelectItem>
-                      {coaches?.map((coach) => (
+                      {coaches.map((coach) => (
                         <SelectItem key={coach.id} value={coach.id} className="text-xs sm:text-sm">
                           {coach.name}
                         </SelectItem>
@@ -742,7 +763,7 @@ export function AttendanceManager() {
                           <span className="text-xs sm:text-sm md:text-base truncate">
                             <span className="font-medium">Coaches:</span>{" "}
                             {session.session_coaches.length > 0
-                              ? session.session_coaches.map((sc) => sc.coaches.name).join(", ")
+                              ? session.session_coaches.map((sc) => sc.coaches?.name || "Unknown").join(", ")
                               : "No coaches assigned"}
                           </span>
                         </div>
@@ -869,7 +890,7 @@ export function AttendanceManager() {
                     <span className="text-xs sm:text-sm font-medium text-gray-700">
                       Coaches:{" "}
                       {selectedSessionDetails?.session_coaches.length > 0
-                        ? selectedSessionDetails.session_coaches.map((sc) => sc.coaches.name).join(", ")
+                        ? selectedSessionDetails.session_coaches.map((sc) => sc.coaches?.name || "Unknown").join(", ")
                         : "No coaches assigned"}
                     </span>
                   </div>
@@ -893,12 +914,12 @@ export function AttendanceManager() {
                   {selectedSessionDetails?.session_coaches?.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-600">No coaches assigned.</p>
                   ) : (
-                    selectedSessionDetails?.session_coaches?.map((sc) => {
+                    selectedSessionDetails?.session_coaches?.map((sc, index) => {
                       const coachTime = selectedSessionDetails.coach_session_times?.find((cst) => cst.coach_id === sc.coach_id);
                       return (
-                        <div key={sc.id} className="flex flex-col space-y-2 p-2 border-b last:border-b-0">
+                        <div key={`${sc.coach_id}-${index}`} className="flex flex-col space-y-2 p-2 border-b last:border-b-0">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs sm:text-sm font-medium text-gray-700">{sc.coaches.name}</span>
+                            <span className="text-xs sm:text-sm font-medium text-gray-700">{sc.coaches?.name || "Unknown"}</span>
                           </div>
                           <div className="flex flex-col space-y-1">
                             <span className="text-xs sm:text-sm text-gray-600">Time In: {formatDateTime(coachTime?.time_in)}</span>
@@ -935,7 +956,7 @@ export function AttendanceManager() {
                     <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
                   ) : (
                     selectedSessionDetails?.session_participants?.map((participant) => {
-                      const attendance = filteredAttendanceRecords?.find((record) => record.student_id === participant.student_id);
+                      const attendance = filteredAttendanceRecords.find((record) => record.student_id === participant.student_id);
                       return (
                         <div key={participant.id} className="flex items-center justify-between p-2">
                           <div className="flex items-center space-x-3">
@@ -987,7 +1008,7 @@ export function AttendanceManager() {
                     <p className="text-xs sm:text-sm text-gray-700">
                       <span className="font-medium">Coaches:</span>{" "}
                       {selectedSessionDetails?.session_coaches.length > 0
-                        ? selectedSessionDetails.session_coaches.map((sc) => sc.coaches.name).join(", ")
+                        ? selectedSessionDetails.session_coaches.map((sc) => sc.coaches?.name || "Unknown").join(", ")
                         : "No coaches assigned"}
                     </p>
                     <p className="text-xs sm:text-sm text-gray-700">
@@ -1034,7 +1055,7 @@ export function AttendanceManager() {
                     <div className="flex items-center gap-2">
                       <span className="text-xs sm:text-sm">Player Attendance</span>
                       <span className="bg-gray-100 text-gray-600 py-1 px-2 rounded-full text-xs">
-                        {filteredAttendanceRecords?.length || 0}
+                        {filteredAttendanceRecords.length || 0}
                       </span>
                     </div>
                   </button>
@@ -1049,12 +1070,12 @@ export function AttendanceManager() {
                         <p className="text-xs sm:text-sm text-gray-600 text-center py-8">No coaches assigned.</p>
                       ) : (
                         <div className="space-y-4">
-                          {selectedSessionDetails?.session_coaches?.map((sc) => {
+                          {selectedSessionDetails?.session_coaches?.map((sc, index) => {
                             const coachTime = selectedSessionDetails.coach_session_times?.find((cst) => cst.coach_id === sc.coach_id);
                             return (
-                              <div key={sc.id} className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200">
+                              <div key={`${sc.coach_id}-${index}`} className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200">
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-                                  <span className="text-sm sm:text-base font-medium text-gray-700">{sc.coaches.name}</span>
+                                  <span className="text-sm sm:text-base font-medium text-gray-700">{sc.coaches?.name || "Unknown"}</span>
                                   <div className="flex gap-2">
                                     <Button
                                       variant="outline"
