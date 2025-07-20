@@ -26,6 +26,11 @@ type CoachSessionTime = {
   time_out: string | null;
 };
 
+type Package = {
+  id: string;
+  name: string;
+};
+
 type TrainingSession = {
   id: string;
   date: string;
@@ -33,7 +38,8 @@ type TrainingSession = {
   end_time: string;
   branch_id: string;
   status: SessionStatus;
-  package_type: "Camp Training" | "Personal Training" | null;
+  package_id: string | null;
+  package_name: string | null;
   branches: { name: string };
   session_participants: Array<{ students: { name: string } }>;
 };
@@ -94,7 +100,7 @@ export function CoachAttendanceManager() {
   const [sessionSearchTerm, setSessionSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<SessionStatus>("all");
   const [branchFilter, setBranchFilter] = useState<string>("all");
-  const [packageFilter, setPackageFilter] = useState<"All" | "Camp Training" | "Personal Training">("All");
+  const [packageFilter, setPackageFilter] = useState<string | "All">("All");
   const [activeTab, setActiveTab] = useState<"coaches" | "players">("coaches");
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -146,6 +152,24 @@ export function CoachAttendanceManager() {
     }
   });
 
+  const { data: packages } = useQuery<Package[]>({
+    queryKey: ['packages-select'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packages')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+      if (error) {
+        console.error("Error fetching packages:", error);
+        toast.error("Failed to load package types");
+        throw error;
+      }
+      console.log("Fetched packages:", data);
+      return data as Package[];
+    }
+  });
+
   const { data: sessions } = useQuery<TrainingSession[]>({
     queryKey: ["coach-sessions", coachId, branchFilter, packageFilter, statusFilter, sessionSearchTerm],
     queryFn: async () => {
@@ -169,11 +193,13 @@ export function CoachAttendanceManager() {
       const pastDate = subDays(today, 30);
       const futureDate = addDays(today, 30);
       
-      let query = supabase
+      // Explicitly type the query to avoid TS2589
+      let query: any = supabase
         .from("training_sessions")
         .select(`
-          id, date, start_time, end_time, branch_id, status, package_type,
+          id, date, start_time, end_time, branch_id, status, package_id,
           branches (name),
+          packages (name),
           session_participants (students (name))
         `)
         .in("id", sessionIds)
@@ -183,8 +209,8 @@ export function CoachAttendanceManager() {
       if (branchFilter !== "all") {
         query = query.eq('branch_id', branchFilter);
       }
-      if (packageFilter !== "All") {
-        query = query.eq('package_type', packageFilter);
+      if (packageFilter !== "All" && typeof packageFilter === "string") {
+        query = query.eq('package_id', packageFilter);
       }
       if (statusFilter !== "all") {
         query = query.eq('status', statusFilter);
@@ -200,11 +226,8 @@ export function CoachAttendanceManager() {
       console.log("Fetched sessions:", data);
       return (data || []).map((session: any) => ({
         ...session,
-        package_type: session.package_type === "Camp Training"
-          ? "Camp Training"
-          : session.package_type === "Personal Training"
-          ? "Personal Training"
-          : null,
+        package_name: session.packages?.name || null,
+        package_id: session.package_id || null,
       })) as TrainingSession[];
     },
     enabled: !!coachId,
@@ -546,15 +569,16 @@ export function CoachAttendanceManager() {
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Package Type</label>
                     <Select
                       value={packageFilter}
-                      onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setPackageFilter(value)}
+                      onValueChange={setPackageFilter}
                     >
                       <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#BEA877' }}>
                         <SelectValue placeholder="Select package type" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="All">All Sessions</SelectItem>
-                        <SelectItem value="Camp Training">Camp Training</SelectItem>
-                        <SelectItem value="Personal Training">Personal Training</SelectItem>
+                        {packages?.map(pkg => (
+                          <SelectItem key={pkg.id} value={pkg.id}>{pkg.name}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -626,7 +650,7 @@ export function CoachAttendanceManager() {
                         </div>
                         <div className="flex items-center space-x-2">
                           <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          <span className="text-gray-700 truncate">{session.package_type || 'N/A'}</span>
+                          <span className="text-gray-700 truncate">{session.package_name || 'N/A'}</span>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
@@ -687,7 +711,7 @@ export function CoachAttendanceManager() {
                     <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Package Type</p>
-                      <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.package_type || 'N/A'}</p>
+                      <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.package_name || 'N/A'}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
@@ -754,7 +778,7 @@ export function CoachAttendanceManager() {
                   </div>
                   <div className="space-y-2">
                     <p className="text-xs sm:text-sm text-gray-700">
-                      <span className="font-medium">Package Type:</span> {selectedSessionDetails?.package_type || 'N/A'}
+                      <span className="font-medium">Package Type:</span> {selectedSessionDetails?.package_name || 'N/A'}
                     </p>
                     <p className="text-xs sm:text-sm text-gray-700">
                       <span className="font-medium">Status:</span>{" "}

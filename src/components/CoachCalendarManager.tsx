@@ -12,8 +12,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths, isAfter, parseISO } from "date-fns";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 
 type SessionStatus = Database['public']['Enums']['session_status'];
+
+type Package = {
+  id: string;
+  name: string;
+};
 
 type TrainingSession = {
   id: string;
@@ -22,7 +28,8 @@ type TrainingSession = {
   end_time: string;
   branch_id: string;
   status: SessionStatus;
-  package_type: "Camp Training" | "Personal Training" | null;
+  package_id: string | null;
+  package_name: string | null;
   branches: { name: string };
   session_participants: Array<{ students: { name: string } }>;
 };
@@ -38,7 +45,7 @@ export function CoachCalendarManager() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
-  const [filterPackageType, setFilterPackageType] = useState<"All" | "Camp Training" | "Personal Training">("All");
+  const [filterPackageType, setFilterPackageType] = useState<string | "All">("All");
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [showUpcomingSessions, setShowUpcomingSessions] = useState(false);
   const [showPastSessions, setShowPastSessions] = useState(false);
@@ -64,6 +71,40 @@ export function CoachCalendarManager() {
     enabled: !!user?.id,
   });
 
+  const { data: branches } = useQuery({
+    queryKey: ['branches-select'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('id, name')
+        .order('name');
+      if (error) {
+        console.error("Error fetching branches:", error);
+        throw error;
+      }
+      console.log("Branches:", data);
+      return data;
+    }
+  });
+
+  const { data: packages } = useQuery<Package[]>({
+    queryKey: ['packages-select'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packages')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+      if (error) {
+        console.error("Error fetching packages:", error);
+        toast.error("Failed to load package types");
+        throw error;
+      }
+      console.log("Fetched packages:", data);
+      return data as Package[];
+    }
+  });
+
   const { data: sessions, isLoading } = useQuery({
     queryKey: ['coach-training-sessions', coachId, selectedBranch, filterPackageType, currentMonth],
     queryFn: async () => {
@@ -86,11 +127,13 @@ export function CoachCalendarManager() {
       const startDate = subMonths(startOfMonth(currentMonth), 6);
       const endDate = addMonths(endOfMonth(currentMonth), 1);
 
-      let query = supabase
+      // Use any type to avoid TS2589
+      let query: any = supabase
         .from('training_sessions')
         .select(`
-          id, date, start_time, end_time, branch_id, status, package_type,
+          id, date, start_time, end_time, branch_id, status, package_id,
           branches (name),
+          packages (name),
           session_participants (
             students (name)
           )
@@ -102,6 +145,9 @@ export function CoachCalendarManager() {
       if (selectedBranch !== "all") {
         query = query.eq('branch_id', selectedBranch);
       }
+      if (filterPackageType !== "All" && typeof filterPackageType === "string") {
+        query = query.eq('package_id', filterPackageType);
+      }
 
       const { data, error } = await query.order('date', { ascending: true });
       if (error) {
@@ -109,27 +155,18 @@ export function CoachCalendarManager() {
         throw error;
       }
       console.log("Sessions result:", data);
-      return data as TrainingSession[];
+      return (data || []).map((session: any) => ({
+        ...session,
+        package_name: session.packages?.name || null,
+        package_id: session.package_id || null,
+      })) as TrainingSession[];
     },
     enabled: !!coachId
   });
 
-  const { data: branches } = useQuery({
-    queryKey: ['branches-select'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('branches')
-        .select('id, name')
-        .order('name');
-      if (error) throw error;
-      console.log("Branches:", data);
-      return data;
-    }
-  });
-
   const filteredSessions = sessions
     ?.filter((session) =>
-      filterPackageType === "All" || session.package_type === filterPackageType
+      filterPackageType === "All" || session.package_id === filterPackageType
     ) || [];
 
   const daysInMonth = eachDayOfInterval({
@@ -205,7 +242,8 @@ export function CoachCalendarManager() {
   }) || [];
 
   const pastSessions = filteredSessions.filter(session => {
-    return session.status === 'completed';
+    const sessionDate = parseISO(session.date);
+    return session.status === 'completed' || isBefore(sessionDate, todayDateOnly);
   }) || [];
 
   const handleAttendanceRedirect = (sessionId: string) => {
@@ -271,15 +309,16 @@ export function CoachCalendarManager() {
                   <label className="text-xs sm:text-sm font-bold text-gray-700">Package Type</label>
                   <Select
                     value={filterPackageType}
-                    onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setFilterPackageType(value)}
+                    onValueChange={setFilterPackageType}
                   >
                     <SelectTrigger className="border-2 border-[#8e7a3f] focus:border-[#8e7a3f] focus:ring-[#8e7a3f]/20 rounded-lg text-xs sm:text-sm py-2 h-8 sm:h-10">
                       <SelectValue placeholder="Select package type" />
                     </SelectTrigger>
                     <SelectContent className="bg-white border-2 border-[#8e7a3f] z-50">
                       <SelectItem value="All">All Sessions</SelectItem>
-                      <SelectItem value="Camp Training">Camp Training</SelectItem>
-                      <SelectItem value="Personal Training">Personal Training</SelectItem>
+                      {packages?.map(pkg => (
+                        <SelectItem key={pkg.id} value={pkg.id}>{pkg.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -457,7 +496,7 @@ export function CoachCalendarManager() {
                               <Users className="h-3 w-3 sm:h-4 sm:w-4 text-[#8e7a3f] flex-shrink-0" />
                               <div className="min-w-0">
                                 <p className="text-xs font-bold text-gray-600">Package</p>
-                                <p className="font-bold text-black text-xs sm:text-sm truncate">{session.package_type || 'N/A'}</p>
+                                <p className="font-bold text-black text-xs sm:text-sm truncate">{session.package_name || 'N/A'}</p>
                               </div>
                             </div>
                           </div>
@@ -530,7 +569,7 @@ export function CoachCalendarManager() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-bold text-green-600">Package</p>
-                            <p className="font-bold text-black text-sm truncate">{session.package_type || 'N/A'}</p>
+                            <p className="font-bold text-black text-sm truncate">{session.package_name || 'N/A'}</p>
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-bold text-green-600">Players</p>
@@ -570,10 +609,10 @@ export function CoachCalendarManager() {
             <DialogHeader>
               <DialogTitle className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center">
                 <CalendarIcon className="h-5 sm:h-6 w-5 sm:w-6 mr-3 text-gray-600" />
-                Completed Sessions ({pastSessions.length})
+                Past Sessions ({pastSessions.length})
               </DialogTitle>
               <DialogDescription className="text-gray-600 text-sm sm:text-base font-bold">
-                All completed sessions
+                All completed sessions or sessions from past dates
               </DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-[60vh] pr-4">
@@ -599,7 +638,7 @@ export function CoachCalendarManager() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-bold text-gray-600">Package</p>
-                            <p className="font-bold text-black text-sm truncate">{session.package_type || 'N/A'}</p>
+                            <p className="font-bold text-black text-sm truncate">{session.package_name || 'N/A'}</p>
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs sm:text-sm font-bold text-gray-600">Players</p>
@@ -625,8 +664,8 @@ export function CoachCalendarManager() {
               ) : (
                 <div className="text-center py-8 sm:py-12">
                   <CalendarIcon className="h-12 sm:h-16 w-12 sm:w-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-lg sm:text-xl text-gray-500 mb-2 font-bold">No completed sessions</p>
-                  <p className="text-gray-400 text-sm sm:text-base font-bold">Completed sessions will appear here.</p>
+                  <p className="text-lg sm:text-xl text-gray-500 mb-2 font-bold">No past sessions</p>
+                  <p className="text-gray-400 text-sm sm:text-base font-bold">Completed or past sessions will appear here.</p>
                 </div>
               )}
             </ScrollArea>
