@@ -1,5 +1,4 @@
-
-import { Calendar, Users, MapPin, UserCheck, BookOpen, ClipboardList, Home, LogOut } from "lucide-react";
+import { Calendar, Users, MapPin, UserCheck, BookOpen, ClipboardList, Home, LogOut, Package } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +22,7 @@ const menuItems = [
   { title: "Players", icon: Users, value: "students", allowedRoles: ['admin'] },
   { title: "Coaches", icon: BookOpen, value: "coaches", allowedRoles: ['admin'] },
   { title: "Branches", icon: MapPin, value: "branches", allowedRoles: ['admin'] },
+  { title: "Packages", icon: Package, value: "packages", allowedRoles: ['admin'] }, // Added Packages menu item
 ];
 
 interface AppSidebarProps {

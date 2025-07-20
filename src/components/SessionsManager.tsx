@@ -15,6 +15,11 @@ import { Calendar, Clock, Eye, MapPin, Plus, Trash2, User, Users, Filter, Search
 
 type SessionStatus = Database['public']['Enums']['session_status'];
 
+type Package = {
+  id: string;
+  name: string;
+};
+
 type Student = {
   id: string;
   name: string;
@@ -40,7 +45,7 @@ type TrainingSession = {
   branch_id: string;
   notes: string | null;
   status: SessionStatus;
-  package_type: "Camp Training" | "Personal Training" | null;
+  package_type: string | null;
   branches: { name: string };
   session_coaches: Array<{
     id: string;
@@ -115,7 +120,7 @@ export function SessionsManager() {
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [selectedCoaches, setSelectedCoaches] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterPackageType, setFilterPackageType] = useState<"All" | "Camp Training" | "Personal Training">("All");
+  const [filterPackageType, setFilterPackageType] = useState<string>("All");
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [coachFilter, setCoachFilter] = useState<string>("All");
   const [sortOrder, setSortOrder] = useState<"Newest to Oldest" | "Oldest to Newest">("Newest to Oldest");
@@ -204,6 +209,19 @@ export function SessionsManager() {
     },
   });
 
+  const { data: packages, isLoading: packagesLoading, error: packagesError } = useQuery({
+    queryKey: ['packages-select'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packages')
+        .select('id, name')
+        .order('name');
+      
+      if (error) throw error;
+      return data as Package[];
+    },
+  });
+
   const { data: students, isLoading: studentsLoading, error: studentsError } = useQuery({
     queryKey: ['students-select', formData.branch_id, formData.package_type],
     queryFn: async () => {
@@ -214,7 +232,16 @@ export function SessionsManager() {
         .eq('branch_id', formData.branch_id)
         .eq('package_type', formData.package_type)
         .order('name');
-      if (error) throw error;
+      
+      if (error) {
+        console.error('Error fetching students:', error, { branch_id: formData.branch_id, package_type: formData.package_type });
+        throw new Error(`Failed to fetch students: ${error.message}`);
+      }
+      
+      if (!data || data.length === 0) {
+        console.warn('No students found for:', { branch_id: formData.branch_id, package_type: formData.package_type });
+      }
+      
       return data as Student[];
     },
     enabled: !!formData.branch_id && !!formData.package_type,
@@ -359,19 +386,20 @@ export function SessionsManager() {
       toast.error('Failed to create session: ' + error.message);
     }
   });
-const handleSelectAllStudents = (selectAll: boolean) => {
-  if (!students) return;
 
-  const eligibleIds = students
-    .filter(student => student.remaining_sessions > 0)
-    .map(student => student.id);
+  const handleSelectAllStudents = (selectAll: boolean) => {
+    if (!students) return;
 
-  if (selectAll) {
-    setSelectedStudents(eligibleIds);
-  } else {
-    setSelectedStudents(prev => prev.filter(id => !eligibleIds.includes(id)));
-  }
-};
+    const eligibleIds = students
+      .filter(student => student.remaining_sessions > 0)
+      .map(student => student.id);
+
+    if (selectAll) {
+      setSelectedStudents(eligibleIds);
+    } else {
+      setSelectedStudents(prev => prev.filter(id => !eligibleIds.includes(id)));
+    }
+  };
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...session }: typeof formData & { id: string }) => {
@@ -819,21 +847,27 @@ const handleSelectAllStudents = (selectAll: boolean) => {
                             </Label>
                             <Select
                               value={formData.package_type}
-                              onValueChange={(value: "Camp Training" | "Personal Training") => {
+                              onValueChange={(value) => {
                                 setFormData(prev => ({ ...prev, package_type: value }));
                                 setSelectedStudents([]);
                                 setSelectedCoaches([]);
                               }}
-                              disabled={!formData.branch_id}
+                              disabled={!formData.branch_id || packagesLoading}
                             >
                               <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                                <SelectValue placeholder={formData.branch_id ? "Select package type" : "Select branch first"} />
+                                <SelectValue placeholder={formData.branch_id ? (packagesLoading ? "Loading packages..." : "Select package type") : "Select branch first"} />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
-                                <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
+                                {packages?.map(pkg => (
+                                  <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
+                                    {pkg.name}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
+                            {packagesError && (
+                              <p className="text-xs sm:text-sm text-red-600">Error loading packages: {(packagesError as Error).message}</p>
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-col space-y-2 min-w-0">
@@ -950,85 +984,80 @@ const handleSelectAllStudents = (selectAll: boolean) => {
                           </div>
                         </div>
                         <div className="flex flex-col space-y-2 min-w-0">
-  <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-    <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-    Select Players ({selectedStudents.length} selected)
-  </Label>
-
-  <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
-    {formData.branch_id && formData.package_type ? (
-      studentsLoading ? (
-        <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
-      ) : studentsError ? (
-        <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
-      ) : students?.length === 0 ? (
-        <p className="text-xs sm:text-sm text-gray-600">
-          No students available for this branch and package type combination.
-        </p>
-      ) : (
-        <>
-          {/* Select All */}
-          <div className="flex items-center space-x-2 mb-2 p-2 rounded-md hover:bg-white transition-colors">
-            <input
-              type="checkbox"
-              id="select-all-students"
-              checked={
-                students.filter(s => s.remaining_sessions > 0).every(s => selectedStudents.includes(s.id)) &&
-                students.filter(s => s.remaining_sessions > 0).length > 0
-              }
-              onChange={(e) => handleSelectAllStudents(e.target.checked)}
-              className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-              style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-            />
-            <Label htmlFor="select-all-students" className="text-xs sm:text-sm cursor-pointer">
-              Select All Players
-            </Label>
-          </div>
-
-          {/* Players List */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {students.map(student => (
-              <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
-                <input
-                  type="checkbox"
-                  id={student.id}
-                  checked={selectedStudents.includes(student.id)}
-                  onChange={(e) => {
-                    if (student.remaining_sessions <= 0) {
-                      toast.error(
-                        `${student.name} has no remaining sessions. Please increase their session count in the Players Manager.`
-                      );
-                      return;
-                    }
-                    if (e.target.checked) {
-                      setSelectedStudents(prev => [...prev, student.id]);
-                    } else {
-                      setSelectedStudents(prev => prev.filter(id => id !== student.id));
-                    }
-                  }}
-                  className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                  style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                  disabled={student.remaining_sessions <= 0}
-                />
-                <Label
-                  htmlFor={student.id}
-                  className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
-                    student.remaining_sessions <= 0 ? 'text-gray-400' : ''
-                  }`}
-                >
-                  {student.name} ({student.remaining_sessions} sessions left)
-                </Label>
-              </div>
-            ))}
-          </div>
-        </>
-      )
-    ) : (
-      <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
-    )}
-  </div>
-</div>
-
+                          <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                            <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                            Select Players ({selectedStudents.length} selected)
+                          </Label>
+                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                            {formData.branch_id && formData.package_type ? (
+                              studentsLoading ? (
+                                <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
+                              ) : studentsError ? (
+                                <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
+                              ) : students?.length === 0 ? (
+                                <p className="text-xs sm:text-sm text-gray-600">
+                                  No students found for branch "{branches?.find(b => b.id === formData.branch_id)?.name}" and package "{formData.package_type}".
+                                </p>
+                              ) : (
+                                <>
+                                  <div className="flex items-center space-x-2 mb-2 p-2 rounded-md hover:bg-white transition-colors">
+                                    <input
+                                      type="checkbox"
+                                      id="select-all-students"
+                                      checked={
+                                        students.filter(s => s.remaining_sessions > 0).every(s => selectedStudents.includes(s.id)) &&
+                                        students.filter(s => s.remaining_sessions > 0).length > 0
+                                      }
+                                      onChange={(e) => handleSelectAllStudents(e.target.checked)}
+                                      className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                      style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                    />
+                                    <Label htmlFor="select-all-students" className="text-xs sm:text-sm cursor-pointer">
+                                      Select All Players
+                                    </Label>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {students.map(student => (
+                                      <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                                        <input
+                                          type="checkbox"
+                                          id={student.id}
+                                          checked={selectedStudents.includes(student.id)}
+                                          onChange={(e) => {
+                                            if (student.remaining_sessions <= 0) {
+                                              toast.error(
+                                                `${student.name} has no remaining sessions. Please increase their session count in the Players Manager.`
+                                              );
+                                              return;
+                                            }
+                                            if (e.target.checked) {
+                                              setSelectedStudents(prev => [...prev, student.id]);
+                                            } else {
+                                              setSelectedStudents(prev => prev.filter(id => id !== student.id));
+                                            }
+                                          }}
+                                          className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                          style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                          disabled={student.remaining_sessions <= 0}
+                                        />
+                                        <Label
+                                          htmlFor={student.id}
+                                          className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
+                                            student.remaining_sessions <= 0 ? 'text-gray-400' : ''
+                                          }`}
+                                        >
+                                          {student.name} ({student.remaining_sessions} sessions left)
+                                        </Label>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )
+                            ) : (
+                              <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
+                            )}
+                          </div>
+                        </div>
                         <div className="flex flex-col space-y-2 min-w-0">
                           <Label htmlFor="notes" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
                             <Eye className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
@@ -1126,15 +1155,18 @@ const handleSelectAllStudents = (selectAll: boolean) => {
                   </Label>
                   <Select
                     value={filterPackageType}
-                    onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setFilterPackageType(value)}
+                    onValueChange={(value) => setFilterPackageType(value)}
                   >
                     <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
                       <SelectValue placeholder="Select package type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All" className="text-xs sm:text-sm">All Sessions</SelectItem>
-                      <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
-                      <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
+                      {packages?.map(pkg => (
+                        <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
+                          {pkg.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1264,7 +1296,7 @@ const handleSelectAllStudents = (selectAll: boolean) => {
                         </div>
                         <div className="flex items-center space-x-2 min-w-0">
                           <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Package:</span> {session.package_type || 'N/A'}</span>
+                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Package:</span> {session.package_type || 'Not specified'}</span>
                         </div>
                         <div className="flex items-center space-x-2 min-w-0">
                           <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
@@ -1381,7 +1413,7 @@ const handleSelectAllStudents = (selectAll: boolean) => {
                       : 'No coaches assigned'}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
-                    <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'N/A'}
+                    <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'Not specified'}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
                     <span className="font-medium">Status:</span> {selectedSession?.status || 'N/A'}
@@ -1471,7 +1503,7 @@ const handleSelectAllStudents = (selectAll: boolean) => {
                     {selectedSession?.date ? formatDisplayDate(selectedSession.date) : 'Invalid Date'}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
-                    <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'N/A'}
+                    <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'Not specified'}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
                     <span className="font-medium">Coaches:</span> {selectedSession?.session_coaches.length > 0 ? selectedSession.session_coaches.map(sc => sc.coaches.name).join(', ') : 'No coaches assigned'}
@@ -1490,7 +1522,7 @@ const handleSelectAllStudents = (selectAll: boolean) => {
                     <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
                   ) : students?.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-600">
-                      No students available for this branch and package type combination.
+                      No students found for branch "{branches?.find(b => b.id === formData.branch_id)?.name}" and package "{formData.package_type}".
                     </p>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

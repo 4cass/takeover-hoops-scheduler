@@ -1,4 +1,3 @@
-
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useLocation, Routes, Route, useNavigate, Navigate } from "react-router-dom";
@@ -11,6 +10,7 @@ import { CoachAttendanceManager } from "@/components/CoachAttendanceManager";
 import { StudentsManager } from "@/components/StudentsManager";
 import { CoachesManager } from "@/components/CoachesManager";
 import { BranchesManager } from "@/components/BranchesManager";
+import { PackagesManager } from "@/components/PackagesManager"; // Added import
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Settings } from "lucide-react";
@@ -78,6 +78,7 @@ export default function Dashboard() {
     path.includes("/dashboard/students") ? "students" :
     path.includes("/dashboard/coaches") ? "coaches" :
     path.includes("/dashboard/branches") ? "branches" :
+    path.includes("/dashboard/packages") ? "packages" : // Added packages path
     "overview";
 
   return (
@@ -124,6 +125,7 @@ export default function Dashboard() {
                   <Route path="students" element={<StudentsManager />} />
                   <Route path="coaches" element={<CoachesManager />} />
                   <Route path="branches" element={<BranchesManager />} />
+                  <Route path="packages" element={<PackagesManager />} /> {/* Added packages route */}
                 </>
               )}
               
@@ -134,6 +136,7 @@ export default function Dashboard() {
                   <Route path="students" element={<Navigate to="/dashboard" replace />} />
                   <Route path="coaches" element={<Navigate to="/dashboard" replace />} />
                   <Route path="branches" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="packages" element={<Navigate to="/dashboard" replace />} /> {/* Added packages redirect */}
                 </>
               )}
             </Routes>

@@ -14,10 +14,39 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Database } from "@/integrations/supabase/types";
 
-type Student = Database["public"]["Tables"]["students"]["Row"];
-type Branch = Database["public"]["Tables"]["branches"]["Row"];
-type AttendanceRecord = Database["public"]["Tables"]["attendance_records"]["Row"] & {
-  training_sessions: Database["public"]["Tables"]["training_sessions"]["Row"] & {
+interface Student {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  sessions: number | null;
+  remaining_sessions: number | null;
+  branch_id: string | null;
+  package_type: string | null;
+  created_at: string;
+}
+
+interface Branch {
+  id: string;
+  name: string;
+}
+
+interface Package {
+  id: string;
+  name: string;
+  is_active: boolean;
+}
+
+interface AttendanceRecord {
+  session_id: string;
+  student_id: string;
+  status: "present" | "absent" | "pending";
+  training_sessions: {
+    date: string;
+    start_time: string;
+    end_time: string;
+    branch_id: string;
+    package_type: string | null;
     branches: { name: string } | null;
     session_coaches: Array<{
       id: string;
@@ -25,7 +54,7 @@ type AttendanceRecord = Database["public"]["Tables"]["attendance_records"]["Row"
       coaches: { name: string } | null;
     }>;
   };
-};
+}
 
 // Error Boundary Component
 class StudentsErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; error: string | null }> {
@@ -56,11 +85,6 @@ class StudentsErrorBoundary extends Component<{ children: React.ReactNode }, { h
     return this.props.children;
   }
 }
-
-const PACKAGE_TYPES = [
-  "Camp Training",
-  "Personal Training"
-];
 
 export function StudentsManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -111,6 +135,25 @@ export function StudentsManager() {
       }
       console.log("Fetched branches:", data);
       return data as Branch[];
+    },
+  });
+
+  const { data: packages, isLoading: packagesLoading, error: packagesError } = useQuery<Package[], Error>({
+    queryKey: ["packages-select"],
+    queryFn: async () => {
+      console.log("Fetching packages...");
+      const { data, error } = await (supabase as any)
+        .from("packages")
+        .select("id, name, is_active")
+        .eq("is_active", true)
+        .order("name");
+      if (error) {
+        console.error("packages query error:", error);
+        toast.error(`Failed to fetch packages: ${error.message}`);
+        throw error;
+      }
+      console.log("Fetched packages:", data);
+      return (data || []) as Package[];
     },
   });
 
@@ -173,6 +216,16 @@ export function StudentsManager() {
   const recordsStartIndex = (recordsCurrentPage - 1) * itemsPerPage;
   const recordsEndIndex = recordsStartIndex + itemsPerPage;
   const paginatedRecords = filteredAttendanceRecords.slice(recordsStartIndex, recordsEndIndex);
+
+  const getPaginationRange = (current: number, total: number) => {
+    const maxPagesToShow = 3;
+    let start = Math.max(1, current - 1);
+    let end = Math.min(total, start + maxPagesToShow - 1);
+    if (end - start + 1 < maxPagesToShow) {
+      start = Math.max(1, end - maxPagesToShow + 1);
+    }
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  };
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -285,7 +338,7 @@ export function StudentsManager() {
       email: student.email,
       phone: student.phone || "",
       sessions: student.sessions || 0,
-      remaining_sessions: student.remaining_sessions,
+      remaining_sessions: student.remaining_sessions || 0,
       branch_id: student.branch_id || null,
       package_type: student.package_type || null,
     });
@@ -311,14 +364,19 @@ export function StudentsManager() {
   });
 
   const getPackageBadgeColor = (packageType: string | null) => {
-    switch (packageType) {
-      case 'Camp Training': return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Personal Training': return 'bg-green-50 text-green-700 border-green-200';
-      default: return 'bg-gray-50 text-gray-700 border-gray-200';
-    }
+    if (!packageType) return 'bg-gray-50 text-gray-700 border-gray-200';
+    const colors = [
+      'bg-blue-50 text-blue-700 border-blue-200',
+      'bg-green-50 text-green-700 border-green-200',
+      'bg-purple-50 text-purple-700 border-purple-200',
+      'bg-indigo-50 text-indigo-700 border-indigo-200',
+      'bg-teal-50 text-teal-700 border-teal-200',
+    ];
+    const hash = packageType.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
   };
 
-  if (studentsLoading || branchesLoading) {
+  if (studentsLoading || branchesLoading || packagesLoading) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
@@ -330,14 +388,14 @@ export function StudentsManager() {
     );
   }
 
-  if (studentsError || branchesError) {
+  if (studentsError || branchesError || packagesError) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
           <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Error loading players</h3>
           <p className="text-sm sm:text-base md:text-lg text-gray-600">
-            Failed to load data: {(studentsError || branchesError)?.message || 'Unknown error'}. Please try again later.
+            Failed to load data: {(studentsError || branchesError || packagesError)?.message || 'Unknown error'}. Please try again later.
           </p>
         </div>
       </div>
@@ -450,9 +508,9 @@ export function StudentsManager() {
                             <SelectValue placeholder="Select Package Type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {PACKAGE_TYPES.map((packageType) => (
-                              <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
-                                {packageType}
+                            {packages?.map((pkg) => (
+                              <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
+                                {pkg.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -568,10 +626,10 @@ export function StudentsManager() {
                         <SelectValue placeholder="Select Package Type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="All" className="text-xs sm:text-sm">All Package Types</SelectItem>
-                        {PACKAGE_TYPES.map((packageType) => (
-                          <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
-                            {packageType}
+                        <SelectItem value="All" className="text-xs sm:text-sm">All Packages</SelectItem>
+                        {packages?.map((pkg) => (
+                          <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
+                            {pkg.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -683,7 +741,7 @@ export function StudentsManager() {
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </Button>
-                      {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                      {getPaginationRange(currentPage, totalPages).map((page) => (
                         <Button
                           key={page}
                           variant={currentPage === page ? "default" : "outline"}
@@ -744,121 +802,170 @@ export function StudentsManager() {
                     </div>
                   </div>
                 </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Session Records</h3>
-                  <p className="text-xs sm:text-sm text-gray-600 mb-3">
+                <div className="mb-6">
+                  <div className="flex items-center mb-4">
+                    <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filter Records</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col space-y-2 min-w-0">
+                      <Label htmlFor="records-filter-branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                        <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                        Branch
+                      </Label>
+                      <Select
+                        value={recordsBranchFilter}
+                        onValueChange={(value) => setRecordsBranchFilter(value)}
+                      >
+                        <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                          <SelectValue placeholder="Select Branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All" className="text-xs sm:text-sm">All Branches</SelectItem>
+                          {branches?.map((branch) => (
+                            <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
+                              {branch.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col space-y-2 min-w-0">
+                      <Label htmlFor="records-filter-package-type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                        <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                        Package Type
+                      </Label>
+                      <Select
+                        value={recordsPackageTypeFilter}
+                        onValueChange={(value) => setRecordsPackageTypeFilter(value)}
+                      >
+                        <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                          <SelectValue placeholder="Select Package Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All" className="text-xs sm:text-sm">All Packages</SelectItem>
+                          {packages?.map((pkg) => (
+                            <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
+                              {pkg.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <p className="text-xs sm:text-sm text-gray-600 mt-3">
                     Showing {filteredAttendanceRecords.length} record{filteredAttendanceRecords.length === 1 ? '' : 's'}
                   </p>
-                  {recordsLoading ? (
-                    <div className="text-center py-8 sm:py-12">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#BEA877' }}></div>
-                      <p className="text-gray-600 mt-2 text-xs sm:text-sm">Loading attendance records...</p>
-                    </div>
-                  ) : recordsError ? (
-                    <p className="text-red-600 text-xs sm:text-sm">Error loading records: {(recordsError as Error).message}</p>
-                  ) : !filteredAttendanceRecords || filteredAttendanceRecords.length === 0 ? (
-                    <p className="text-gray-600 text-xs sm:text-sm">No attendance records found for this player.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[600px] rounded-lg border-2 border-[#181A18]">
-                        <thead className="bg-[#181A18] text-[#efeff1]">
-                          <tr>
-                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><Calendar className="w-4 h-4 inline mr-2" />Date</th>
-                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><Clock className="w-4 h-4 inline mr-2" />Time</th>
-                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><MapPin className="w-4 h-4 inline mr-2" />Branch</th>
-                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><User className="w-4 h-4 inline mr-2" />Coaches</th>
-                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">Status</th>
+                </div>
+                {recordsLoading ? (
+                  <div className="text-center py-8 sm:py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#BEA877' }}></div>
+                    <p className="text-gray-600 mt-2 text-xs sm:text-sm">Loading attendance records...</p>
+                  </div>
+                ) : recordsError ? (
+                  <p className="text-red-600 text-xs sm:text-sm">Error loading records: {(recordsError as Error).message}</p>
+                ) : !filteredAttendanceRecords || filteredAttendanceRecords.length === 0 ? (
+                  <p className="text-gray-600 text-xs sm:text-sm">No attendance records found for this player.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[600px] rounded-lg border-2 border-[#181A18]">
+                      <thead className="bg-[#181A18] text-[#efeff1]">
+                        <tr>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><Calendar className="w-4 h-4 inline mr-2" />Date</th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><Clock className="w-4 h-4 inline mr-2" />Time</th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><MapPin className="w-4 h-4 inline mr-2" />Branch</th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><User className="w-4 h-4 inline mr-2" />Coaches</th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedRecords.map((record, index) => (
+                          <tr
+                            key={record.session_id}
+                            className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                          >
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
+                              {format(new Date(record.training_sessions.date), "MMM dd, yyyy")}
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
+                              {format(new Date(`1970-01-01T${record.training_sessions.start_time}`), "hh:mm a")} - 
+                              {format(new Date(`1970-01-01T${record.training_sessions.end_time}`), "hh:mm a")}
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">{record.training_sessions.branches?.name || 'N/A'}</td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
+                              {record.training_sessions.session_coaches.length > 0 
+                                ? record.training_sessions.session_coaches.map(sc => sc.coaches?.name || 'Unknown').join(', ') 
+                                : 'No coaches assigned'}
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs sm:text-sm font-medium truncate max-w-full ${
+                                  record.status === "present"
+                                    ? "bg-green-50 text-green-700 border-green-200"
+                                    : record.status === "absent"
+                                    ? "bg-red-50 text-red-700 border-red-200"
+                                    : "bg-amber-50 text-amber-700 border-amber-200"
+                                }`}
+                              >
+                                {record.status}
+                              </span>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {paginatedRecords.map((record, index) => (
-                            <tr
-                              key={record.session_id}
-                              className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                            >
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                                {format(new Date(record.training_sessions.date), "MMM dd, yyyy")}
-                              </td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                                {format(new Date(`1970-01-01T${record.training_sessions.start_time}`), "hh:mm a")} - 
-                                {format(new Date(`1970-01-01T${record.training_sessions.end_time}`), "hh:mm a")}
-                              </td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">{record.training_sessions.branches?.name || 'N/A'}</td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                                {record.training_sessions.session_coaches.length > 0 
-                                  ? record.training_sessions.session_coaches.map(sc => sc.coaches?.name || 'Unknown').join(', ') 
-                                  : 'No coaches assigned'}
-                              </td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4">
-                                <span
-                                  className={`px-2 py-1 rounded-full text-xs sm:text-sm font-medium truncate max-w-full ${
-                                    record.status === "present"
-                                      ? "bg-green-50 text-green-700 border-green-200"
-                                      : record.status === "absent"
-                                      ? "bg-red-50 text-red-700 border-red-200"
-                                      : "bg-amber-50 text-amber-700 border-amber-200"
-                                  }`}
-                                >
-                                  {record.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {recordsTotalPages > 1 && (
-                        <div className="flex justify-center items-center mt-6 space-x-2 flex-wrap gap-2">
+                        ))}
+                      </tbody>
+                    </table>
+                    {recordsTotalPages > 1 && (
+                      <div className="flex justify-center items-center mt-6 space-x-2 flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => handleRecordsPageChange(recordsCurrentPage - 1)}
+                          disabled={recordsCurrentPage === 1}
+                          className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
+                          style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        {getPaginationRange(recordsCurrentPage, recordsTotalPages).map((page) => (
                           <Button
-                            variant="outline"
-                            onClick={() => handleRecordsPageChange(recordsCurrentPage - 1)}
-                            disabled={recordsCurrentPage === 1}
-                            className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                            style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                            key={page}
+                            variant={recordsCurrentPage === page ? "default" : "outline"}
+                            onClick={() => handleRecordsPageChange(page)}
+                            className={`border-2 w-10 h-10 p-0 flex items-center justify-center text-xs sm:text-sm ${
+                              recordsCurrentPage === page
+                                ? 'bg-accent text-white'
+                                : 'border-accent text-accent hover:bg-accent hover:text-white'
+                            }`}
+                            style={{ 
+                              backgroundColor: recordsCurrentPage === page ? '#BEA877' : 'transparent',
+                              borderColor: '#BEA877',
+                              color: recordsCurrentPage === page ? 'white' : '#BEA877'
+                            }}
                           >
-                            <ChevronLeft className="w-4 h-4" />
+                            {page}
                           </Button>
-                          {Array.from({ length: recordsTotalPages }, (_, index) => index + 1).map((page) => (
-                            <Button
-                              key={page}
-                              variant={recordsCurrentPage === page ? "default" : "outline"}
-                              onClick={() => handleRecordsPageChange(page)}
-                              className={`border-2 w-10 h-10 p-0 flex items-center justify-center text-xs sm:text-sm ${
-                                recordsCurrentPage === page
-                                  ? 'bg-accent text-white'
-                                  : 'border-accent text-accent hover:bg-accent hover:text-white'
-                              }`}
-                              style={{ 
-                                backgroundColor: recordsCurrentPage === page ? '#BEA877' : 'transparent',
-                                borderColor: '#BEA877',
-                                color: recordsCurrentPage === page ? 'white' : '#BEA877'
-                              }}
-                            >
-                              {page}
-                            </Button>
-                          ))}
-                          <Button
-                            variant="outline"
-                            onClick={() => handleRecordsPageChange(recordsCurrentPage + 1)}
-                            disabled={recordsCurrentPage === recordsTotalPages}
-                            className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                            style={{ borderColor: '#BEA877', color: '#BEA877' }}
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsRecordsDialogOpen(false)}
-                    className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                  >
-                    Close
-                  </Button>
-                </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          onClick={() => handleRecordsPageChange(recordsCurrentPage + 1)}
+                          disabled={recordsCurrentPage === recordsTotalPages}
+                          className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
+                          style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsRecordsDialogOpen(false)}
+                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                >
+                  Close
+                </Button>
               </div>
             </DialogContent>
           </Dialog>

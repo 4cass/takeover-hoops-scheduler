@@ -31,6 +31,12 @@ interface Branch {
   name: string;
 }
 
+interface Package {
+  id: string;
+  name: string;
+  is_active: boolean;
+}
+
 interface Student {
   id: string;
   name: string;
@@ -51,7 +57,7 @@ interface TrainingSession {
   start_time: string;
   end_time: string;
   status: SessionStatus;
-  package_type: "Camp Training" | "Personal Training" | null;
+  package_type: string | null;
   branch_id: string;
   branches: { name: string };
   session_coaches: Array<{
@@ -85,8 +91,6 @@ interface UpdateAttendanceVariables {
 const formatTime12Hour = (time: string | null | undefined, date: string | null | undefined): string => {
   if (!time || !date) return "N/A";
   try {
-    // Combine date and time to create a parseable datetime string
-    // Handle time formats like HH:mm:ss or HH:mm
     const timeFormats = ["HH:mm:ss", "HH:mm"];
     let parsedTime: Date | null = null;
 
@@ -135,12 +139,11 @@ export function AttendanceManager() {
   const sessionIdFromUrl = searchParams.get("sessionId");
   const queryClient = useQueryClient();
 
-  // Moved useState for activeTab to the top to ensure consistent hook order
   const [activeTab, setActiveTab] = useState<'coaches' | 'players'>('coaches');
   const [selectedSession, setSelectedSession] = useState<string | null>(sessionIdFromUrl);
   const [searchTerm, setSearchTerm] = useState("");
   const [sessionSearchTerm, setSessionSearchTerm] = useState("");
-  const [filterPackageType, setFilterPackageType] = useState<"All" | "Camp Training" | "Personal Training">("All");
+  const [filterPackageType, setFilterPackageType] = useState<string>("All");
   const [filterSessionStatus, setFilterSessionStatus] = useState<"All" | SessionStatus>("All");
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [coachFilter, setCoachFilter] = useState<string>("All");
@@ -209,19 +212,7 @@ export function AttendanceManager() {
         throw error;
       }
 
-      return (data || []).map((session: any) => ({
-        ...session,
-        package_type:
-          session.package_type === "Camp Training"
-            ? "Camp Training"
-            : session.package_type === "Personal Training"
-            ? "Personal Training"
-            : null,
-        coach_session_times: session.coach_session_times.map((cst: any) => ({
-          ...cst,
-          coaches: cst.coaches ? { name: cst.coaches.name } : null,
-        })),
-      })) as TrainingSession[];
+      return (data || []) as TrainingSession[];
     },
   });
 
@@ -256,6 +247,24 @@ export function AttendanceManager() {
         throw error;
       }
       return (data || []) as Coach[];
+    },
+  });
+
+  const { data: packages, isLoading: packagesLoading, error: packagesError } = useQuery<Package[], Error>({
+    queryKey: ["packages-select"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("packages")
+        .select("id, name, is_active")
+        .eq("is_active", true)
+        .order("name");
+
+      if (error) {
+        console.error("Error fetching packages:", error);
+        toast.error(`Failed to fetch packages: ${error.message}`);
+        throw error;
+      }
+      return (data || []) as Package[];
     },
   });
 
@@ -527,7 +536,7 @@ export function AttendanceManager() {
     setShowViewModal(true);
   };
 
-  if (sessionsLoading || branchesLoading || coachesLoading) {
+  if (sessionsLoading || branchesLoading || coachesLoading || packagesLoading) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
@@ -539,7 +548,7 @@ export function AttendanceManager() {
     );
   }
 
-  if (sessionsError || branchesError || coachesError) {
+  if (sessionsError || branchesError || coachesError || packagesError) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
@@ -604,15 +613,16 @@ export function AttendanceManager() {
                   </Label>
                   <Select
                     value={filterPackageType}
-                    onValueChange={(value: "All" | "Camp Training" | "Personal Training") => setFilterPackageType(value)}
+                    onValueChange={(value: string) => setFilterPackageType(value)}
                   >
                     <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: "#BEA877" }}>
                       <SelectValue placeholder="Select package type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="All" className="text-xs sm:text-sm">All Sessions</SelectItem>
-                      <SelectItem value="Camp Training" className="text-xs sm:text-sm">Camp Training</SelectItem>
-                      <SelectItem value="Personal Training" className="text-xs sm:text-sm">Personal Training</SelectItem>
+                      <SelectItem value="All" className="text-xs sm:text-sm">All Packages</SelectItem>
+                      {packages?.map((pkg) => (
+                        <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">{pkg.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -932,7 +942,7 @@ export function AttendanceManager() {
                         <div key={participant.id} className="flex items-center justify-between p-2">
                           <div className="flex items-center space-x-3">
                             <span className="text-xs sm:text-sm text-gray-700">{participant.students.name}</span>
-                            <Badge className={`font-medium ${getAttendanceBadgeColor(attendance?.status || "pending")} text-xs sm:text-sm`}>
+                            <Badge className={`font-medium ${getAttendanceBadgeColor(attendance?.status || "pending")} text-xs`}>
                               {getAttendanceIcon(attendance?.status || "pending")}
                               <span className="ml-1 capitalize">{attendance?.status || "pending"}</span>
                             </Badge>

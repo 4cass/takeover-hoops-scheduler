@@ -11,37 +11,39 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
-type Coach = {
+interface Coach {
   id: string;
   name: string;
   email: string;
   phone: string | null;
   created_at: string;
-};
+}
 
-type Branch = {
+interface Branch {
   id: string;
   name: string;
-};
+}
 
-type SessionRecord = {
-  training_sessions: any;
-  coach_id: string;
+interface Package {
   id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  branch_id: string;
-  package_type: string | null;
-  branches: { name: string } | null;
-  session_participants: { students: { name: string } }[];
-  session_coaches: { coach_id: string; coaches: { name: string } | null }[];
-};
+  name: string;
+  is_active: boolean;
+}
 
-const PACKAGE_TYPES = [
-  "Personal Training",
-  "Camp Training"
-];
+interface SessionRecord {
+  id: string;
+  coach_id: string;
+  training_sessions: {
+    id: string;
+    date: string;
+    start_time: string;
+    end_time: string;
+    branch_id: string;
+    package_type: string | null;
+    branches: { name: string } | null;
+    session_participants: { students: { name: string } }[];
+  };
+}
 
 const formatTime12Hour = (timeString: string) => {
   const [hours, minutes] = timeString.split(":").map(Number);
@@ -132,6 +134,25 @@ export function CoachesManager() {
     },
   });
 
+  const { data: packages, isLoading: packagesLoading, error: packagesError } = useQuery<Package[], Error>({
+    queryKey: ["packages-select"],
+    queryFn: async () => {
+      console.log("Fetching packages...");
+      const { data, error } = await (supabase as any)
+        .from("packages")
+        .select("id, name, is_active")
+        .eq("is_active", true)
+        .order("name");
+      if (error) {
+        console.error("packages query error:", error);
+        toast.error(`Failed to fetch packages: ${error.message}`);
+        throw error;
+      }
+      console.log("Fetched packages:", data);
+      return (data || []) as Package[];
+    },
+  });
+
   const filteredCoaches = coaches?.filter((coach) =>
     coach.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
     (branchFilter === "All" || true) && // Branch filter not applied to coaches directly
@@ -151,6 +172,8 @@ export function CoachesManager() {
       const { data, error } = await supabase
         .from("session_coaches")
         .select(`
+          id,
+          coach_id,
           training_sessions (
             id,
             date,
@@ -160,9 +183,7 @@ export function CoachesManager() {
             package_type,
             branches (name),
             session_participants (students (name))
-          ),
-          coach_id,
-          coaches (name)
+          )
         `)
         .in("coach_id", paginatedCoaches.map(c => c.id))
         .order("date", { ascending: false, referencedTable: "training_sessions" });
@@ -172,7 +193,7 @@ export function CoachesManager() {
         throw error;
       }
       console.log("Fetched session records:", data);
-      return data as unknown as SessionRecord[];
+      return data as SessionRecord[];
     },
     enabled: !!paginatedCoaches && paginatedCoaches.length > 0,
   });
@@ -187,6 +208,16 @@ export function CoachesManager() {
   const recordsStartIndex = (recordsCurrentPage - 1) * itemsPerPage;
   const recordsEndIndex = recordsStartIndex + itemsPerPage;
   const paginatedSessionRecords = filteredSessionRecords.slice(recordsStartIndex, recordsEndIndex);
+
+  const getPaginationRange = (current: number, total: number) => {
+    const maxPagesToShow = 3;
+    let start = Math.max(1, current - 1);
+    let end = Math.min(total, start + maxPagesToShow - 1);
+    if (end - start + 1 < maxPagesToShow) {
+      start = Math.max(1, end - maxPagesToShow + 1);
+    }
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  };
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -294,7 +325,20 @@ export function CoachesManager() {
     phone: "",
   });
 
-  if (coachesLoading || branchesLoading) {
+  const getPackageBadgeColor = (packageType: string | null) => {
+    if (!packageType) return 'bg-gray-50 text-gray-700 border-gray-200';
+    const colors = [
+      'bg-blue-50 text-blue-700 border-blue-200',
+      'bg-green-50 text-green-700 border-green-200',
+      'bg-purple-50 text-purple-700 border-purple-200',
+      'bg-indigo-50 text-indigo-700 border-indigo-200',
+      'bg-teal-50 text-teal-700 border-teal-200',
+    ];
+    const hash = packageType.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
+  if (coachesLoading || branchesLoading || packagesLoading) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
@@ -306,14 +350,14 @@ export function CoachesManager() {
     );
   }
 
-  if (coachesError || branchesError) {
+  if (coachesError || branchesError || packagesError) {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
           <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Error loading coaches</h3>
           <p className="text-sm sm:text-base md:text-lg text-gray-600">
-            Failed to load data: {(coachesError || branchesError)?.message || 'Unknown error'}. Please try again later.
+            Failed to load data: {(coachesError || branchesError || packagesError)?.message || 'Unknown error'}. Please try again later.
           </p>
         </div>
       </div>
@@ -543,7 +587,7 @@ export function CoachesManager() {
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
-                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  {getPaginationRange(currentPage, totalPages).map((page) => (
                     <Button
                       key={page}
                       variant={currentPage === page ? "default" : "outline"}
@@ -639,10 +683,10 @@ export function CoachesManager() {
                           <SelectValue placeholder="Select Package Type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="All" className="text-xs sm:text-sm">All Package Types</SelectItem>
-                          {PACKAGE_TYPES.map((packageType) => (
-                            <SelectItem key={packageType} value={packageType} className="text-xs sm:text-sm">
-                              {packageType}
+                          <SelectItem value="All" className="text-xs sm:text-sm">All Packages</SelectItem>
+                          {packages?.map((pkg) => (
+                            <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
+                              {pkg.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -695,8 +739,10 @@ export function CoachesManager() {
                               <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
                                 {record.training_sessions?.branches?.name || 'N/A'}
                               </td>
-                              <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                {record.training_sessions?.package_type || 'N/A'}
+                              <td className="py-3 px-4 text-xs sm:text-sm min-w-0 truncate">
+                                <span className={`px-2 py-1 rounded-full font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
+                                  {record.training_sessions?.package_type || 'N/A'}
+                                </span>
                               </td>
                               <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
                                 {record.training_sessions?.session_participants?.map(participant => participant.students.name).join(", ") || "No students"}
@@ -716,7 +762,7 @@ export function CoachesManager() {
                           >
                             <ChevronLeft className="w-4 h-4" />
                           </Button>
-                          {Array.from({ length: recordsTotalPages }, (_, index) => index + 1).map((page) => (
+                          {getPaginationRange(recordsCurrentPage, recordsTotalPages).map((page) => (
                             <Button
                               key={page}
                               variant={recordsCurrentPage === page ? "default" : "outline"}
