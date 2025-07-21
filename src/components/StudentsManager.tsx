@@ -688,7 +688,7 @@ export function StudentsManager() {
                             </div>
                             <div className="flex items-center space-x-2 min-w-0">
                               <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Sessions:</span> {usedSessions} of {total} attended</span>
+                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Session Progress:</span> {usedSessions} of {total} attended</span>
                             </div>
                             <div>
                               <Progress value={progressPercentage} className="h-2 w-full max-w-full" />
@@ -782,7 +782,7 @@ export function StudentsManager() {
                   History Records for {selectedStudent?.name}
                 </DialogTitle>
                 <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                  View session attendance and details for this player
+                  View session attendance and progress for this player
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-6">
@@ -797,9 +797,15 @@ export function StudentsManager() {
                     <div className="min-w-0">
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Branch:</span> {branches?.find(b => b.id === selectedStudent?.branch_id)?.name || "N/A"}</p>
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Package Type:</span> {selectedStudent?.package_type || "N/A"}</p>
-                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Total Sessions:</span> {selectedStudent?.sessions || 0}</p>
+                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Session Progress:</span> {(selectedStudent?.sessions || 0) - (selectedStudent?.remaining_sessions || 0)} of {selectedStudent?.sessions || 0} attended</p>
                       <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Remaining Sessions:</span> {selectedStudent?.remaining_sessions || 0}</p>
                     </div>
+                  </div>
+                  <div className="mt-3">
+                    <Progress 
+                      value={selectedStudent?.sessions ? (((selectedStudent.sessions - (selectedStudent.remaining_sessions || 0)) / selectedStudent.sessions) * 100) : 0} 
+                      className="h-2 w-full max-w-full"
+                    />
                   </div>
                 </div>
                 <div className="mb-6">
