@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Calendar as CalendarIcon, Users, Clock, MapPin, User, ChevronLeft, ChevronRight, Filter, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths, isAfter, parseISO } from "date-fns";
-import { getCurrentPhilippinesTime, isTodayInPhilippines, toPhilippinesTime } from "@/utils/timezone";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/context/AuthContext";
 import { CoachCalendarManager } from "./CoachCalendarManager";
@@ -100,7 +99,7 @@ export function CalendarManager() {
   const [selectedCoach, setSelectedCoach] = useState<string>("all");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
   const [filterPackageType, setFilterPackageType] = useState<string>("All");
-  const [currentMonth, setCurrentMonth] = useState<Date>(getCurrentPhilippinesTime());
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [showUpcomingSessions, setShowUpcomingSessions] = useState(false);
   const [showPastSessions, setShowPastSessions] = useState(false);
   const navigate = useNavigate();
@@ -243,7 +242,7 @@ export function CalendarManager() {
       }) || []
     : [];
 
-  const today = getCurrentPhilippinesTime();
+  const today = new Date();
   const todayDateOnly = new Date(format(today, "yyyy-MM-dd") + "T00:00:00");
 
   const upcomingSessions = filteredSessions.filter(session => {
@@ -454,7 +453,7 @@ export function CalendarManager() {
                     const hasCompleted = daySessions.some(s => s.status === 'completed');
                     const hasCancelled = daySessions.some(s => s.status === 'cancelled');
                     const isSelected = selectedDate && isSameDay(day, selectedDate);
-                    const isToday = isTodayInPhilippines(day);
+                    const isToday = isSameDay(day, new Date());
                     
                     return (
                       <button

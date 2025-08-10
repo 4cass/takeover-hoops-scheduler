@@ -10,7 +10,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar as CalendarIcon, Users, Clock, MapPin, ChevronLeft, ChevronRight, Filter, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths, isAfter, parseISO } from "date-fns";
-import { getCurrentPhilippinesTime, isTodayInPhilippines } from "@/utils/timezone";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -47,7 +46,7 @@ export function CoachCalendarManager() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
   const [filterPackageType, setFilterPackageType] = useState<string | "All">("All");
-  const [currentMonth, setCurrentMonth] = useState<Date>(getCurrentPhilippinesTime());
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [showUpcomingSessions, setShowUpcomingSessions] = useState(false);
   const [showPastSessions, setShowPastSessions] = useState(false);
   const navigate = useNavigate();
@@ -233,7 +232,7 @@ export function CoachCalendarManager() {
       }) || []
     : [];
 
-  const today = getCurrentPhilippinesTime();
+  const today = new Date();
   const todayDateOnly = new Date(format(today, "yyyy-MM-dd") + "T00:00:00");
 
   const upcomingSessions = filteredSessions.filter(session => {
@@ -391,7 +390,7 @@ export function CoachCalendarManager() {
               <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {daysInMonth.map(day => {
                   const daySessions = filteredSessions.filter(session => isSameDay(parseISO(session.date), day)) || [];
-                  const isToday = isTodayInPhilippines(day);
+                  const isToday = isSameDay(day, new Date());
                   const hasSessions = daySessions.length > 0;
                   const statusColor = getDayStatusColor(daySessions);
                   

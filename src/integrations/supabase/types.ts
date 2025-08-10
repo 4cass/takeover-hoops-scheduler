@@ -350,7 +350,6 @@ export type Database = {
           end_time: string
           id: string
           notes: string | null
-          package_id: string | null
           package_type: string | null
           start_time: string
           status: Database["public"]["Enums"]["session_status"]
@@ -363,7 +362,6 @@ export type Database = {
           end_time: string
           id?: string
           notes?: string | null
-          package_id?: string | null
           package_type?: string | null
           start_time: string
           status?: Database["public"]["Enums"]["session_status"]
@@ -376,7 +374,6 @@ export type Database = {
           end_time?: string
           id?: string
           notes?: string | null
-          package_id?: string | null
           package_type?: string | null
           start_time?: string
           status?: Database["public"]["Enums"]["session_status"]
@@ -388,13 +385,6 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "training_sessions_package_id_fkey"
-            columns: ["package_id"]
-            isOneToOne: false
-            referencedRelation: "packages"
             referencedColumns: ["id"]
           },
         ]
@@ -426,22 +416,6 @@ export type Database = {
           conflict_type: string
           conflict_details: string
         }[]
-      }
-      get_current_coach_id: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      get_current_user_role: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      is_user_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
-      is_user_coach_or_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
       }
     }
     Enums: {
