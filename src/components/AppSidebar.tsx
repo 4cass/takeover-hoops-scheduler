@@ -17,12 +17,12 @@ import { useAuth } from "@/context/AuthContext";
 const menuItems = [
   { title: "Dashboard", icon: Home, value: "overview", allowedRoles: ['admin', 'coach'] },
   { title: "Calendar", icon: Calendar, value: "calendar", allowedRoles: ['admin', 'coach'] },
-  { title: "Sessions", icon: ClipboardList, value: "sessions", allowedRoles: ['admin'] },
+  { title: "Sessions", icon: ClipboardList, value: "sessions", allowedRoles: ['admin', 'coach'] }, // Updated to include 'coach'
   { title: "Attendance", icon: UserCheck, value: "attendance", allowedRoles: ['admin', 'coach'] },
-  { title: "Players", icon: Users, value: "students", allowedRoles: ['admin'] },
+  { title: "Players", icon: Users, value: "students", allowedRoles: ['admin', 'coach'] }, // Updated to include 'coach'
   { title: "Coaches", icon: BookOpen, value: "coaches", allowedRoles: ['admin'] },
   { title: "Branches", icon: MapPin, value: "branches", allowedRoles: ['admin'] },
-  { title: "Packages", icon: Package, value: "packages", allowedRoles: ['admin'] }, // Added Packages menu item
+  { title: "Packages", icon: Package, value: "packages", allowedRoles: ['admin'] },
 ];
 
 interface AppSidebarProps {
@@ -45,13 +45,12 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
     await logout();
   };
 
-  // Filter menu items based on user role
   const filteredMenuItems = menuItems.filter(item => 
     role && item.allowedRoles.includes(role as 'admin' | 'coach')
   );
 
   if (!role) {
-    return null; // Don't render sidebar if no role is determined
+    return null;
   }
 
   return (
@@ -65,7 +64,7 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
               className="w-full h-full object-contain"
             />
           </div>
-          <div className="flex bg-[#181A18] flex-col">
+          <div className="flex flex-col">
             <h2 className="text-xl font-bold tracking-tight text-white">Takeover Basketball</h2>
             <p className="text-sm text-white/80">Management System</p>
           </div>

@@ -3,13 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge"; // Correct import for Badge
 import { Calendar as CalendarIcon, Users, Clock, MapPin, User, ChevronLeft, ChevronRight, Filter, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths, isAfter, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, addMonths, subMonths, isAfter, parseISO, getDay } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/context/AuthContext";
 import { CoachCalendarManager } from "./CoachCalendarManager";
@@ -99,10 +99,12 @@ export function CalendarManager() {
   const [selectedCoach, setSelectedCoach] = useState<string>("all");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
   const [filterPackageType, setFilterPackageType] = useState<string>("All");
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [currentMonth, setCurrentMonth] = useState<Date>(toZonedTime(new Date(), 'Asia/Manila'));
   const [showUpcomingSessions, setShowUpcomingSessions] = useState(false);
   const [showPastSessions, setShowPastSessions] = useState(false);
   const navigate = useNavigate();
+
+  const timeZone = 'Asia/Manila';
 
   const { data: sessions, isLoading, error: sessionsError } = useQuery({
     queryKey: ['training-sessions', selectedCoach, selectedBranch, filterPackageType, currentMonth],
@@ -188,7 +190,7 @@ export function CalendarManager() {
   const { data: packages, error: packagesError } = useQuery({
     queryKey: ['packages-select'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('packages')
         .select('id, name, is_active')
         .eq('is_active', true)
@@ -213,17 +215,18 @@ export function CalendarManager() {
       }
     }) || [];
 
-  const daysInMonth = eachDayOfInterval({
-    start: startOfMonth(currentMonth),
-    end: endOfMonth(currentMonth),
-  });
+  const firstDayOfMonth = startOfMonth(currentMonth);
+  const lastDayOfMonth = endOfMonth(currentMonth);
+  const daysInMonth = eachDayOfInterval({ start: firstDayOfMonth, end: lastDayOfMonth });
+  const firstDayWeekday = getDay(firstDayOfMonth); // 0 = Sunday, 1 = Monday, etc.
+  const paddingDays = Array(firstDayWeekday).fill(null); // Padding for days before the 1st
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
-      case 'scheduled': return 'scheduled';
-      case 'completed': return 'completed';
-      case 'cancelled': return 'cancelled';
-      default: return 'default';
+      case 'scheduled': return 'default'; // Adjust based on your Badge component's variant options
+      case 'completed': return 'secondary';
+      case 'cancelled': return 'destructive';
+      default: return 'secondary';
     }
   };
 
@@ -242,7 +245,7 @@ export function CalendarManager() {
       }) || []
     : [];
 
-  const today = new Date();
+  const today = toZonedTime(new Date(), timeZone);
   const todayDateOnly = new Date(format(today, "yyyy-MM-dd") + "T00:00:00");
 
   const upcomingSessions = filteredSessions.filter(session => {
@@ -301,8 +304,6 @@ export function CalendarManager() {
     <CalendarErrorBoundary>
       <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6">
         <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-          
-          {/* Header */}
           <div className="space-y-2">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#181A18] tracking-tight">
               Calendar
@@ -311,8 +312,6 @@ export function CalendarManager() {
               Manage and view all basketball training sessions
             </p>
           </div>
-
-          {/* Main Calendar Card */}
           <Card className="border-2 border-[#181A18] bg-white shadow-xl">
             <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-4 sm:p-6">
               <CardTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-[#efeff1] flex items-center">
@@ -324,14 +323,11 @@ export function CalendarManager() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
-              
-              {/* Filters */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                   <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900">Filter Sessions</h3>
                 </div>
-                
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Coach</label>
@@ -347,7 +343,6 @@ export function CalendarManager() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
                   <div className="space-y-2">
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Branch</label>
                     <Select value={selectedBranch} onValueChange={setSelectedBranch}>
@@ -362,7 +357,6 @@ export function CalendarManager() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
                   <div className="space-y-2 sm:col-span-2 lg:col-span-1">
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Package Type</label>
                     <Select
@@ -381,12 +375,10 @@ export function CalendarManager() {
                     </Select>
                   </div>
                 </div>
-                
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
                   <p className="text-xs sm:text-sm text-gray-600">
                     Showing {filteredSessions.length} session{filteredSessions.length === 1 ? '' : 's'}
                   </p>
-                  
                   <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                     <Button
                       onClick={() => setShowUpcomingSessions(true)}
@@ -409,11 +401,7 @@ export function CalendarManager() {
                   </div>
                 </div>
               </div>
-
-              {/* Calendar Grid */}
               <div className="border-2 border-[#181A18] rounded-xl p-3 sm:p-4 lg:p-6 bg-white shadow-lg">
-                
-                {/* Calendar Navigation */}
                 <div className="flex justify-between items-center mb-4 sm:mb-6">
                   <Button
                     onClick={handlePrevMonth}
@@ -435,8 +423,6 @@ export function CalendarManager() {
                     <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
                 </div>
-                
-                {/* Days of Week Header */}
                 <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-3 sm:mb-4">
                   {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
                     <div key={day} className="text-center py-2 sm:py-3 bg-[#181A18] text-white font-semibold rounded-lg text-xs sm:text-sm">
@@ -444,16 +430,17 @@ export function CalendarManager() {
                     </div>
                   ))}
                 </div>
-                
-                {/* Calendar Days */}
                 <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                  {paddingDays.map((_, index) => (
+                    <div key={`padding-${index}`} className="h-12 sm:h-16 lg:h-20 bg-gray-100 rounded-lg"></div>
+                  ))}
                   {daysInMonth.map(day => {
                     const daySessions = filteredSessions.filter(session => isSameDay(parseISO(session.date), day)) || [];
                     const hasScheduled = daySessions.some(s => s.status === 'scheduled');
                     const hasCompleted = daySessions.some(s => s.status === 'completed');
                     const hasCancelled = daySessions.some(s => s.status === 'cancelled');
                     const isSelected = selectedDate && isSameDay(day, selectedDate);
-                    const isToday = isSameDay(day, new Date());
+                    const isToday = isSameDay(day, today);
                     
                     return (
                       <button
@@ -492,8 +479,6 @@ export function CalendarManager() {
                     );
                   })}
                 </div>
-                
-                {/* Legend */}
                 <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 sm:gap-3 lg:gap-4 justify-center text-xs sm:text-sm">
                   <div className="flex items-center gap-1 sm:gap-2">
                     <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full"></div>
@@ -511,8 +496,6 @@ export function CalendarManager() {
               </div>
             </CardContent>
           </Card>
-
-          {/* Sessions Modal */}
           <Dialog open={!!selectedDate} onOpenChange={() => setSelectedDate(null)}>
             <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[90vh] border-2 border-[#181A18] bg-white shadow-lg p-2 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden flex flex-col">
               <div className="flex flex-col w-full">
@@ -525,7 +508,6 @@ export function CalendarManager() {
                     View session details for the selected date
                   </DialogDescription>
                 </DialogHeader>
-                
                 {selectedDateSessions.length > 0 ? (
                   <div className="space-y-3 sm:space-y-4">
                     {selectedDateSessions.map(session => (
@@ -541,7 +523,6 @@ export function CalendarManager() {
                                 </p>
                               </div>
                             </div>
-                            
                             <div className="flex items-center space-x-2 min-w-0">
                               <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                               <div className="min-w-0 flex-1">
@@ -549,7 +530,6 @@ export function CalendarManager() {
                                 <p className="font-semibold text-black text-xs sm:text-sm truncate">{session.branches?.name || 'N/A'}</p>
                               </div>
                             </div>
-                            
                             <div className="flex items-center space-x-2 min-w-0">
                               <User className="h-3 w-3 sm:h-4 sm:w-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                               <div className="min-w-0 flex-1">
@@ -561,7 +541,6 @@ export function CalendarManager() {
                                 </p>
                               </div>
                             </div>
-                            
                             <div className="flex items-center space-x-2 min-w-0">
                               <Users className="h-3 w-3 sm:h-4 sm:w-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                               <div className="min-w-0 flex-1">
@@ -569,7 +548,6 @@ export function CalendarManager() {
                                 <p className="font-semibold text-black text-xs sm:text-sm">{session.session_participants?.length || 0}</p>
                               </div>
                             </div>
-                            
                             <div className="flex items-center space-x-2 min-w-0">
                               <Users className="h-3 w-3 sm:h-4 sm:w-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
                               <div className="min-w-0 flex-1">
@@ -577,7 +555,6 @@ export function CalendarManager() {
                                 <p className="font-semibold text-black text-xs sm:text-sm truncate">{session.package_type || 'N/A'}</p>
                               </div>
                             </div>
-                            
                             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-fit flex-shrink-0">
                               <Badge variant={getStatusBadgeVariant(session.status)} className="font-medium px-2 py-1 text-xs sm:text-sm w-fit">
                                 {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
@@ -612,8 +589,6 @@ export function CalendarManager() {
               </div>
             </DialogContent>
           </Dialog>
-
-          {/* Upcoming Sessions Modal */}
           <Dialog open={showUpcomingSessions} onOpenChange={setShowUpcomingSessions}>
             <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[90vh] border-2 border-green-200 bg-white shadow-lg p-2 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden flex flex-col">
               <div className="flex flex-col w-full">
@@ -626,7 +601,6 @@ export function CalendarManager() {
                     All scheduled sessions for today and future dates
                   </DialogDescription>
                 </DialogHeader>
-                
                 {upcomingSessions.length > 0 ? (
                   <div className="space-y-3 sm:space-y-4">
                     {upcomingSessions.map((session) => (
@@ -684,8 +658,6 @@ export function CalendarManager() {
               </div>
             </DialogContent>
           </Dialog>
-
-          {/* Past Sessions Modal */}
           <Dialog open={showPastSessions} onOpenChange={setShowPastSessions}>
             <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl lg:max-w-6xl max-h-[90vh] border-2 border-gray-200 bg-white shadow-lg p-2 sm:p-4 lg:p-5 overflow-y-auto overflow-x-hidden flex flex-col">
               <div className="flex flex-col w-full">
@@ -698,7 +670,6 @@ export function CalendarManager() {
                     All completed sessions and sessions before today
                   </DialogDescription>
                 </DialogHeader>
-                
                 {pastSessions.length > 0 ? (
                   <div className="space-y-3 sm:space-y-4">
                     {pastSessions.map((session) => (

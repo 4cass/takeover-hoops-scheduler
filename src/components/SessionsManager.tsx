@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import type { Database } from "@/integrations/supabase/types";
 import { Calendar, Clock, Eye, MapPin, Plus, Trash2, User, Users, Filter, Search, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 type SessionStatus = Database['public']['Enums']['session_status'];
 
@@ -139,49 +140,71 @@ export function SessionsManager() {
 
   const queryClient = useQueryClient();
 
-  const { data: sessions, isLoading, error } = useQuery({
-    queryKey: ['training-sessions'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('training_sessions')
-        .select(`
+const { role, coachData } = useAuth();
+const coachId = role === "coach" ? coachData?.id : null; // <-- DB ID, not auth.id
+
+const { data: sessions, isLoading, error } = useQuery({
+  queryKey: ['training-sessions', coachId], // include coachId so it refetches if changes
+  queryFn: async () => {
+    let query = supabase
+      .from('training_sessions')
+      .select(`
+        id,
+        date,
+        start_time,
+        end_time,
+        branch_id,
+        notes,
+        status,
+        package_type,
+        branches (name),
+        session_coaches (
           id,
-          date,
-          start_time,
-          end_time,
-          branch_id,
-          notes,
-          status,
-          package_type,
-          branches (name),
-          session_coaches (
-            id,
-            coach_id,
-            coaches (name)
-          ),
-          session_participants (
-            id,
-            student_id,
-            students (name)
-          ),
-          coach_session_times (
-            id,
-            session_id,
-            coach_id,
-            time_in,
-            time_out,
-            coaches (name)
-          )
-        `)
-        .order('date', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching training sessions:', error);
-        throw new Error(`Failed to fetch training sessions: ${error.message}`);
+          coach_id,
+          coaches (name)
+        ),
+        session_participants (
+          id,
+          student_id,
+          students (name)
+        ),
+        coach_session_times (
+          id,
+          session_id,
+          coach_id,
+          time_in,
+          time_out,
+          coaches (name)
+        )
+      `)
+      .order('date', { ascending: false });
+
+    if (role === "coach" && coachId) {
+      const { data: coachSessions, error: csError } = await supabase
+        .from('session_coaches')
+        .select('session_id')
+        .eq('coach_id', coachId);
+
+      if (csError) throw csError;
+
+      const sessionIds = coachSessions?.map(cs => cs.session_id) || [];
+      console.log('Coach sessions data:', coachSessions);
+      console.log('Derived session IDs:', sessionIds);
+
+      if (sessionIds.length > 0) {
+        query = query.in('id', sessionIds);
+      } else {
+        return [];
       }
-      return data as TrainingSession[];
     }
-  });
+
+    const { data, error: qError } = await query;
+    if (qError) throw qError;
+
+    return data as TrainingSession[];
+  },
+});
+
 
   const { data: branches } = useQuery({
     queryKey: ['branches-select'],

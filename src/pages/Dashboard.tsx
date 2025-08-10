@@ -10,7 +10,7 @@ import { CoachAttendanceManager } from "@/components/CoachAttendanceManager";
 import { StudentsManager } from "@/components/StudentsManager";
 import { CoachesManager } from "@/components/CoachesManager";
 import { BranchesManager } from "@/components/BranchesManager";
-import { PackagesManager } from "@/components/PackagesManager"; // Added import
+import { PackagesManager } from "@/components/PackagesManager";
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Settings } from "lucide-react";
@@ -27,7 +27,6 @@ export default function Dashboard() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  // Show loading while auth is being determined
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -39,13 +38,11 @@ export default function Dashboard() {
     );
   }
 
-  // Redirect to login if no user is found
   if (!user) {
     console.log("No user found, redirecting to login");
     return <Navigate to="/login" replace />;
   }
 
-  // Show error message if role is still null after loading is complete
   if (!role) {
     console.log("No role found for authenticated user, showing error message");
     return (
@@ -69,7 +66,6 @@ export default function Dashboard() {
     );
   }
 
-  // Derive active tab from current URL
   const path = location.pathname;
   const activeTab = 
     path.includes("/dashboard/calendar") ? "calendar" :
@@ -78,7 +74,7 @@ export default function Dashboard() {
     path.includes("/dashboard/students") ? "students" :
     path.includes("/dashboard/coaches") ? "coaches" :
     path.includes("/dashboard/branches") ? "branches" :
-    path.includes("/dashboard/packages") ? "packages" : // Added packages path
+    path.includes("/dashboard/packages") ? "packages" :
     "overview";
 
   return (
@@ -102,13 +98,11 @@ export default function Dashboard() {
             <Routes>
               <Route path="/" element={<DashboardStats />} />
               
-              {/* Calendar routes - role-specific components */}
               <Route 
                 path="calendar" 
                 element={role === 'coach' ? <CoachCalendarManager /> : <CalendarManager />} 
               />
               
-              {/* Attendance routes - role-specific components */}
               <Route 
                 path="attendance" 
                 element={role === 'coach' ? <CoachAttendanceManager /> : <AttendanceManager />} 
@@ -118,25 +112,28 @@ export default function Dashboard() {
                 element={role === 'coach' ? <CoachAttendanceManager /> : <AttendanceManager />} 
               />
               
-              {/* Admin-only routes */}
+              <Route 
+                path="sessions" 
+                element={<SessionsManager />} // Render for both admin and coach
+              />
+              <Route 
+                path="students" 
+                element={<StudentsManager />} // Render for both admin and coach
+              />
+              
               {role === 'admin' && (
                 <>
-                  <Route path="sessions" element={<SessionsManager />} />
-                  <Route path="students" element={<StudentsManager />} />
                   <Route path="coaches" element={<CoachesManager />} />
                   <Route path="branches" element={<BranchesManager />} />
-                  <Route path="packages" element={<PackagesManager />} /> {/* Added packages route */}
+                  <Route path="packages" element={<PackagesManager />} />
                 </>
               )}
               
-              {/* Redirect coaches trying to access admin-only routes */}
               {role === 'coach' && (
                 <>
-                  <Route path="sessions" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="students" element={<Navigate to="/dashboard" replace />} />
                   <Route path="coaches" element={<Navigate to="/dashboard" replace />} />
                   <Route path="branches" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="packages" element={<Navigate to="/dashboard" replace />} /> {/* Added packages redirect */}
+                  <Route path="packages" element={<Navigate to="/dashboard" replace />} />
                 </>
               )}
             </Routes>

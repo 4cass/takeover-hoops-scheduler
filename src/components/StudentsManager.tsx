@@ -1,4 +1,4 @@
-import { useState, Component, ErrorInfo } from "react";
+import { Component, ErrorInfo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,13 @@ import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, Use
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Database } from "@/integrations/supabase/types";
 
 interface Student {
   id: string;
   name: string;
   email: string;
   phone: string | null;
-  sessions: number | null;
+  sessions: number | null; // Changed from total_sessions to sessions
   remaining_sessions: number | null;
   branch_id: string | null;
   package_type: string | null;
@@ -56,7 +55,6 @@ interface AttendanceRecord {
   };
 }
 
-// Error Boundary Component
 class StudentsErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; error: string | null }> {
   state = { hasError: false, error: null };
 
@@ -99,6 +97,7 @@ export function StudentsManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const [recordsCurrentPage, setRecordsCurrentPage] = useState(1);
   const itemsPerPage = 6;
+  const [userRole, setUserRole] = useState<string>("user"); // Placeholder for user role (e.g., "admin", "coach", "user")
 
   const queryClient = useQueryClient();
 
@@ -237,14 +236,15 @@ export function StudentsManager() {
 
   const createMutation = useMutation({
     mutationFn: async (student: typeof formData) => {
+      const defaultSessions = 8;
       const { data, error } = await supabase
         .from("students")
         .insert([{
           name: student.name,
           email: student.email,
           phone: student.phone || null,
-          sessions: student.sessions,
-          remaining_sessions: student.remaining_sessions,
+          sessions: defaultSessions,
+          remaining_sessions: defaultSessions,
           branch_id: student.branch_id,
           package_type: student.package_type,
         }])
@@ -293,28 +293,56 @@ export function StudentsManager() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("students").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["students"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      toast.success("Player deleted successfully");
-    },
-    onError: (error: any) => {
-      toast.error("Failed to delete player: " + error.message);
-    },
-  });
+const deleteMutation = useMutation({
+  mutationFn: async (id: string) => {
+    try {
+      // Temporarily comment out permission check
+      // if (userRole !== "admin" && userRole !== "coach") {
+      //   throw new Error("You do not have permission to delete players.");
+      // }
+
+      // Perform deletions in the correct order to avoid foreign key constraints
+      const { error: attendanceError } = await supabase
+        .from("attendance_records")
+        .delete()
+        .eq("student_id", id);
+      if (attendanceError) throw attendanceError;
+
+      const { error: participantsError } = await supabase
+        .from("session_participants")
+        .delete()
+        .eq("student_id", id);
+      if (participantsError) throw participantsError;
+
+      const { error: studentError } = await supabase
+        .from("students")
+        .delete()
+        .eq("id", id);
+      if (studentError) throw studentError;
+
+      // If all deletions succeed, return success
+      return { success: true };
+    } catch (error: any) {
+      throw new Error(`Failed to delete player: ${error.message}`);
+    }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["students"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    toast.success("Player deleted successfully");
+  },
+  onError: (error: any) => {
+    toast.error(`Failed to delete player: ${error.message}`);
+  },
+});
 
   const resetForm = () => {
     setFormData({
       name: "",
       email: "",
       phone: "",
-      sessions: 0,
-      remaining_sessions: 0,
+      sessions: 8,
+      remaining_sessions: 8,
       branch_id: null,
       package_type: null,
     });
@@ -357,8 +385,8 @@ export function StudentsManager() {
     name: "",
     email: "",
     phone: "",
-    sessions: 0,
-    remaining_sessions: 0,
+    sessions: 8,
+    remaining_sessions: 8,
     branch_id: null as string | null,
     package_type: null as string | null,
   });
@@ -716,13 +744,15 @@ export function StudentsManager() {
                                   <Edit className="w-4 h-4" />
                                 </Button>
                                 <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => deleteMutation.mutate(student.id)}
-                                  className="bg-red-600 text-white hover:bg-red-700 w-10 h-10 p-0 flex items-center justify-center"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+      variant="outline"
+      size="sm"
+      onClick={() => deleteMutation.mutate(student.id)}
+      // Temporarily remove disabled to test
+      // disabled={userRole !== "admin" && userRole !== "coach"}
+      className="bg-red-600 text-white hover:bg-red-700 w-10 h-10 p-0 flex items-center justify-center"
+    >
+      <Trash2 className="w-4 h-4" />
+    </Button>
                               </div>
                             </div>
                           </CardContent>
@@ -797,7 +827,7 @@ export function StudentsManager() {
                     <div className="min-w-0">
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Branch:</span> {branches?.find(b => b.id === selectedStudent?.branch_id)?.name || "N/A"}</p>
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Package Type:</span> {selectedStudent?.package_type || "N/A"}</p>
-                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Session Progress:</span> {(selectedStudent?.sessions || 0) - (selectedStudent?.remaining_sessions || 0)} of {selectedStudent?.sessions || 0} attended</p>
+                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Session Progress:</span> {selectedStudent?.sessions ? (selectedStudent.sessions - (selectedStudent.remaining_sessions || 0)) : 0} of {selectedStudent?.sessions || 0} attended</p>
                       <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Remaining Sessions:</span> {selectedStudent?.remaining_sessions || 0}</p>
                     </div>
                   </div>
@@ -979,4 +1009,8 @@ export function StudentsManager() {
       </div>
     </StudentsErrorBoundary>
   );
+}
+
+function useEffect(arg0: () => void, arg1: undefined[]) {
+  throw new Error("Function not implemented.");
 }
