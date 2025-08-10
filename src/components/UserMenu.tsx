@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { LogOut, Settings, User } from "lucide-react";
 
 export function UserMenu() {
-  const { user, userProfile } = useAuth();
+  const { user, role, coachData, logout } = useAuth();
 
   const handleLogout = async () => {
     // Alert confirmation before logout
@@ -23,21 +23,12 @@ export function UserMenu() {
       return;
     }
 
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        toast.error("Error logging out: " + error.message);
-      } else {
-        toast.success("Logged out successfully!");
-      }
-    } catch (error: any) {
-      toast.error("An error occurred: " + error.message);
-    }
+    await logout();
   };
 
   if (!user) return null;
 
-  const displayName = userProfile?.name || user.email || "User";
+  const displayName = coachData?.name || user.email || "User";
   const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase();
 
   return (
