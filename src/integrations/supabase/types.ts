@@ -427,6 +427,22 @@ export type Database = {
           conflict_details: string
         }[]
       }
+      get_current_coach_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_current_user_role: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      is_user_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      is_user_coach_or_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
     }
     Enums: {
       attendance_status: "present" | "absent" | "pending"
