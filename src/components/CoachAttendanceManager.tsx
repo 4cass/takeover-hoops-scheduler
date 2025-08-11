@@ -170,68 +170,68 @@ export function CoachAttendanceManager() {
     }
   });
 
-  const { data: sessions } = useQuery<TrainingSession[]>({
-    queryKey: ["coach-sessions", coachId, branchFilter, packageFilter, statusFilter, sessionSearchTerm],
-    queryFn: async () => {
-      if (!coachId) return [];
-      console.log("Fetching sessions for coach:", coachId);
-      
-      const coachSessionsRes = await supabase
-        .from('session_coaches')
-        .select('session_id')
-        .eq('coach_id', coachId);
+const { data: sessions } = useQuery<TrainingSession[]>({
+  queryKey: ["coach-sessions", coachId, branchFilter, packageFilter, statusFilter, sessionSearchTerm],
+  queryFn: async () => {
+    if (!coachId) return [];
+    console.log("Fetching sessions for coach:", coachId);
+    
+    const coachSessionsRes = await supabase
+      .from('session_coaches')
+      .select('session_id')
+      .eq('coach_id', coachId);
 
-      if (coachSessionsRes.error) {
-        console.error("Error fetching coach sessions:", coachSessionsRes.error);
-        throw coachSessionsRes.error;
-      }
+    if (coachSessionsRes.error) {
+      console.error("Error fetching coach sessions:", coachSessionsRes.error);
+      throw coachSessionsRes.error;
+    }
 
-      const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
-      console.log("Session IDs from session_coaches:", sessionIds);
+    const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
+    console.log("Session IDs from session_coaches:", sessionIds);
 
-      const today = new Date();
-      const pastDate = subDays(today, 30);
-      const futureDate = addDays(today, 30);
-      
-      // Explicitly type the query to avoid TS2589
-      let query: any = supabase
-        .from("training_sessions")
-        .select(`
-          id, date, start_time, end_time, branch_id, status, package_id,
-          branches (name),
-          packages (name),
-          session_participants (students (name))
-        `)
-        .in("id", sessionIds)
-        .gte("date", format(pastDate, 'yyyy-MM-dd'))
-        .lte("date", format(futureDate, 'yyyy-MM-dd'));
+    const today = new Date();
+    const pastDate = subDays(today, 30);
+    const futureDate = addDays(today, 30);
+    
+    // Remove 'any' type and let TypeScript infer from Supabase client
+    let query = supabase
+      .from("training_sessions")
+      .select(`
+        id, date, start_time, end_time, branch_id, status, package_id, package_type,
+        branches (name),
+        session_participants (students (name))
+      `)
+      .in("id", sessionIds)
+      .gte("date", format(pastDate, 'yyyy-MM-dd'))
+      .lte("date", format(futureDate, 'yyyy-MM-dd'));
 
-      if (branchFilter !== "all") {
-        query = query.eq('branch_id', branchFilter);
-      }
-      if (packageFilter !== "All" && typeof packageFilter === "string") {
-        query = query.eq('package_id', packageFilter);
-      }
-      if (statusFilter !== "all") {
-        query = query.eq('status', statusFilter);
-      }
+    // Apply filters with type-safe conditions
+    if (branchFilter !== "all") {
+      query = query.eq('branch_id', branchFilter);
+    }
+    if (packageFilter !== "All" && typeof packageFilter === "string") {
+      query = (query as any).eq('package_id', packageFilter);
+    }
+    if (statusFilter !== "all") {
+      query = query.eq('status', statusFilter);
+    }
 
-      const { data, error } = await query.order("date", { ascending: false });
-      
-      if (error) {
-        console.error("Error fetching sessions:", error);
-        throw error;
-      }
-      
-      console.log("Fetched sessions:", data);
-      return (data || []).map((session: any) => ({
-        ...session,
-        package_name: session.packages?.name || null,
-        package_id: session.package_id || null,
-      })) as TrainingSession[];
-    },
-    enabled: !!coachId,
-  });
+    const { data, error } = await query.order("date", { ascending: false });
+    
+    if (error) {
+      console.error("Error fetching sessions:", error);
+      throw error;
+    }
+    
+    console.log("Fetched sessions raw:", data);
+    return (data || []).map((session: any) => ({
+      ...session,
+      package_name: session.package_type || session.packages?.name || (session.packages && session.packages.length > 0 ? session.packages[0].name : null) || null,
+      package_id: session.package_id || null,
+    })) as TrainingSession[];
+  },
+  enabled: !!coachId,
+});
 
   const { data: sessionCoaches } = useQuery({
     queryKey: ["session-coaches", selectedSession],
