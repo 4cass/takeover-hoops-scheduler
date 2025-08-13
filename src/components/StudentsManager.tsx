@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,7 +98,7 @@ export function StudentsManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const [recordsCurrentPage, setRecordsCurrentPage] = useState(1);
   const itemsPerPage = 6;
-  const [userRole, setUserRole] = useState<string>("user"); // Placeholder for user role (e.g., "admin", "coach", "user")
+  const { role } = useAuth();
 
   const queryClient = useQueryClient();
 
@@ -545,32 +546,34 @@ const deleteMutation = useMutation({
                         </Select>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="flex flex-col space-y-2 min-w-0">
-                          <Label htmlFor="sessions" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Total Sessions</Label>
-                          <Input
-                            id="sessions"
-                            type="number"
-                            min="0"
-                            value={formData.sessions}
-                            onChange={(e) => setFormData((prev) => ({ ...prev, sessions: parseInt(e.target.value) || 0 }))}
-                            className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                            style={{ borderColor: '#BEA877' }}
-                          />
-                        </div>
-                        <div className="flex flex-col space-y-2 min-w-0">
-                          <Label htmlFor="remaining_sessions" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Remaining Sessions</Label>
-                          <Input
-                            id="remaining_sessions"
-                            type="number"
-                            min="0"
-                            value={formData.remaining_sessions}
-                            onChange={(e) =>
-                              setFormData((prev) => ({ ...prev, remaining_sessions: parseInt(e.target.value) || 0 }))
-                            }
-                            className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                            style={{ borderColor: '#BEA877' }}
-                          />
-                        </div>
+                         <div className="flex flex-col space-y-2 min-w-0">
+                           <Label htmlFor="sessions" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Total Sessions</Label>
+                           <Input
+                             id="sessions"
+                             type="number"
+                             min="0"
+                             value={formData.sessions}
+                             onChange={(e) => setFormData((prev) => ({ ...prev, sessions: parseInt(e.target.value) || 0 }))}
+                             className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                             style={{ borderColor: '#BEA877' }}
+                             disabled={role === 'coach'}
+                           />
+                         </div>
+                         <div className="flex flex-col space-y-2 min-w-0">
+                           <Label htmlFor="remaining_sessions" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Remaining Sessions</Label>
+                           <Input
+                             id="remaining_sessions"
+                             type="number"
+                             min="0"
+                             value={formData.remaining_sessions}
+                             onChange={(e) =>
+                               setFormData((prev) => ({ ...prev, remaining_sessions: parseInt(e.target.value) || 0 }))
+                             }
+                             className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                             style={{ borderColor: '#BEA877' }}
+                             disabled={role === 'coach'}
+                           />
+                         </div>
                       </div>
                       <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
                         <Button

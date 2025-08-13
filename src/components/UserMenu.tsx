@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { LogOut, Settings, User } from "lucide-react";
 
 export function UserMenu() {
-  const { user, userProfile } = useAuth();
+  const { user, coachData } = useAuth();
 
   const handleLogout = async () => {
     // Alert confirmation before logout
@@ -37,7 +37,7 @@ export function UserMenu() {
 
   if (!user) return null;
 
-  const displayName = userProfile?.name || user.email || "User";
+  const displayName = coachData?.name || user.email || "User";
   const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase();
 
   return (
