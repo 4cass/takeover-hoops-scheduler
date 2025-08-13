@@ -244,8 +244,8 @@ export function StudentsManager() {
           name: student.name,
           email: student.email,
           phone: student.phone || null,
-          sessions: defaultSessions,
-          remaining_sessions: defaultSessions,
+          sessions: role === 'admin' ? student.sessions : defaultSessions,
+          remaining_sessions: role === 'admin' ? student.remaining_sessions : defaultSessions,
           branch_id: student.branch_id,
           package_type: student.package_type,
         }])
