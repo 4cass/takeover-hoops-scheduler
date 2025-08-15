@@ -945,7 +945,6 @@ const { data: sessions, isLoading, error } = useQuery({
                               value={formData.date}
                               onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
                               required
-                              min={getTodayDate()}
                               className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
                               disabled={!formData.branch_id}
                               style={{ borderColor: '#BEA877' }}
