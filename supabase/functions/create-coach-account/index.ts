@@ -76,8 +76,7 @@ const handler = async (req: Request): Promise<Response> => {
       .update({
         name: name,
         email: email,
-        phone: phone || null,
-        package_type: package_type || null
+        phone: phone || null
       })
       .eq("id", coachRecord.id)
       .select()
