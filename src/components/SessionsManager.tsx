@@ -1216,28 +1216,30 @@ const { data: sessions, isLoading, error } = useQuery({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex flex-col space-y-2 min-w-0">
-                  <Label htmlFor="filter-coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                    <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                    Coach
-                  </Label>
-                  <Select
-                    value={coachFilter}
-                    onValueChange={(value) => setCoachFilter(value)}
-                  >
-                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                      <SelectValue placeholder="Select coach" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All" className="text-xs sm:text-sm">All Coaches</SelectItem>
-                      {coaches?.map(coach => (
-                        <SelectItem key={coach.id} value={coach.id} className="text-xs sm:text-sm">
-                          {coach.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {role === 'admin' && (
+                  <div className="flex flex-col space-y-2 min-w-0">
+                    <Label htmlFor="filter-coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                      <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                      Coach
+                    </Label>
+                    <Select
+                      value={coachFilter}
+                      onValueChange={(value) => setCoachFilter(value)}
+                    >
+                      <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                        <SelectValue placeholder="Select coach" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All" className="text-xs sm:text-sm">All Coaches</SelectItem>
+                        {coaches?.map(coach => (
+                          <SelectItem key={coach.id} value={coach.id} className="text-xs sm:text-sm">
+                            {coach.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="flex flex-col space-y-2 min-w-0">
                   <Label htmlFor="sort-order" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
                     <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
