@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
@@ -350,6 +350,7 @@ export type Database = {
           end_time: string
           id: string
           notes: string | null
+          package_id: string | null
           package_type: string | null
           start_time: string
           status: Database["public"]["Enums"]["session_status"]
@@ -362,6 +363,7 @@ export type Database = {
           end_time: string
           id?: string
           notes?: string | null
+          package_id?: string | null
           package_type?: string | null
           start_time: string
           status?: Database["public"]["Enums"]["session_status"]
@@ -374,6 +376,7 @@ export type Database = {
           end_time?: string
           id?: string
           notes?: string | null
+          package_id?: string | null
           package_type?: string | null
           start_time?: string
           status?: Database["public"]["Enums"]["session_status"]
@@ -387,6 +390,13 @@ export type Database = {
             referencedRelation: "branches"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "training_sessions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -394,29 +404,39 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      check_scheduling_conflicts: {
-        Args:
-          | {
-              p_date: string
-              p_start_time: string
-              p_end_time: string
+      check_scheduling_conflicts:
+        | {
+            Args: {
               p_coach_id: string
-              p_student_ids: string[]
-              p_session_id?: string
-            }
-          | {
               p_date: string
-              p_start_time: string
               p_end_time: string
-              p_coach_ids: string[]
-              p_student_ids: string[]
               p_session_id?: string
+              p_start_time: string
+              p_student_ids: string[]
             }
-        Returns: {
-          conflict_type: string
-          conflict_details: string
-        }[]
-      }
+            Returns: {
+              conflict_details: string
+              conflict_type: string
+            }[]
+          }
+        | {
+            Args: {
+              p_coach_ids: string[]
+              p_date: string
+              p_end_time: string
+              p_session_id?: string
+              p_start_time: string
+              p_student_ids: string[]
+            }
+            Returns: {
+              conflict_details: string
+              conflict_type: string
+            }[]
+          }
+      get_current_coach_id: { Args: never; Returns: string }
+      get_current_user_role: { Args: never; Returns: string }
+      is_user_admin: { Args: never; Returns: boolean }
+      is_user_coach_or_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       attendance_status: "present" | "absent" | "pending"
