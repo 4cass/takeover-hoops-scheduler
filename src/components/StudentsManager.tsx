@@ -9,21 +9,26 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Eye, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface Student {
   id: string;
   name: string;
   email: string;
   phone: string | null;
-  sessions: number | null; // Changed from total_sessions to sessions
+  sessions: number | null;
   remaining_sessions: number | null;
   branch_id: string | null;
   package_type: string | null;
   created_at: string;
+  enrollment_date: string | null;
+  expiration_date: string | null;
 }
 
 interface Branch {
@@ -248,6 +253,8 @@ export function StudentsManager() {
           remaining_sessions: role === 'admin' ? student.remaining_sessions : defaultSessions,
           branch_id: student.branch_id,
           package_type: student.package_type,
+          enrollment_date: student.enrollment_date ? format(student.enrollment_date, 'yyyy-MM-dd') : null,
+          expiration_date: student.expiration_date ? format(student.expiration_date, 'yyyy-MM-dd') : null,
         }])
         .select()
         .single();
@@ -277,6 +284,8 @@ export function StudentsManager() {
           remaining_sessions: student.remaining_sessions,
           branch_id: student.branch_id,
           package_type: student.package_type,
+          enrollment_date: student.enrollment_date ? format(student.enrollment_date, 'yyyy-MM-dd') : null,
+          expiration_date: student.expiration_date ? format(student.expiration_date, 'yyyy-MM-dd') : null,
         })
         .eq("id", id)
         .select()
@@ -346,6 +355,8 @@ const deleteMutation = useMutation({
       remaining_sessions: 8,
       branch_id: null,
       package_type: null,
+      enrollment_date: null,
+      expiration_date: null,
     });
     setEditingStudent(null);
     setIsDialogOpen(false);
@@ -370,6 +381,8 @@ const deleteMutation = useMutation({
       remaining_sessions: student.remaining_sessions || 0,
       branch_id: student.branch_id || null,
       package_type: student.package_type || null,
+      enrollment_date: student.enrollment_date ? new Date(student.enrollment_date) : null,
+      expiration_date: student.expiration_date ? new Date(student.expiration_date) : null,
     });
     setIsDialogOpen(true);
   };
@@ -390,6 +403,8 @@ const deleteMutation = useMutation({
     remaining_sessions: 8,
     branch_id: null as string | null,
     package_type: null as string | null,
+    enrollment_date: null as Date | null,
+    expiration_date: null as Date | null,
   });
 
   const getPackageBadgeColor = (packageType: string | null) => {
@@ -575,6 +590,62 @@ const deleteMutation = useMutation({
                            />
                          </div>
                       </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="flex flex-col space-y-2 min-w-0">
+                          <Label className="text-gray-700 font-medium text-xs sm:text-sm truncate">Enrollment Date</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
+                                  !formData.enrollment_date && "text-muted-foreground"
+                                )}
+                                style={{ borderColor: '#BEA877' }}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {formData.enrollment_date ? format(formData.enrollment_date, "MM/dd/yyyy") : <span>Pick a date</span>}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <CalendarComponent
+                                mode="single"
+                                selected={formData.enrollment_date || undefined}
+                                onSelect={(date) => setFormData((prev) => ({ ...prev, enrollment_date: date || null }))}
+                                initialFocus
+                                className={cn("p-3 pointer-events-auto")}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <div className="flex flex-col space-y-2 min-w-0">
+                          <Label className="text-gray-700 font-medium text-xs sm:text-sm truncate">Expiration Date</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
+                                  !formData.expiration_date && "text-muted-foreground"
+                                )}
+                                style={{ borderColor: '#BEA877' }}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {formData.expiration_date ? format(formData.expiration_date, "MM/dd/yyyy") : <span>Pick a date</span>}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <CalendarComponent
+                                mode="single"
+                                selected={formData.expiration_date || undefined}
+                                onSelect={(date) => setFormData((prev) => ({ ...prev, expiration_date: date || null }))}
+                                initialFocus
+                                className={cn("p-3 pointer-events-auto")}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      </div>
                       <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
                         <Button
                           type="button"
@@ -728,6 +799,14 @@ const deleteMutation = useMutation({
                               <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
                               <span className="text-xs sm:text-sm font-medium">{student.remaining_sessions || 0} Remaining Sessions</span>
                             </div>
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Enrolled:</span> {student.enrollment_date ? format(new Date(student.enrollment_date), 'MM/dd/yyyy') : 'N/A'}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Expires:</span> {student.expiration_date ? format(new Date(student.expiration_date), 'MM/dd/yyyy') : 'N/A'}</span>
+                            </div>
                             <div className="flex items-center justify-end flex-wrap gap-2">
                               <div className="flex space-x-2">
                                 <Button
@@ -832,6 +911,8 @@ const deleteMutation = useMutation({
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Package Type:</span> {selectedStudent?.package_type || "N/A"}</p>
                       <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Session Progress:</span> {selectedStudent?.sessions ? (selectedStudent.sessions - (selectedStudent.remaining_sessions || 0)) : 0} of {selectedStudent?.sessions || 0} attended</p>
                       <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Remaining Sessions:</span> {selectedStudent?.remaining_sessions || 0}</p>
+                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Enrollment Date:</span> {selectedStudent?.enrollment_date ? format(new Date(selectedStudent.enrollment_date), 'MM/dd/yyyy') : "N/A"}</p>
+                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Expiration Date:</span> {selectedStudent?.expiration_date ? format(new Date(selectedStudent.expiration_date), 'MM/dd/yyyy') : "N/A"}</p>
                     </div>
                   </div>
                   <div className="mt-3">
