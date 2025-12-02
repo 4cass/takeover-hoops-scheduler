@@ -300,6 +300,8 @@ export type Database = {
           branch_id: string | null
           created_at: string
           email: string
+          enrollment_date: string | null
+          expiration_date: string | null
           id: string
           name: string
           package_type: string | null
@@ -312,6 +314,8 @@ export type Database = {
           branch_id?: string | null
           created_at?: string
           email: string
+          enrollment_date?: string | null
+          expiration_date?: string | null
           id?: string
           name: string
           package_type?: string | null
@@ -324,6 +328,8 @@ export type Database = {
           branch_id?: string | null
           created_at?: string
           email?: string
+          enrollment_date?: string | null
+          expiration_date?: string | null
           id?: string
           name?: string
           package_type?: string | null
