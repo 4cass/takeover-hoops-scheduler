@@ -25,7 +25,7 @@ export function CoachDashboardStats() {
     queryKey: ['coach-dashboard-stats', coachData?.id],
     queryFn: async () => {
       console.log("Fetching coach stats for ID:", coachData?.id);
-      if (!coachData?.id) return { sessions: 0, attendedSessions: 0 };
+      if (!coachData?.id) return { scheduledSessions: 0, completedSessions: 0 };
 
       // Fetch session IDs from session_coaches
       const coachSessionsRes = await supabase
@@ -41,54 +41,39 @@ export function CoachDashboardStats() {
       const sessionIds = coachSessionsRes.data?.map(s => s.session_id) || [];
       console.log("Session IDs from session_coaches:", sessionIds);
 
-      // Fetch sessions
-      const sessionRes = await supabase
+      if (sessionIds.length === 0) {
+        return { scheduledSessions: 0, completedSessions: 0 };
+      }
+
+      // Fetch scheduled sessions count
+      const scheduledRes = await supabase
         .from('training_sessions')
         .select('id')
         .in('id', sessionIds)
         .eq('status', 'scheduled');
 
-      if (sessionRes.error) {
-        console.error("Error fetching sessions:", sessionRes.error);
-        throw sessionRes.error;
+      if (scheduledRes.error) {
+        console.error("Error fetching scheduled sessions:", scheduledRes.error);
+        throw scheduledRes.error;
       }
 
-      console.log("Sessions result:", sessionRes.data);
+      // Fetch completed sessions count
+      const completedRes = await supabase
+        .from('training_sessions')
+        .select('id')
+        .in('id', sessionIds)
+        .eq('status', 'completed');
 
-      // Fetch student IDs from session_participants
-      const participantsRes = await supabase
-        .from('session_participants')
-        .select('student_id')
-        .in('session_id', sessionIds);
-
-      if (participantsRes.error) {
-        console.error("Error fetching participants:", participantsRes.error);
-        throw participantsRes.error;
+      if (completedRes.error) {
+        console.error("Error fetching completed sessions:", completedRes.error);
+        throw completedRes.error;
       }
 
-      const studentIds = participantsRes.data?.map(p => p.student_id) || [];
-      console.log("Student IDs:", studentIds);
-
-      // Fetch student data
-      const studentsRes = await supabase
-        .from('students')
-        .select('sessions, remaining_sessions')
-        .in('id', studentIds);
-
-      if (studentsRes.error) {
-        console.error("Error fetching students:", studentsRes.error);
-        throw studentsRes.error;
-      }
-
-      console.log("Students result:", studentsRes.data);
-
-      const attendedSessions = studentsRes.data?.reduce((total, student) => {
-        return total + ((student.sessions || 0) - (student.remaining_sessions || 0));
-      }, 0) || 0;
+      console.log("Scheduled sessions:", scheduledRes.data?.length, "Completed sessions:", completedRes.data?.length);
 
       return {
-        sessions: sessionRes.data?.length || 0,
-        attendedSessions
+        scheduledSessions: scheduledRes.data?.length || 0,
+        completedSessions: completedRes.data?.length || 0
       };
     },
     enabled: !!coachData?.id && !loading
@@ -234,16 +219,16 @@ export function CoachDashboardStats() {
 
   const statCards = [
     {
-      title: "My Scheduled Sessions",
-      value: stats?.sessions || 0,
+      title: "Scheduled Sessions",
+      value: stats?.scheduledSessions || 0,
       icon: Calendar,
       color: "text-accent",
       bgGradient: "from-accent/10 to-accent/5",
       borderColor: "border-foreground"
     },
     {
-      title: "Total Attended Sessions",
-      value: stats?.attendedSessions || 0,
+      title: "Completed Sessions",
+      value: stats?.completedSessions || 0,
       icon: CheckCircle,
       color: "text-green-600",
       bgGradient: "from-green-50 to-green-25",
