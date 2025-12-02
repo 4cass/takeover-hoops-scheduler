@@ -19,7 +19,7 @@ const menuItems = [
   { title: "Calendar", icon: Calendar, value: "calendar", allowedRoles: ['admin', 'coach'] },
   { title: "Sessions", icon: ClipboardList, value: "sessions", allowedRoles: ['admin', 'coach'] }, // Updated to include 'coach'
   { title: "Attendance", icon: UserCheck, value: "attendance", allowedRoles: ['admin', 'coach'] },
-  { title: "Players", icon: Users, value: "students", allowedRoles: ['admin', 'coach'] }, // Updated to include 'coach'
+  { title: "Players", icon: Users, value: "students", allowedRoles: ['admin'] },
   { title: "Coaches", icon: BookOpen, value: "coaches", allowedRoles: ['admin'] },
   { title: "Branches", icon: MapPin, value: "branches", allowedRoles: ['admin'] },
   { title: "Packages", icon: Package, value: "packages", allowedRoles: ['admin'] },
