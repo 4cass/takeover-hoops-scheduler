@@ -814,17 +814,18 @@ const { data: sessions, isLoading, error } = useQuery({
                   View and manage all basketball training sessions
                 </CardDescription>
               </div>
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button 
-                    onClick={() => resetForm()}
-                    className="bg-accent hover:bg-[#8e7a3f] text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                    style={{ backgroundColor: '#BEA877' }}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Schedule New Session
-                  </Button>
-                </DialogTrigger>
+              {role === 'admin' && (
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      onClick={() => resetForm()}
+                      className="bg-accent hover:bg-[#8e7a3f] text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                      style={{ backgroundColor: '#BEA877' }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Schedule New Session
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-hidden">
                   <ScrollArea className="max-h-[85vh] overflow-y-auto">
                     <div className="p-3 sm:p-4 md:p-5">
@@ -1143,6 +1144,7 @@ const { data: sessions, isLoading, error } = useQuery({
                   </ScrollArea>
                 </DialogContent>
               </Dialog>
+              )}
             </div>
           </CardHeader>
           <CardContent className="p-3 sm:p-4 md:p-5">
