@@ -11,6 +11,7 @@ import { StudentsManager } from "@/components/StudentsManager";
 import { CoachesManager } from "@/components/CoachesManager";
 import { BranchesManager } from "@/components/BranchesManager";
 import { PackagesManager } from "@/components/PackagesManager";
+import StudentPaymentPage from "./StudentPaymentPage";
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Settings } from "lucide-react";
@@ -71,7 +72,7 @@ export default function Dashboard() {
     path.includes("/dashboard/calendar") ? "calendar" :
     path.includes("/dashboard/sessions") ? "sessions" :
     path.includes("/dashboard/attendance") ? "attendance" :
-    path.includes("/dashboard/students") ? "students" :
+    (path.includes("/dashboard/students") && !path.includes("/payments")) ? "students" :
     path.includes("/dashboard/coaches") ? "coaches" :
     path.includes("/dashboard/branches") ? "branches" :
     path.includes("/dashboard/packages") ? "packages" :
@@ -119,6 +120,10 @@ export default function Dashboard() {
               <Route 
                 path="students" 
                 element={<StudentsManager />} // Render for both admin and coach
+              />
+              <Route 
+                path="students/:studentId/payments" 
+                element={<StudentPaymentPage />} // Render for both admin and coach
               />
               
               {role === 'admin' && (

@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Mail, Phone, Eye } from "lucide-react";
+import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Mail, Phone, Eye, Download } from "lucide-react";
+import { exportToCSV } from "@/utils/exportUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -496,9 +497,34 @@ export function CoachesManager() {
                     </div>
                   </div>
                 </div>
-                <p className="text-xs sm:text-sm text-gray-600 mt-3">
-                  Showing {filteredCoaches.length} coach{filteredCoaches.length === 1 ? '' : 'es'}
-                </p>
+                <div className="flex items-center justify-between mt-3">
+                  <p className="text-xs sm:text-sm text-gray-600">
+                    Showing {filteredCoaches.length} coach{filteredCoaches.length === 1 ? '' : 'es'}
+                  </p>
+                  {filteredCoaches.length > 0 && (
+                    <Button
+                      onClick={() => {
+                        const headers = ['Name', 'Email', 'Phone', 'Created At'];
+                        exportToCSV(
+                          filteredCoaches,
+                          'coaches_report',
+                          headers,
+                          (coach) => [
+                            coach.name || '',
+                            coach.email || '',
+                            coach.phone || '',
+                            coach.created_at ? format(new Date(coach.created_at), 'yyyy-MM-dd') : ''
+                          ]
+                        );
+                        toast.success('Coaches report exported to Excel successfully');
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm transition-all duration-300"
+                    >
+                      <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                      Export Excel
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {filteredCoaches.length === 0 ? (

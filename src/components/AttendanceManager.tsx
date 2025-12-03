@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { CheckCircle, XCircle, Clock, Calendar, MapPin, User, Users, Filter, Search, ChevronLeft, ChevronRight, Eye, Pencil, Activity, AlertCircle, Edit3, GraduationCap, LogIn, LogOut, Package, Save, UserCheck, X } from "lucide-react";
+import { CheckCircle, XCircle, Clock, Calendar, MapPin, User, Users, Filter, Search, ChevronLeft, ChevronRight, Eye, Pencil, Activity, AlertCircle, Edit3, GraduationCap, LogIn, LogOut, Package, Save, UserCheck, X, Download } from "lucide-react";
+import { exportToCSV } from "@/utils/exportUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
@@ -79,12 +80,17 @@ interface AttendanceRecord {
   student_id: string;
   status: AttendanceStatus;
   marked_at: string | null;
-  students: { name: string };
+  session_duration: number | null;
+  students: { 
+    name: string;
+    package_type: string | null;
+  };
 }
 
 interface UpdateAttendanceVariables {
   recordId: string;
   status: AttendanceStatus;
+  session_duration?: number;
 }
 
 // Utility functions
@@ -148,6 +154,9 @@ export function AttendanceManager() {
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [coachFilter, setCoachFilter] = useState<string>("All");
   const [sortOrder, setSortOrder] = useState<"Newest to Oldest" | "Oldest to Newest">("Newest to Oldest");
+  const [showDurationDialog, setShowDurationDialog] = useState(false);
+  const [pendingAttendanceUpdate, setPendingAttendanceUpdate] = useState<{ recordId: string; status: AttendanceStatus } | null>(null);
+  const [selectedDuration, setSelectedDuration] = useState<number>(0);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -280,7 +289,8 @@ export function AttendanceManager() {
           student_id,
           status,
           marked_at,
-          students (name)
+          session_duration,
+          students (name, package_type)
         `)
         .eq("session_id", selectedSession)
         .order("created_at", { ascending: true });
@@ -297,10 +307,31 @@ export function AttendanceManager() {
   });
 
   const updateAttendance = useMutation<void, Error, UpdateAttendanceVariables>({
-    mutationFn: async ({ recordId, status }) => {
+    mutationFn: async ({ recordId, status, session_duration }) => {
+      const updateData: any = { 
+        status, 
+        marked_at: status !== "pending" ? new Date().toISOString() : null 
+      };
+      
+      // Always explicitly set session_duration when marking as present
+      // This prevents the database default (1.0) from being used
+      if (status === 'present') {
+        if (session_duration !== undefined && session_duration !== null && session_duration > 0) {
+          // Use the provided duration (for personal packages)
+          updateData.session_duration = Number(session_duration); // Ensure it's a number
+          console.log('Setting session_duration to:', updateData.session_duration, 'type:', typeof updateData.session_duration);
+        } else {
+          // For non-personal packages marking as present, default to 1.0
+          updateData.session_duration = 1.0;
+          console.log('Using default session_duration: 1.0 for non-personal package');
+        }
+      }
+      
+      console.log('Updating attendance with data:', updateData);
+      console.log('session_duration value being sent:', updateData.session_duration, 'type:', typeof updateData.session_duration);
       const { error } = await supabase
         .from("attendance_records")
-        .update({ status, marked_at: status !== "pending" ? new Date().toISOString() : null })
+        .update(updateData)
         .eq("id", recordId);
       if (error) {
         console.error("Error updating attendance:", error);
@@ -310,6 +341,7 @@ export function AttendanceManager() {
     onSuccess: () => {
       toast.success("Attendance updated");
       queryClient.invalidateQueries({ queryKey: ["attendance", selectedSession] });
+      queryClient.invalidateQueries({ queryKey: ["students"] });
     },
     onError: (error) => {
       console.error("Attendance update failed:", error);
@@ -489,8 +521,59 @@ export function AttendanceManager() {
   const pendingCount = filteredAttendanceRecords.filter((r) => r.status === "pending").length;
 
   const handleAttendanceChange = (recordId: string, status: AttendanceStatus) => {
-    updateAttendance.mutate({ recordId, status });
+    const record = attendanceRecords?.find(r => r.id === recordId);
+    const packageType = record?.students?.package_type?.toLowerCase() || '';
+    const isPersonalPackage = packageType.includes('personal');
+    
+    // If marking as present and package is personal, show duration dialog
+    if (status === 'present' && isPersonalPackage) {
+      setPendingAttendanceUpdate({ recordId, status });
+      setSelectedDuration(record?.session_duration || 0);
+      setShowDurationDialog(true);
+    } else {
+      // For non-personal packages or non-present status, update directly
+      updateAttendance.mutate({ recordId, status });
+    }
   };
+
+  const handleDurationConfirm = () => {
+    if (pendingAttendanceUpdate) {
+      console.log('handleDurationConfirm - selectedDuration:', selectedDuration, 'type:', typeof selectedDuration);
+      if (selectedDuration <= 0) {
+        console.error('Invalid duration selected:', selectedDuration);
+        toast.error('Please select a valid duration');
+        return;
+      }
+      updateAttendance.mutate({ 
+        recordId: pendingAttendanceUpdate.recordId, 
+        status: pendingAttendanceUpdate.status,
+        session_duration: selectedDuration
+      });
+      setShowDurationDialog(false);
+      setPendingAttendanceUpdate(null);
+      setSelectedDuration(0); // Reset after use
+    }
+  };
+
+  // Generate duration options (30mins, 1hr, 1hr 30mins, 2hrs, etc.)
+  const durationOptions = Array.from({ length: 12 }, (_, i) => {
+    // Start from 30 mins (0.5 hours), then increment by 30 mins each time
+    const totalMinutes = 30 + (i * 30); // 30, 60, 90, 120, etc.
+    const durationValue = totalMinutes / 60; // Convert to hours (0.5 = 30mins, 1.0 = 1hr, 1.5 = 1hr 30mins)
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    
+    let label = '';
+    if (hours === 0) {
+      label = '30 mins';
+    } else if (minutes === 0) {
+      label = hours === 1 ? '1 hr' : `${hours} hrs`;
+    } else {
+      label = hours === 1 ? '1 hr 30 mins' : `${hours} hrs 30 mins`;
+    }
+    
+    return { value: durationValue, label };
+  });
 
   const getAttendanceIcon = (status: AttendanceStatus) => {
     switch (status) {
@@ -697,7 +780,38 @@ export function AttendanceManager() {
                   </Select>
                 </div>
               </div>
-              <p className="text-xs sm:text-sm text-gray-600 mt-3">Showing {filteredSessions.length} session{filteredSessions.length === 1 ? "" : "s"}</p>
+              <div className="flex items-center justify-between mt-3">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Showing {filteredSessions.length} session{filteredSessions.length === 1 ? "" : "s"}
+                </p>
+                {filteredSessions.length > 0 && (
+                  <Button
+                    onClick={() => {
+                      const headers = ['Date', 'Start Time', 'End Time', 'Branch', 'Package Type', 'Status', 'Coaches', 'Participants Count'];
+                      exportToCSV(
+                        filteredSessions,
+                        'attendance_sessions_report',
+                        headers,
+                        (session) => [
+                          format(parseISO(session.date), 'yyyy-MM-dd'),
+                          session.start_time || '',
+                          session.end_time || '',
+                          session.branches?.name || '',
+                          session.package_type || '',
+                          session.status || '',
+                          session.session_coaches?.map(sc => sc.coaches?.name).filter(Boolean).join('; ') || '',
+                          String(session.session_participants?.length || 0)
+                        ]
+                      );
+                      toast.success('Attendance sessions report exported to Excel successfully');
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm transition-all duration-300"
+                  >
+                    <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                    Export Excel
+                  </Button>
+                )}
+              </div>
             </div>
 
             {filteredSessions.length === 0 ? (
@@ -1178,6 +1292,30 @@ export function AttendanceManager() {
                         </p>
                       ) : (
                         <div className="space-y-3">
+                          <div className="flex justify-end mb-2">
+                            <Button
+                              onClick={() => {
+                                const headers = ['Student Name', 'Package Type', 'Status', 'Session Duration', 'Marked At'];
+                                exportToCSV(
+                                  filteredAttendanceRecords,
+                                  'attendance_records_report',
+                                  headers,
+                                  (record) => [
+                                    record.students?.name || '',
+                                    record.students?.package_type || '',
+                                    record.status || '',
+                                    record.session_duration ? String(record.session_duration) : '',
+                                    record.marked_at ? format(parseISO(record.marked_at), 'yyyy-MM-dd HH:mm') : ''
+                                  ]
+                                );
+                                toast.success('Attendance records report exported to Excel successfully');
+                              }}
+                              className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm transition-all duration-300"
+                            >
+                              <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                              Export CSV
+                            </Button>
+                          </div>
                           {filteredAttendanceRecords.map((record) => (
                             <div key={record.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-white rounded-lg border border-gray-200">
                               <div className="flex items-center space-x-3">
@@ -1245,6 +1383,73 @@ export function AttendanceManager() {
                   style={{ backgroundColor: "#BEA877" }}
                 >
                   Save
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-md border-2 border-gray-200 bg-white shadow-lg p-3 sm:p-4 md:p-5">
+            <DialogHeader>
+              <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
+                Session Duration
+              </DialogTitle>
+              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
+                Select the duration of this session. Each hour equals 1 session.
+              </DialogDescription>
+            </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex flex-col space-y-2">
+                  <Label className="text-gray-700 font-medium text-xs sm:text-sm">
+                    Duration
+                  </Label>
+                  <Select
+                    value={selectedDuration > 0 ? selectedDuration.toString() : undefined}
+                    onValueChange={(value) => {
+                      const duration = parseFloat(value);
+                      console.log('Duration selected:', value, 'parsed as:', duration);
+                      setSelectedDuration(duration);
+                    }}
+                  >
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {durationOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value.toString()} className="text-xs sm:text-sm">
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {selectedDuration > 0 ? (
+                      <>This will deduct {selectedDuration} {selectedDuration === 1 ? 'session' : 'sessions'} from the student's remaining sessions.</>
+                    ) : (
+                      <>Please select a duration.</>
+                    )}
+                  </p>
+                </div>
+              <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowDurationDialog(false);
+                    setPendingAttendanceUpdate(null);
+                  }}
+                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleDurationConfirm}
+                  disabled={selectedDuration <= 0}
+                  className="bg-green-600 hover:bg-green-700 text-white transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Confirm
                 </Button>
               </div>
             </div>

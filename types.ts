@@ -55,6 +55,7 @@ export type Database = {
           session_id: string
           status: Database["public"]["Enums"]["attendance_status"]
           student_id: string
+          session_duration: number | null
         }
         Insert: {
           created_at?: string
@@ -63,6 +64,7 @@ export type Database = {
           session_id: string
           status?: Database["public"]["Enums"]["attendance_status"]
           student_id: string
+          session_duration?: number | null
         }
         Update: {
           created_at?: string
@@ -71,6 +73,7 @@ export type Database = {
           session_id?: string
           status?: Database["public"]["Enums"]["attendance_status"]
           student_id?: string
+          session_duration?: number | null
         }
         Relationships: [
           {
@@ -307,6 +310,9 @@ export type Database = {
           remaining_sessions: number
           sessions: number | null
           updated_at: string
+          total_training_fee: number | null
+          downpayment: number | null
+          remaining_balance: number | null
         }
         Insert: {
           branch_id?: string | null
@@ -319,6 +325,9 @@ export type Database = {
           remaining_sessions?: number
           sessions?: number | null
           updated_at?: string
+          total_training_fee?: number | null
+          downpayment?: number | null
+          remaining_balance?: number | null
         }
         Update: {
           branch_id?: string | null
@@ -331,6 +340,9 @@ export type Database = {
           remaining_sessions?: number
           sessions?: number | null
           updated_at?: string
+          total_training_fee?: number | null
+          downpayment?: number | null
+          remaining_balance?: number | null
         }
         Relationships: [
           {
@@ -338,6 +350,44 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_payments: {
+        Row: {
+          id: string
+          student_id: string
+          payment_amount: number
+          payment_date: string
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          student_id: string
+          payment_amount: number
+          payment_date?: string
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          student_id?: string
+          payment_amount?: number
+          payment_date?: string
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_payments_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
         ]

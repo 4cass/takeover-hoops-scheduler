@@ -11,8 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import type { Database } from "@/integrations/supabase/types";
-import { Calendar, Clock, Eye, MapPin, Plus, Trash2, User, Users, Filter, Search, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { Calendar, Clock, Eye, MapPin, Plus, Trash2, User, Users, Filter, Search, ChevronLeft, ChevronRight, Pencil, Download } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { exportToCSV } from "@/utils/exportUtils";
 
 type SessionStatus = Database['public']['Enums']['session_status'];
 
@@ -1259,9 +1260,39 @@ const { data: sessions, isLoading, error } = useQuery({
                   </Select>
                 </div>
               </div>
-              <p className="text-xs sm:text-sm text-gray-600 mt-3">
-                Showing {filteredSessions.length} session{filteredSessions.length === 1 ? '' : 's'}
-              </p>
+              <div className="flex items-center justify-between mt-3">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Showing {filteredSessions.length} session{filteredSessions.length === 1 ? '' : 's'}
+                </p>
+                {filteredSessions.length > 0 && (
+                  <Button
+                    onClick={() => {
+                      const headers = ['Date', 'Start Time', 'End Time', 'Branch', 'Package Type', 'Status', 'Coaches', 'Participants', 'Notes'];
+                      exportToCSV(
+                        filteredSessions,
+                        'sessions_report',
+                        headers,
+                        (session) => [
+                          format(parseISO(session.date), 'yyyy-MM-dd'),
+                          session.start_time || '',
+                          session.end_time || '',
+                          session.branches?.name || '',
+                          session.package_type || '',
+                          session.status || '',
+                          session.session_coaches?.map(sc => sc.coaches?.name).filter(Boolean).join('; ') || '',
+                          session.session_participants?.map(sp => sp.students?.name).filter(Boolean).join('; ') || '',
+                          session.notes || ''
+                        ]
+                      );
+                      toast.success('Sessions report exported to Excel successfully');
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm transition-all duration-300"
+                  >
+                    <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                    Export Excel
+                  </Button>
+                )}
+              </div>
             </div>
             {filteredSessions.length === 0 ? (
               <div className="text-center py-10 sm:py-12 md:py-16">

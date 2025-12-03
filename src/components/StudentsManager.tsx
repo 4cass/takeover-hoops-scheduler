@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,8 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Eye, CalendarIcon } from "lucide-react";
+import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Eye, CalendarIcon, DollarSign, CreditCard, Download } from "lucide-react";
+import { exportToCSV } from "@/utils/exportUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -29,7 +31,11 @@ interface Student {
   created_at: string;
   enrollment_date: string | null;
   expiration_date: string | null;
+  total_training_fee: number | null;
+  downpayment: number | null;
+  remaining_balance: number | null;
 }
+
 
 interface Branch {
   id: string;
@@ -104,6 +110,7 @@ export function StudentsManager() {
   const [recordsCurrentPage, setRecordsCurrentPage] = useState(1);
   const itemsPerPage = 6;
   const { role } = useAuth();
+  const navigate = useNavigate();
 
   const queryClient = useQueryClient();
 
@@ -121,6 +128,30 @@ export function StudentsManager() {
         throw error;
       }
       console.log("Fetched students:", data);
+      // Log remaining_sessions values to debug decimal support
+      if (data && data.length > 0) {
+        const sample = data.slice(0, 5).map(s => ({
+          name: s.name,
+          remaining_sessions: s.remaining_sessions,
+          sessions: s.sessions,
+          type: typeof s.remaining_sessions,
+          raw_value: s.remaining_sessions,
+          is_decimal: s.remaining_sessions % 1 !== 0
+        }));
+        console.log("Sample remaining_sessions values:", sample);
+        // Also log any students with decimal values
+        const withDecimals = data.filter(s => s.remaining_sessions != null && s.remaining_sessions % 1 !== 0);
+        if (withDecimals.length > 0) {
+          console.log("Students with decimal remaining_sessions:", withDecimals.map(s => ({
+            name: s.name,
+            remaining: s.remaining_sessions,
+            total: s.sessions,
+            used: (s.sessions || 0) - (s.remaining_sessions || 0)
+          })));
+        } else {
+          console.log("⚠️ No students found with decimal remaining_sessions values. Database column may still be INTEGER.");
+        }
+      }
       return data as Student[];
     },
   });
@@ -303,6 +334,7 @@ export function StudentsManager() {
     },
   });
 
+
 const deleteMutation = useMutation({
   mutationFn: async (id: string) => {
     try {
@@ -362,6 +394,7 @@ const deleteMutation = useMutation({
     setIsDialogOpen(false);
   };
 
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingStudent) {
@@ -385,6 +418,10 @@ const deleteMutation = useMutation({
       expiration_date: student.expiration_date ? new Date(student.expiration_date) : null,
     });
     setIsDialogOpen(true);
+  };
+
+  const handleAddPayment = (student: Student) => {
+    navigate(`/dashboard/students/${student.id}/payments`);
   };
 
   const handleShowRecords = (student: Student) => {
@@ -738,9 +775,39 @@ const deleteMutation = useMutation({
                     </Select>
                   </div>
                 </div>
-                <p className="text-xs sm:text-sm text-gray-600 mt-3">
-                  Showing {filteredStudents.length} player{filteredStudents.length === 1 ? '' : 's'}
-                </p>
+                <div className="flex items-center justify-between mt-3">
+                  <p className="text-xs sm:text-sm text-gray-600">
+                    Showing {filteredStudents.length} player{filteredStudents.length === 1 ? '' : 's'}
+                  </p>
+                  {filteredStudents.length > 0 && (
+                    <Button
+                      onClick={() => {
+                        const headers = ['Name', 'Remaining Sessions', 'Total Sessions', 'Email', 'Phone', 'Branch', 'Package Type', 'Enrollment Date', 'Expiration Date'];
+                        exportToCSV(
+                          filteredStudents,
+                          'players_report',
+                          headers,
+                          (student) => [
+                            student.name || '',
+                            String(student.remaining_sessions || 0),
+                            String(student.sessions || 0),
+                            student.email || '',
+                            student.phone || '',
+                            branches?.find(b => b.id === student.branch_id)?.name || '',
+                            student.package_type || '',
+                            student.enrollment_date ? format(new Date(student.enrollment_date), 'yyyy-MM-dd') : '',
+                            student.expiration_date ? format(new Date(student.expiration_date), 'yyyy-MM-dd') : ''
+                          ]
+                        );
+                        toast.success('Players report exported to Excel successfully');
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm transition-all duration-300"
+                    >
+                      <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                      Export Excel
+                    </Button>
+                  )}
+                </div>
               </div>
               {filteredStudents.length === 0 ? (
                 <div className="text-center py-12 sm:py-16">
@@ -756,8 +823,9 @@ const deleteMutation = useMutation({
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
                     {paginatedStudents.map((student) => {
-                      const total = student.sessions || 0;
-                      const usedSessions = total - (student.remaining_sessions || 0);
+                      const total = Number(student.sessions) || 0;
+                      const remaining = Number(student.remaining_sessions) || 0;
+                      const usedSessions = total - remaining;
                       const progressPercentage = total > 0 ? (usedSessions / total) * 100 : 0;
                       const branch = branches?.find(b => b.id === student.branch_id);
                       return (
@@ -790,14 +858,34 @@ const deleteMutation = useMutation({
                             </div>
                             <div className="flex items-center space-x-2 min-w-0">
                               <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Session Progress:</span> {usedSessions} of {total} attended</span>
+                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Session Progress:</span> {
+                                (() => {
+                                  const used = Number(usedSessions);
+                                  // Debug logging
+                                  if (used % 1 !== 0) {
+                                    console.log(`Student ${student.name}: usedSessions=${usedSessions}, used=${used}, remaining=${remaining}, total=${total}`);
+                                  }
+                                  // Always show one decimal place if it's not a whole number
+                                  const remainder = used % 1;
+                                  if (remainder === 0) {
+                                    return used.toString();
+                                  } else {
+                                    return used.toFixed(1);
+                                  }
+                                })()
+                              } of {total} attended</span>
                             </div>
                             <div>
                               <Progress value={progressPercentage} className="h-2 w-full max-w-full" />
                             </div>
                             <div className="flex items-center space-x-2 min-w-0">
                               <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm font-medium">{student.remaining_sessions || 0} Remaining Sessions</span>
+                              <span className="text-xs sm:text-sm font-medium">{
+                                (() => {
+                                  const rem = Number(student.remaining_sessions) || 0;
+                                  return rem % 1 === 0 ? rem.toString() : rem.toFixed(1);
+                                })()
+                              } Remaining Sessions</span>
                             </div>
                             <div className="flex items-center space-x-2 min-w-0">
                               <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
@@ -807,21 +895,48 @@ const deleteMutation = useMutation({
                               <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
                               <span className="text-xs sm:text-sm truncate"><span className="font-medium">Expires:</span> {student.expiration_date ? format(new Date(student.expiration_date), 'MM/dd/yyyy') : 'N/A'}</span>
                             </div>
+                            <div className="border-t pt-3 space-y-2">
+                              <div className="flex items-center space-x-2 min-w-0">
+                                <DollarSign className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                                <span className="text-xs sm:text-sm truncate"><span className="font-medium">Total Fee:</span> ₱{(student.total_training_fee || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center space-x-2 min-w-0">
+                                <CreditCard className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                                <span className="text-xs sm:text-sm truncate"><span className="font-medium">Downpayment:</span> ₱{(student.downpayment || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center space-x-2 min-w-0">
+                                <DollarSign className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                                <span className={`text-xs sm:text-sm truncate font-medium ${(student.remaining_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  <span className="font-medium">Remaining:</span> ₱{(student.remaining_balance || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
                             <div className="flex items-center justify-end flex-wrap gap-2">
-                              <div className="flex space-x-2">
+                              <div className="flex space-x-2 flex-wrap">
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleShowRecords(student)}
                                   className="bg-blue-600 text-white hover:bg-blue-700 w-10 h-10 p-0 flex items-center justify-center"
+                                  title="View Records"
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  onClick={() => handleAddPayment(student)}
+                                  className="bg-green-600 text-white hover:bg-green-700 w-10 h-10 p-0 flex items-center justify-center"
+                                  title="Add Payment"
+                                >
+                                  <DollarSign className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => handleEdit(student)}
                                   className="bg-yellow-600 text-white hover:bg-yellow-700 w-10 h-10 p-0 flex items-center justify-center"
+                                  title="Edit"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
@@ -832,6 +947,7 @@ const deleteMutation = useMutation({
       // Temporarily remove disabled to test
       // disabled={userRole !== "admin" && userRole !== "coach"}
       className="bg-red-600 text-white hover:bg-red-700 w-10 h-10 p-0 flex items-center justify-center"
+      title="Delete"
     >
       <Trash2 className="w-4 h-4" />
     </Button>
@@ -909,8 +1025,26 @@ const deleteMutation = useMutation({
                     <div className="min-w-0">
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Branch:</span> {branches?.find(b => b.id === selectedStudent?.branch_id)?.name || "N/A"}</p>
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Package Type:</span> {selectedStudent?.package_type || "N/A"}</p>
-                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Session Progress:</span> {selectedStudent?.sessions ? (selectedStudent.sessions - (selectedStudent.remaining_sessions || 0)) : 0} of {selectedStudent?.sessions || 0} attended</p>
-                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Remaining Sessions:</span> {selectedStudent?.remaining_sessions || 0}</p>
+                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Session Progress:</span> {selectedStudent?.sessions ? (() => {
+                        const total = Number(selectedStudent.sessions) || 0;
+                        const remaining = Number(selectedStudent.remaining_sessions) || 0;
+                        const used = total - remaining;
+                        // Debug logging
+                        if (used % 1 !== 0) {
+                          console.log(`Modal - Student ${selectedStudent.name}: used=${used}, remaining=${remaining}, total=${total}`);
+                        }
+                        // Always show one decimal place if it's not a whole number
+                        const remainder = used % 1;
+                        if (remainder === 0) {
+                          return used.toString();
+                        } else {
+                          return used.toFixed(1);
+                        }
+                      })() : 0} of {selectedStudent?.sessions || 0} attended</p>
+                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Remaining Sessions:</span> {(() => {
+                        const remaining = Number(selectedStudent?.remaining_sessions) || 0;
+                        return remaining % 1 === 0 ? remaining.toString() : remaining.toFixed(1);
+                      })()}</p>
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Enrollment Date:</span> {selectedStudent?.enrollment_date ? format(new Date(selectedStudent.enrollment_date), 'MM/dd/yyyy') : "N/A"}</p>
                       <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Expiration Date:</span> {selectedStudent?.expiration_date ? format(new Date(selectedStudent.expiration_date), 'MM/dd/yyyy') : "N/A"}</p>
                     </div>
