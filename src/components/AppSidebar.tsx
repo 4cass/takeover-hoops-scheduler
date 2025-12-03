@@ -55,43 +55,43 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
 
   return (
     <Sidebar className="border-r bg-[#181A18]">
-      <SidebarHeader className="p-6 border-b bg-[#181A18] border-[#181A18]">
-        <div className="flex items-center gap-3">
-          <div className="w-16 h-16 flex items-center justify-center">
+      <SidebarHeader className="p-3 sm:p-4 md:p-6 border-b bg-[#181A18] border-[#181A18]">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 flex items-center justify-center flex-shrink-0">
             <img 
               src="/lovable-uploads/dcb5b3e4-1037-41ed-bf85-c78cee85066e.png" 
               alt="Takeover Basketball Logo" 
               className="w-full h-full object-contain"
             />
           </div>
-          <div className="flex flex-col">
-            <h2 className="text-xl font-bold tracking-tight text-white">Takeover Basketball</h2>
-            <p className="text-sm text-white/80">Management System</p>
+          <div className="flex flex-col min-w-0">
+            <h2 className="text-sm sm:text-base md:text-xl font-bold tracking-tight text-white truncate">Takeover Basketball</h2>
+            <p className="text-xs sm:text-sm text-white/80 truncate">Management System</p>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="pt-4 bg-[#181A18]">
+      <SidebarContent className="pt-2 sm:pt-4 bg-[#181A18]">
         <SidebarGroup>
-          <SidebarGroupLabel className="px-6 text-xs font-bold uppercase tracking-wider text-white/60">
+          <SidebarGroupLabel className="px-4 sm:px-6 text-xs font-bold uppercase tracking-wider text-white/60">
             Navigation
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
             <SidebarMenu>
               {filteredMenuItems.map((item) => (
-                <SidebarMenuItem key={item.value} className="mb-2">
+                <SidebarMenuItem key={item.value} className="mb-1 sm:mb-2">
                   <SidebarMenuButton
                     onClick={() => handleTabChange(item.value)}
                     isActive={activeTab === item.value}
-                    className={`w-full justify-start py-3 px-6 rounded-lg transition-all duration-200 ${
+                    className={`w-full justify-start py-2 sm:py-3 px-4 sm:px-6 rounded-lg transition-all duration-200 ${
                       activeTab === item.value
                         ? "bg-accent text-white font-medium"
                         : "text-white/70 hover:bg-accent hover:text-white"
                     }`}
                   >
-                    <item.icon className="w-5 h-5 mr-3" />
-                    <span className="text-sm">{item.title}</span>
+                    <item.icon className="w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3" />
+                    <span className="text-xs sm:text-sm">{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -100,12 +100,12 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t bg-[#181A18]">
-        <div className="flex flex-col space-y-3">
+      <SidebarFooter className="p-3 sm:p-4 border-t bg-[#181A18]">
+        <div className="flex flex-col space-y-2 sm:space-y-3">
           {user && (
             <div className="px-2 py-1">
               <p className="text-xs text-white/60 uppercase tracking-wider">Logged in as</p>
-              <p className="text-sm text-white font-medium truncate">{user.email}</p>
+              <p className="text-xs sm:text-sm text-white font-medium truncate">{user.email}</p>
               <p className="text-xs text-accent capitalize">{role}</p>
             </div>
           )}
@@ -114,7 +114,7 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
             className="w-full justify-start py-2 px-3 rounded-lg transition-all duration-200 text-white/70 hover:bg-red-600 hover:text-white"
           >
             <LogOut className="w-4 h-4 mr-2" />
-            <span className="text-sm">Logout</span>
+            <span className="text-xs sm:text-sm">Logout</span>
           </SidebarMenuButton>
         </div>
       </SidebarFooter>

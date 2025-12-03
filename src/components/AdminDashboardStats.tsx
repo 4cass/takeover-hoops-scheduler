@@ -45,11 +45,11 @@ class DashboardErrorBoundary extends Component<{ children: React.ReactNode }, { 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-background p-6">
-          <div className="max-w-7xl mx-auto text-center py-12">
-            <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-black mb-3">Something went wrong</h3>
-            <p className="text-base text-gray-600">
+        <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
+          <div className="max-w-7xl mx-auto text-center py-8 sm:py-12">
+            <Activity className="w-10 sm:w-12 h-10 sm:h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg sm:text-xl font-bold text-black mb-3">Something went wrong</h3>
+            <p className="text-sm sm:text-base text-gray-600">
               Error: {this.state.error || "Unknown error"}. Please try refreshing the page or contact support.
             </p>
           </div>
@@ -261,11 +261,11 @@ export function AdminDashboardStats() {
 
   if (statsLoading || sessionsLoading || activityLoading) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-7xl mx-auto text-center py-12">
-          <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-black mb-3">Loading dashboard...</h3>
-          <p className="text-base text-gray-600">Please wait while we fetch the dashboard data.</p>
+      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
+        <div className="max-w-7xl mx-auto text-center py-8 sm:py-12">
+          <Activity className="w-10 sm:w-12 h-10 sm:h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg sm:text-xl font-bold text-black mb-3">Loading dashboard...</h3>
+          <p className="text-sm sm:text-base text-gray-600">Please wait while we fetch the dashboard data.</p>
         </div>
       </div>
     );
@@ -273,11 +273,11 @@ export function AdminDashboardStats() {
 
   if (statsError || sessionsError || activityError) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-7xl mx-auto text-center py-12">
-          <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-black mb-3">Error loading dashboard</h3>
-          <p className="text-base text-gray-600">
+      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
+        <div className="max-w-7xl mx-auto text-center py-8 sm:py-12">
+          <Activity className="w-10 sm:w-12 h-10 sm:h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg sm:text-xl font-bold text-black mb-3">Error loading dashboard</h3>
+          <p className="text-sm sm:text-base text-gray-600">
             Failed to load data: {(statsError || sessionsError || activityError)?.message || 'Unknown error'}. Please try again later.
           </p>
         </div>
@@ -287,21 +287,21 @@ export function AdminDashboardStats() {
 
   return (
     <DashboardErrorBoundary>
-      <div className="min-h-screen bg-background pt-4 p-6">
-        <div className="max-w-7xl mx-auto space-y-8 -mt-5">
+      <div className="min-h-screen bg-background pt-2 sm:pt-4 p-3 sm:p-4 md:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 md:space-y-8">
           
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-[#181A18] mb-2 tracking-tight">
+          <div className="mb-4 sm:mb-6 md:mb-8">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#181A18] mb-2 tracking-tight">
               Admin Dashboard
             </h1>
-            <p className="text-lg text-muted-foreground">
+            <p className="text-sm sm:text-base md:text-lg text-muted-foreground">
               Welcome back! Here's your complete overview of the training management system.
             </p>
           </div>
 
           {/* Stat Cards */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-6 lg:grid-cols-4">
             {statCards.map((stat, index) => {
               const IconComponent = stat.icon;
               return (
@@ -313,18 +313,16 @@ export function AdminDashboardStats() {
                     hover:-translate-y-1 hover:scale-105 cursor-pointer group
                   `}
                 >
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-semibold text-foreground uppercase tracking-wider">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-4 md:p-6">
+                    <CardTitle className="text-xs sm:text-sm font-semibold text-foreground uppercase tracking-wider">
                       {stat.title}
                     </CardTitle>
-                    <div className={`
-                      p-2 rounded-lg bg-accent/10 shadow-sm group-hover:scale-110 transition-transform duration-300
-                    `}>
-                      <IconComponent className={`h-5 w-5 ${stat.color}`} />
+                    <div className="p-1.5 sm:p-2 rounded-lg bg-accent/10 shadow-sm group-hover:scale-110 transition-transform duration-300">
+                      <IconComponent className={`h-4 sm:h-5 w-4 sm:w-5 ${stat.color}`} />
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-foreground mb-1">{stat.value}</div>
+                  <CardContent className="p-3 sm:p-4 md:p-6 pt-0">
+                    <div className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-1">{stat.value}</div>
                     <div className="flex items-center text-xs text-muted-foreground">
                       <TrendingUp className="h-3 w-3 mr-1" />
                       Active
@@ -337,17 +335,17 @@ export function AdminDashboardStats() {
 
           {/* Quick Actions */}
           <Card className="border-2 border-[#181A18] bg-white shadow-xl">
-            <CardHeader className="border-b border-foreground bg-[#181A18]">
-              <CardTitle className="text-2xl font-bold text-primary-foreground flex items-center">
-                <Calendar className="h-6 w-6 mr-3 text-accent" style={{ color: '#BEA877' }} />
+            <CardHeader className="border-b border-foreground bg-[#181A18] p-3 sm:p-4 md:p-6">
+              <CardTitle className="text-lg sm:text-xl md:text-2xl font-bold text-primary-foreground flex items-center">
+                <Calendar className="h-5 sm:h-6 w-5 sm:w-6 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
                 Quick Actions
               </CardTitle>
-              <CardDescription className="text-muted text-base">
+              <CardDescription className="text-muted text-sm sm:text-base">
                 Manage your training system efficiently
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <CardContent className="p-3 sm:p-4 md:p-6 lg:p-8">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
                 {[
                   { label: "Manage Sessions", icon: Calendar, route: "/dashboard/sessions" },
                   { label: "Track Attendance", icon: UserCheck, route: "/dashboard/attendance" },
@@ -360,14 +358,14 @@ export function AdminDashboardStats() {
                       key={index}
                       onClick={() => navigate(action.route)}
                       className="
-                        h-auto p-4 bg-accent hover:bg-accent/90 text-accent-foreground font-semibold
+                        h-auto p-3 sm:p-4 bg-accent hover:bg-accent/90 text-accent-foreground font-semibold
                         transition-all duration-300 hover:scale-105 hover:shadow-lg
-                        flex flex-col items-center gap-2 border-none
+                        flex flex-col items-center gap-1.5 sm:gap-2 border-none
                       "
                       style={{ backgroundColor: '#BEA877' }}
                     >
-                      <IconComponent className="h-5 w-5" />
-                      <span className="text-sm text-center">{action.label}</span>
+                      <IconComponent className="h-4 sm:h-5 w-4 sm:w-5" />
+                      <span className="text-xs sm:text-sm text-center">{action.label}</span>
                     </Button>
                   );
                 })}
@@ -375,25 +373,25 @@ export function AdminDashboardStats() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-8 lg:grid-cols-2">
+          <div className="grid gap-4 sm:gap-6 md:gap-8 lg:grid-cols-2">
             
             {/* Upcoming Sessions */}
             <Card className="border-2 border-[#181A18] bg-white shadow-xl">
-              <CardHeader className="border-b border-[#181A18] bg-[#181A18]">
-                <div className="flex items-center justify-between">
+              <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <CardTitle className="text-xl font-bold text-primary-foreground flex items-center">
-                      <Clock className="h-5 w-5 mr-3 text-accent" style={{ color: '#BEA877' }} />
+                    <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-primary-foreground flex items-center">
+                      <Clock className="h-4 sm:h-5 w-4 sm:w-5 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
                       Upcoming Sessions
                     </CardTitle>
-                    <CardDescription className="text-muted mt-1">
+                    <CardDescription className="text-muted mt-1 text-xs sm:text-sm">
                       Scheduled training sessions
                     </CardDescription>
                   </div>
                   <Button 
                     variant="outline" 
                     onClick={() => navigate('/dashboard/sessions')}
-                    className="border-accent text-accent hover:bg-accent hover:text-accent-foreground transition-colors"
+                    className="border-accent text-accent hover:bg-accent hover:text-accent-foreground transition-colors text-xs sm:text-sm w-full sm:w-auto"
                     style={{ borderColor: '#BEA877', color: '#BEA877' }}
                   >
                     View All
@@ -402,13 +400,13 @@ export function AdminDashboardStats() {
               </CardHeader>
               <CardContent className="p-0">
                 {upcomingSessions && upcomingSessions.length > 0 ? (
-                  <div className="overflow-hidden">
+                  <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-accent/5 border-b border-accent/10">
-                          <TableHead className="font-semibold text-foreground">Date & Time</TableHead>
-                          <TableHead className="font-semibold text-foreground">Coaches</TableHead>
-                          <TableHead className="font-semibold text-foreground">Branch</TableHead>
+                          <TableHead className="font-semibold text-foreground text-xs sm:text-sm p-2 sm:p-4">Date & Time</TableHead>
+                          <TableHead className="font-semibold text-foreground text-xs sm:text-sm p-2 sm:p-4 hidden sm:table-cell">Coaches</TableHead>
+                          <TableHead className="font-semibold text-foreground text-xs sm:text-sm p-2 sm:p-4">Branch</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -420,29 +418,29 @@ export function AdminDashboardStats() {
                               ${index % 2 === 0 ? 'bg-background' : 'bg-muted/10'}
                             `}
                           >
-                            <TableCell className="py-4">
-                              <div className="font-semibold text-foreground">
+                            <TableCell className="py-2 sm:py-4 px-2 sm:px-4">
+                              <div className="font-semibold text-foreground text-xs sm:text-sm">
                                 {format(new Date(session.date), 'MMM dd, yyyy')}
                               </div>
-                              <div className="text-sm text-accent font-medium">
+                              <div className="text-xs sm:text-sm text-accent font-medium">
                                 {formatTime12Hour(session.start_time)} - {formatTime12Hour(session.end_time)}
                               </div>
                             </TableCell>
-                            <TableCell className="text-muted-foreground font-medium">
+                            <TableCell className="text-muted-foreground font-medium text-xs sm:text-sm px-2 sm:px-4 hidden sm:table-cell">
                               {session.session_coaches.length > 0 
                                 ? session.session_coaches.map(sc => sc.coaches?.name || 'Unknown').join(', ') 
                                 : 'No coaches assigned'}
                             </TableCell>
-                            <TableCell className="text-muted-foreground font-medium">{session.branches?.name || 'N/A'}</TableCell>
+                            <TableCell className="text-muted-foreground font-medium text-xs sm:text-sm px-2 sm:px-4">{session.branches?.name || 'N/A'}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
                 ) : (
-                  <div className="p-8 text-center">
-                    <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground text-lg">No upcoming sessions scheduled</p>
+                  <div className="p-4 sm:p-6 md:p-8 text-center">
+                    <Clock className="h-8 sm:h-10 md:h-12 w-8 sm:w-10 md:w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground text-sm sm:text-base md:text-lg">No upcoming sessions scheduled</p>
                   </div>
                 )}
               </CardContent>
@@ -450,23 +448,23 @@ export function AdminDashboardStats() {
 
             {/* Recent Activity */}
             <Card className="border-2 border-[#181A18] bg-white shadow-xl">
-              <CardHeader className="border-b border-[#181A18] bg-[#181A18]">
-                <CardTitle className="text-xl font-bold text-primary-foreground flex items-center">
-                  <Activity className="h-5 w-5 mr-3 text-accent" style={{ color: '#BEA877' }} />
+              <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-6">
+                <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-primary-foreground flex items-center">
+                  <Activity className="h-4 sm:h-5 w-4 sm:w-5 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
                   Recent Activity
                 </CardTitle>
-                <CardDescription className="text-muted mt-1">
+                <CardDescription className="text-muted mt-1 text-xs sm:text-sm">
                   Latest system activities
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent className="p-3 sm:p-4 md:pt-6">
                 {recentActivity && recentActivity.length > 0 ? (
-                  <div className="space-y-4 max-h-80 overflow-y-auto">
+                  <div className="space-y-3 sm:space-y-4 max-h-60 sm:max-h-80 overflow-y-auto">
                     {recentActivity.map((activity, index) => (
                       <div 
                         key={activity.id} 
                         className={`
-                          flex items-start space-x-4 p-3 rounded-lg transition-colors
+                          flex items-start space-x-3 sm:space-x-4 p-2 sm:p-3 rounded-lg transition-colors
                           ${index % 2 === 0 ? 'bg-background' : 'bg-muted/10'}
                           hover:bg-accent/5
                         `}
@@ -475,7 +473,7 @@ export function AdminDashboardStats() {
                           {getActivityIcon(activity.type)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground leading-5">{activity.description}</p>
+                          <p className="text-xs sm:text-sm font-medium text-foreground leading-5">{activity.description}</p>
                           <p className="text-xs text-muted-foreground mt-1 flex items-center">
                             <Clock className="h-3 w-3 mr-1" />
                             {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}
@@ -485,9 +483,9 @@ export function AdminDashboardStats() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8">
-                    <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground text-lg">No recent activity</p>
+                  <div className="text-center py-4 sm:py-6 md:py-8">
+                    <Activity className="h-8 sm:h-10 md:h-12 w-8 sm:w-10 md:w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground text-sm sm:text-base md:text-lg">No recent activity</p>
                   </div>
                 )}
               </CardContent>
