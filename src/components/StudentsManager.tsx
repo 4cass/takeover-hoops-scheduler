@@ -16,7 +16,7 @@ import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, Use
 import { exportToCSV } from "@/utils/exportUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, addMonths } from "date-fns";
 import { cn } from "@/lib/utils";
 
 interface Student {
@@ -48,24 +48,19 @@ interface Package {
   is_active: boolean;
 }
 
-interface AttendanceRecord {
-  session_id: string;
-  student_id: string;
-  status: "present" | "absent" | "pending";
-  training_sessions: {
-    date: string;
-    start_time: string;
-    end_time: string;
-    branch_id: string;
-    package_type: string | null;
-    branches: { name: string } | null;
-    session_coaches: Array<{
-      id: string;
-      coach_id: string;
-      coaches: { name: string } | null;
-    }>;
-  };
-}
+const getPackageStatus = (totalSessions: number, remainingSessions: number, expirationDate: Date | null) => {
+  const usedSessions = totalSessions - remainingSessions;
+  const currentDate = new Date();
+
+  if (remainingSessions <= 0 || usedSessions >= totalSessions) {
+    return { status: 'completed' as const, statusColor: 'bg-blue-50 text-blue-700 border-blue-200', statusText: 'Completed' };
+  } else if (expirationDate && currentDate > expirationDate) {
+    return { status: 'expired' as const, statusColor: 'bg-red-50 text-red-700 border-red-200', statusText: 'Inactive' };
+  } else {
+    return { status: 'ongoing' as const, statusColor: 'bg-green-50 text-green-700 border-green-200', statusText: 'Ongoing' };
+  }
+};
+
 
 class StudentsErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; error: string | null }> {
   state = { hasError: false, error: null };
@@ -98,16 +93,12 @@ class StudentsErrorBoundary extends Component<{ children: React.ReactNode }, { h
 
 export function StudentsManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isRecordsDialogOpen, setIsRecordsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [packageTypeFilter, setPackageTypeFilter] = useState<string>("All");
-  const [recordsBranchFilter, setRecordsBranchFilter] = useState<string>("All");
-  const [recordsPackageTypeFilter, setRecordsPackageTypeFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [currentPage, setCurrentPage] = useState(1);
-  const [recordsCurrentPage, setRecordsCurrentPage] = useState(1);
   const itemsPerPage = 6;
   const { role } = useAuth();
   const navigate = useNavigate();
@@ -193,65 +184,24 @@ export function StudentsManager() {
     },
   });
 
-  const filteredStudents = students?.filter((student) =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    (branchFilter === "All" || student.branch_id === branchFilter) &&
-    (packageTypeFilter === "All" || student.package_type === packageTypeFilter)
-  ) || [];
+  const filteredStudents = students?.filter((student) => {
+    const totalSessions = Number(student.sessions) || 0;
+    const remainingSessions = Number(student.remaining_sessions) || 0;
+    const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
+    const packageStatus = getPackageStatus(totalSessions, remainingSessions, expirationDate);
+
+    return (
+      student.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      (branchFilter === "All" || student.branch_id === branchFilter) &&
+      (packageTypeFilter === "All" || student.package_type === packageTypeFilter) &&
+      (statusFilter === "All" || packageStatus.statusText === statusFilter)
+    );
+  }) || [];
 
   const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedStudents = filteredStudents.slice(startIndex, endIndex);
-
-  const { data: attendanceRecords, isLoading: recordsLoading, error: recordsError } = useQuery({
-    queryKey: ["attendance_records", paginatedStudents?.map(s => s.id) || []],
-    queryFn: async () => {
-      if (!paginatedStudents || paginatedStudents.length === 0) return [];
-      console.log("Fetching attendance records for students:", paginatedStudents.map(s => s.id));
-      const { data, error } = await supabase
-        .from("attendance_records")
-        .select(`
-          session_id,
-          student_id,
-          status,
-          training_sessions (
-            date,
-            start_time,
-            end_time,
-            branch_id,
-            package_type,
-            branches (name),
-            session_coaches (
-              id,
-              coach_id,
-              coaches (name)
-            )
-          )
-        `)
-        .in("student_id", paginatedStudents.map(s => s.id))
-        .order("date", { ascending: false, referencedTable: "training_sessions" });
-      if (error) {
-        console.error("attendance_records query error:", error);
-        toast.error(`Failed to fetch attendance records: ${error.message}`);
-        throw error;
-      }
-      console.log("Fetched attendance records:", data);
-      return data as AttendanceRecord[];
-    },
-    enabled: !!paginatedStudents && paginatedStudents.length > 0,
-  });
-
-  const filteredAttendanceRecords = attendanceRecords?.filter((record) =>
-    (recordsBranchFilter === "All" || record.training_sessions.branch_id === recordsBranchFilter) &&
-    (recordsPackageTypeFilter === "All" || record.training_sessions.package_type === recordsPackageTypeFilter) &&
-    (selectedStudent ? record.student_id === selectedStudent.id : true)
-  ) || [];
-
-  const recordsTotalPages = Math.ceil(filteredAttendanceRecords.length / itemsPerPage);
-  const recordsStartIndex = (recordsCurrentPage - 1) * itemsPerPage;
-  const recordsEndIndex = recordsStartIndex + itemsPerPage;
-  const paginatedRecords = filteredAttendanceRecords.slice(recordsStartIndex, recordsEndIndex);
 
   const getPaginationRange = (current: number, total: number) => {
     const maxPagesToShow = 3;
@@ -267,21 +217,19 @@ export function StudentsManager() {
     setCurrentPage(page);
   };
 
-  const handleRecordsPageChange = (page: number) => {
-    setRecordsCurrentPage(page);
-  };
 
   const createMutation = useMutation({
     mutationFn: async (student: typeof formData) => {
       const defaultSessions = 8;
+      const totalSessions = role === 'admin' ? student.sessions : defaultSessions;
       const { data, error } = await supabase
         .from("students")
         .insert([{
           name: student.name,
           email: student.email,
           phone: student.phone || null,
-          sessions: role === 'admin' ? student.sessions : defaultSessions,
-          remaining_sessions: role === 'admin' ? student.remaining_sessions : defaultSessions,
+          sessions: totalSessions,
+          remaining_sessions: totalSessions, // For new players, remaining = total
           branch_id: student.branch_id,
           package_type: student.package_type,
           enrollment_date: student.enrollment_date ? format(student.enrollment_date, 'yyyy-MM-dd') : null,
@@ -311,12 +259,9 @@ export function StudentsManager() {
           name: student.name,
           email: student.email,
           phone: student.phone || null,
-          sessions: student.sessions,
-          remaining_sessions: student.remaining_sessions,
           branch_id: student.branch_id,
           package_type: student.package_type,
           enrollment_date: student.enrollment_date ? format(student.enrollment_date, 'yyyy-MM-dd') : null,
-          expiration_date: student.expiration_date ? format(student.expiration_date, 'yyyy-MM-dd') : null,
         })
         .eq("id", id)
         .select()
@@ -388,7 +333,7 @@ const deleteMutation = useMutation({
       branch_id: null,
       package_type: null,
       enrollment_date: null,
-      expiration_date: null,
+      expiration_date: addMonths(new Date(), 1), // Default to 1 month from now
     });
     setEditingStudent(null);
     setIsDialogOpen(false);
@@ -410,12 +355,12 @@ const deleteMutation = useMutation({
       name: student.name,
       email: student.email,
       phone: student.phone || "",
-      sessions: student.sessions || 0,
-      remaining_sessions: student.remaining_sessions || 0,
+      sessions: 8,
+      remaining_sessions: 8,
       branch_id: student.branch_id || null,
       package_type: student.package_type || null,
       enrollment_date: student.enrollment_date ? new Date(student.enrollment_date) : null,
-      expiration_date: student.expiration_date ? new Date(student.expiration_date) : null,
+      expiration_date: addMonths(new Date(), 1),
     });
     setIsDialogOpen(true);
   };
@@ -425,11 +370,7 @@ const deleteMutation = useMutation({
   };
 
   const handleShowRecords = (student: Student) => {
-    setSelectedStudent(student);
-    setIsRecordsDialogOpen(true);
-    setRecordsCurrentPage(1);
-    setRecordsBranchFilter("All");
-    setRecordsPackageTypeFilter("All");
+    navigate(`/dashboard/students/${student.id}/view`);
   };
 
   const [formData, setFormData] = useState({
@@ -441,7 +382,7 @@ const deleteMutation = useMutation({
     branch_id: null as string | null,
     package_type: null as string | null,
     enrollment_date: null as Date | null,
-    expiration_date: null as Date | null,
+    expiration_date: addMonths(new Date(), 1), // Default to 1 month from now
   });
 
   const getPackageBadgeColor = (packageType: string | null) => {
@@ -579,57 +520,27 @@ const deleteMutation = useMutation({
                           </Select>
                         </div>
                       </div>
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="package_type" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Package Type</Label>
-                        <Select
-                          value={formData.package_type ?? undefined}
-                          onValueChange={(value) => setFormData((prev) => ({ ...prev, package_type: value }))}
-                        >
-                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                            <SelectValue placeholder="Select Package Type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {packages?.map((pkg) => (
-                              <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
-                                {pkg.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                         <div className="flex flex-col space-y-2 min-w-0">
-                           <Label htmlFor="sessions" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Total Sessions</Label>
-                           <Input
-                             id="sessions"
-                             type="number"
-                             min="0"
-                             value={formData.sessions}
-                             onChange={(e) => setFormData((prev) => ({ ...prev, sessions: parseInt(e.target.value) || 0 }))}
-                             className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                             style={{ borderColor: '#BEA877' }}
-                             disabled={role === 'coach'}
-                           />
-                         </div>
-                         <div className="flex flex-col space-y-2 min-w-0">
-                           <Label htmlFor="remaining_sessions" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Remaining Sessions</Label>
-                           <Input
-                             id="remaining_sessions"
-                             type="number"
-                             min="0"
-                             value={formData.remaining_sessions}
-                             onChange={(e) =>
-                               setFormData((prev) => ({ ...prev, remaining_sessions: parseInt(e.target.value) || 0 }))
-                             }
-                             className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                             style={{ borderColor: '#BEA877' }}
-                             disabled={role === 'coach'}
-                           />
-                         </div>
-                      </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="flex flex-col space-y-2 min-w-0">
-                          <Label className="text-gray-700 font-medium text-xs sm:text-sm truncate">Enrollment Date</Label>
+                          <Label htmlFor="package_type" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Package Type</Label>
+                          <Select
+                            value={formData.package_type ?? undefined}
+                            onValueChange={(value) => setFormData((prev) => ({ ...prev, package_type: value }))}
+                          >
+                            <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                              <SelectValue placeholder="Select Package Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {packages?.map((pkg) => (
+                                <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
+                                  {pkg.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex flex-col space-y-2 min-w-0">
+                          <Label className="text-gray-700 font-medium text-xs sm:text-sm truncate">Player Enrollment Date</Label>
                           <Popover>
                             <PopoverTrigger asChild>
                               <Button
@@ -655,33 +566,36 @@ const deleteMutation = useMutation({
                             </PopoverContent>
                           </Popover>
                         </div>
-                        <div className="flex flex-col space-y-2 min-w-0">
-                          <Label className="text-gray-700 font-medium text-xs sm:text-sm truncate">Expiration Date</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
-                                  !formData.expiration_date && "text-muted-foreground"
-                                )}
-                                style={{ borderColor: '#BEA877' }}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {formData.expiration_date ? format(formData.expiration_date, "MM/dd/yyyy") : <span>Pick a date</span>}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <CalendarComponent
-                                mode="single"
-                                selected={formData.expiration_date || undefined}
-                                onSelect={(date) => setFormData((prev) => ({ ...prev, expiration_date: date || null }))}
-                                initialFocus
-                                className={cn("p-3 pointer-events-auto")}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
+                        {!editingStudent && (
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label className="text-gray-700 font-medium text-xs sm:text-sm truncate">Session Expiry Date</Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className={cn(
+                                    "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
+                                    !formData.expiration_date && "text-muted-foreground"
+                                  )}
+                                  style={{ borderColor: '#BEA877' }}
+                                >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {formData.expiration_date ? format(formData.expiration_date, "MM/dd/yyyy") : <span>Pick a date</span>}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <CalendarComponent
+                                  mode="single"
+                                  selected={formData.expiration_date || undefined}
+                                  onSelect={(date) => setFormData((prev) => ({ ...prev, expiration_date: date || null }))}
+                                  initialFocus
+                                  className={cn("p-3 pointer-events-auto")}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <p className="text-xs text-gray-500 mt-1">Expiry date for the initial package session</p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
                         <Button
@@ -711,7 +625,7 @@ const deleteMutation = useMutation({
                   <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filter Players</h3>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="flex flex-col space-y-2 min-w-0">
                     <Label htmlFor="search-players" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
                       <Search className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
@@ -774,6 +688,26 @@ const deleteMutation = useMutation({
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="flex flex-col space-y-2 min-w-0">
+                    <Label htmlFor="filter-status" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                      <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                      Package Status
+                    </Label>
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(value) => setStatusFilter(value)}
+                    >
+                      <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                        <SelectValue placeholder="Select Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All" className="text-xs sm:text-sm">All Statuses</SelectItem>
+                        <SelectItem value="Ongoing" className="text-xs sm:text-sm">Ongoing</SelectItem>
+                        <SelectItem value="Completed" className="text-xs sm:text-sm">Completed</SelectItem>
+                        <SelectItem value="Inactive" className="text-xs sm:text-sm">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between mt-3">
                   <p className="text-xs sm:text-sm text-gray-600">
@@ -782,7 +716,7 @@ const deleteMutation = useMutation({
                   {filteredStudents.length > 0 && (
                     <Button
                       onClick={() => {
-                        const headers = ['Name', 'Remaining Sessions', 'Total Sessions', 'Email', 'Phone', 'Branch', 'Package Type', 'Enrollment Date', 'Expiration Date'];
+                        const headers = ['Name', 'Remaining Sessions', 'Total Sessions', 'Email', 'Phone', 'Branch', 'Package Type', 'Enrollment Date'];
                         exportToCSV(
                           filteredStudents,
                           'players_report',
@@ -795,8 +729,7 @@ const deleteMutation = useMutation({
                             student.phone || '',
                             branches?.find(b => b.id === student.branch_id)?.name || '',
                             student.package_type || '',
-                            student.enrollment_date ? format(new Date(student.enrollment_date), 'yyyy-MM-dd') : '',
-                            student.expiration_date ? format(new Date(student.expiration_date), 'yyyy-MM-dd') : ''
+                            student.enrollment_date ? format(new Date(student.enrollment_date), 'yyyy-MM-dd') : ''
                           ]
                         );
                         toast.success('Players report exported to Excel successfully');
@@ -813,10 +746,10 @@ const deleteMutation = useMutation({
                 <div className="text-center py-12 sm:py-16">
                   <Users className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 mx-auto mb-4 text-gray-400" />
                   <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 mb-2">
-                    {searchTerm || branchFilter !== "All" || packageTypeFilter !== "All" ? "No players found" : "No players"}
+                    {searchTerm || branchFilter !== "All" || packageTypeFilter !== "All" || statusFilter !== "All" ? "No players found" : "No players"}
                   </h3>
                   <p className="text-xs sm:text-sm md:text-base text-gray-600">
-                    {searchTerm || branchFilter !== "All" || packageTypeFilter !== "All" ? "Try adjusting your search or filters." : "Add a new player to get started."}
+                    {searchTerm || branchFilter !== "All" || packageTypeFilter !== "All" || statusFilter !== "All" ? "Try adjusting your search or filters." : "Add a new player to get started."}
                   </p>
                 </div>
               ) : (
@@ -842,9 +775,23 @@ const deleteMutation = useMutation({
                                   {student.name}
                                 </h3>
                               </div>
-                              <Badge className={`font-medium ${getPackageBadgeColor(student.package_type)} text-xs sm:text-sm px-2 py-1 truncate max-w-full`}>
-                                {student.package_type || 'N/A'}
-                              </Badge>
+                              <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
+                                <Badge className={`font-medium ${getPackageBadgeColor(student.package_type)} text-xs sm:text-sm px-2 py-1 truncate max-w-full`}>
+                                  {student.package_type || 'N/A'}
+                                </Badge>
+                                {(() => {
+                                  const totalSessions = Number(student.sessions) || 0;
+                                  const remainingSessions = Number(student.remaining_sessions) || 0;
+                                  const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
+                                  const packageStatus = getPackageStatus(totalSessions, remainingSessions, expirationDate);
+
+                                  return (
+                                    <Badge className={`font-medium ${packageStatus.statusColor} border text-xs sm:text-sm px-2 py-1`}>
+                                      {packageStatus.statusText}
+                                    </Badge>
+                                  );
+                                })()}
+                              </div>
                             </div>
                             <div className="flex items-center space-x-2 text-gray-600 min-w-0">
                               <User className="w-4 h-4 flex-shrink-0" />
@@ -890,10 +837,6 @@ const deleteMutation = useMutation({
                             <div className="flex items-center space-x-2 min-w-0">
                               <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
                               <span className="text-xs sm:text-sm truncate"><span className="font-medium">Enrolled:</span> {student.enrollment_date ? format(new Date(student.enrollment_date), 'MM/dd/yyyy') : 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center space-x-2 min-w-0">
-                              <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Expires:</span> {student.expiration_date ? format(new Date(student.expiration_date), 'MM/dd/yyyy') : 'N/A'}</span>
                             </div>
                             <div className="border-t pt-3 space-y-2">
                               <div className="flex items-center space-x-2 min-w-0">
@@ -1003,226 +946,6 @@ const deleteMutation = useMutation({
               )}
             </CardContent>
           </Card>
-          <Dialog open={isRecordsDialogOpen} onOpenChange={setIsRecordsDialogOpen}>
-            <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden p-3 sm:p-4 md:p-5">
-              <DialogHeader>
-                <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">
-                  History Records for {selectedStudent?.name}
-                </DialogTitle>
-                <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                  View session attendance and progress for this player
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-6">
-                <div className="border-b border-gray-200 pb-4">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Player Details</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="min-w-0">
-                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Name:</span> {selectedStudent?.name}</p>
-                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Email:</span> {selectedStudent?.email}</p>
-                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Phone:</span> {selectedStudent?.phone || "N/A"}</p>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Branch:</span> {branches?.find(b => b.id === selectedStudent?.branch_id)?.name || "N/A"}</p>
-                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Package Type:</span> {selectedStudent?.package_type || "N/A"}</p>
-                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Session Progress:</span> {selectedStudent?.sessions ? (() => {
-                        const total = Number(selectedStudent.sessions) || 0;
-                        const remaining = Number(selectedStudent.remaining_sessions) || 0;
-                        const used = total - remaining;
-                        // Debug logging
-                        if (used % 1 !== 0) {
-                          console.log(`Modal - Student ${selectedStudent.name}: used=${used}, remaining=${remaining}, total=${total}`);
-                        }
-                        // Always show one decimal place if it's not a whole number
-                        const remainder = used % 1;
-                        if (remainder === 0) {
-                          return used.toString();
-                        } else {
-                          return used.toFixed(1);
-                        }
-                      })() : 0} of {selectedStudent?.sessions || 0} attended</p>
-                      <p className="text-xs sm:text-sm text-gray-600"><span className="font-medium text-gray-900">Remaining Sessions:</span> {(() => {
-                        const remaining = Number(selectedStudent?.remaining_sessions) || 0;
-                        return remaining % 1 === 0 ? remaining.toString() : remaining.toFixed(1);
-                      })()}</p>
-                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Enrollment Date:</span> {selectedStudent?.enrollment_date ? format(new Date(selectedStudent.enrollment_date), 'MM/dd/yyyy') : "N/A"}</p>
-                      <p className="text-xs sm:text-sm text-gray-600 truncate"><span className="font-medium text-gray-900">Expiration Date:</span> {selectedStudent?.expiration_date ? format(new Date(selectedStudent.expiration_date), 'MM/dd/yyyy') : "N/A"}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <Progress 
-                      value={selectedStudent?.sessions ? (((selectedStudent.sessions - (selectedStudent.remaining_sessions || 0)) / selectedStudent.sessions) * 100) : 0} 
-                      className="h-2 w-full max-w-full"
-                    />
-                  </div>
-                </div>
-                <div className="mb-6">
-                  <div className="flex items-center mb-4">
-                    <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filter Records</h3>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex flex-col space-y-2 min-w-0">
-                      <Label htmlFor="records-filter-branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                        Branch
-                      </Label>
-                      <Select
-                        value={recordsBranchFilter}
-                        onValueChange={(value) => setRecordsBranchFilter(value)}
-                      >
-                        <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                          <SelectValue placeholder="Select Branch" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="All" className="text-xs sm:text-sm">All Branches</SelectItem>
-                          {branches?.map((branch) => (
-                            <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
-                              {branch.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex flex-col space-y-2 min-w-0">
-                      <Label htmlFor="records-filter-package-type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                        Package Type
-                      </Label>
-                      <Select
-                        value={recordsPackageTypeFilter}
-                        onValueChange={(value) => setRecordsPackageTypeFilter(value)}
-                      >
-                        <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                          <SelectValue placeholder="Select Package Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="All" className="text-xs sm:text-sm">All Packages</SelectItem>
-                          {packages?.map((pkg) => (
-                            <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
-                              {pkg.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <p className="text-xs sm:text-sm text-gray-600 mt-3">
-                    Showing {filteredAttendanceRecords.length} record{filteredAttendanceRecords.length === 1 ? '' : 's'}
-                  </p>
-                </div>
-                {recordsLoading ? (
-                  <div className="text-center py-8 sm:py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#BEA877' }}></div>
-                    <p className="text-gray-600 mt-2 text-xs sm:text-sm">Loading attendance records...</p>
-                  </div>
-                ) : recordsError ? (
-                  <p className="text-red-600 text-xs sm:text-sm">Error loading records: {(recordsError as Error).message}</p>
-                ) : !filteredAttendanceRecords || filteredAttendanceRecords.length === 0 ? (
-                  <p className="text-gray-600 text-xs sm:text-sm">No attendance records found for this player.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[600px] rounded-lg border-2 border-[#181A18]">
-                      <thead className="bg-[#181A18] text-[#efeff1]">
-                        <tr>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><Calendar className="w-4 h-4 inline mr-2" />Date</th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><Clock className="w-4 h-4 inline mr-2" />Time</th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><MapPin className="w-4 h-4 inline mr-2" />Branch</th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm"><User className="w-4 h-4 inline mr-2" />Coaches</th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedRecords.map((record, index) => (
-                          <tr
-                            key={record.session_id}
-                            className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                          >
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                              {format(new Date(record.training_sessions.date), "MMM dd, yyyy")}
-                            </td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                              {format(new Date(`1970-01-01T${record.training_sessions.start_time}`), "hh:mm a")} - 
-                              {format(new Date(`1970-01-01T${record.training_sessions.end_time}`), "hh:mm a")}
-                            </td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">{record.training_sessions.branches?.name || 'N/A'}</td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                              {record.training_sessions.session_coaches.length > 0 
-                                ? record.training_sessions.session_coaches.map(sc => sc.coaches?.name || 'Unknown').join(', ') 
-                                : 'No coaches assigned'}
-                            </td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4">
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs sm:text-sm font-medium truncate max-w-full ${
-                                  record.status === "present"
-                                    ? "bg-green-50 text-green-700 border-green-200"
-                                    : record.status === "absent"
-                                    ? "bg-red-50 text-red-700 border-red-200"
-                                    : "bg-amber-50 text-amber-700 border-amber-200"
-                                }`}
-                              >
-                                {record.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {recordsTotalPages > 1 && (
-                      <div className="flex justify-center items-center mt-6 space-x-2 flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => handleRecordsPageChange(recordsCurrentPage - 1)}
-                          disabled={recordsCurrentPage === 1}
-                          className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                          style={{ borderColor: '#BEA877', color: '#BEA877' }}
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        {getPaginationRange(recordsCurrentPage, recordsTotalPages).map((page) => (
-                          <Button
-                            key={page}
-                            variant={recordsCurrentPage === page ? "default" : "outline"}
-                            onClick={() => handleRecordsPageChange(page)}
-                            className={`border-2 w-10 h-10 p-0 flex items-center justify-center text-xs sm:text-sm ${
-                              recordsCurrentPage === page
-                                ? 'bg-accent text-white'
-                                : 'border-accent text-accent hover:bg-accent hover:text-white'
-                            }`}
-                            style={{ 
-                              backgroundColor: recordsCurrentPage === page ? '#BEA877' : 'transparent',
-                              borderColor: '#BEA877',
-                              color: recordsCurrentPage === page ? 'white' : '#BEA877'
-                            }}
-                          >
-                            {page}
-                          </Button>
-                        ))}
-                        <Button
-                          variant="outline"
-                          onClick={() => handleRecordsPageChange(recordsCurrentPage + 1)}
-                          disabled={recordsCurrentPage === recordsTotalPages}
-                          className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                          style={{ borderColor: '#BEA877', color: '#BEA877' }}
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsRecordsDialogOpen(false)}
-                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                >
-                  Close
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
     </StudentsErrorBoundary>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,24 @@ type Student = {
   id: string;
   name: string;
   remaining_sessions: number;
+  current_remaining_sessions?: number;
   branch_id: string | null;
   package_type: string | null;
+  sessions?: number | null;
+  attendance_records?: Array<{
+    session_duration: number | null;
+    package_cycle: number | null;
+    status: string;
+    training_sessions?: {
+      package_cycle: number | null;
+    } | null;
+  }>;
+  student_package_history?: Array<{
+    id: string;
+    sessions: number | null;
+    remaining_sessions: number | null;
+    captured_at: string;
+  }>;
 };
 
 type CoachSessionTime = {
@@ -141,44 +157,44 @@ export function SessionsManager() {
 
   const queryClient = useQueryClient();
 
-const { role, coachData } = useAuth();
-const coachId = role === "coach" ? coachData?.id : null; // <-- DB ID, not auth.id
+  const { role, coachData } = useAuth();
+  const coachId = role === "coach" ? coachData?.id : null; // <-- DB ID, not auth.id
 
-const { data: sessions, isLoading, error } = useQuery({
-  queryKey: ['training-sessions', coachId], // include coachId so it refetches if changes
-  queryFn: async () => {
-    let query = supabase
-      .from('training_sessions')
-      .select(`
-        id,
-        date,
-        start_time,
-        end_time,
-        branch_id,
-        notes,
-        status,
-        package_type,
-        branches (name),
-        session_coaches (
+  const { data: sessions, isLoading, error } = useQuery({
+    queryKey: ['training-sessions', coachId], // include coachId so it refetches if changes
+    queryFn: async () => {
+      let query = supabase
+        .from('training_sessions')
+        .select(`
           id,
-          coach_id,
-          coaches (name)
-        ),
-        session_participants (
-          id,
-          student_id,
-          students (name)
-        ),
-        coach_session_times (
-          id,
-          session_id,
-          coach_id,
-          time_in,
-          time_out,
-          coaches (name)
-        )
-      `)
-      .order('date', { ascending: false });
+          date,
+          start_time,
+          end_time,
+          branch_id,
+          notes,
+          status,
+          package_type,
+          branches (name),
+          session_coaches (
+            id,
+            coach_id,
+            coaches (name)
+          ),
+          session_participants (
+            id,
+            student_id,
+            students (name)
+          ),
+          coach_session_times (
+            id,
+            session_id,
+            coach_id,
+            time_in,
+            time_out,
+            coaches (name)
+          )
+        `)
+        .order('date', { ascending: false });
 
     if (role === "coach" && coachId) {
       const { data: coachSessions, error: csError } = await supabase
@@ -250,26 +266,99 @@ const { data: sessions, isLoading, error } = useQuery({
     queryKey: ['students-select', formData.branch_id, formData.package_type],
     queryFn: async () => {
       if (!formData.branch_id || !formData.package_type) return [];
+      const pkgFilter = (formData.package_type || "").trim();
+      const isPersonal = pkgFilter.toLowerCase().includes("personal");
+
       const { data, error } = await supabase
         .from('students')
-        .select('id, name, remaining_sessions, branch_id, package_type')
+        .select(`
+          id,
+          name,
+          remaining_sessions,
+          branch_id,
+          package_type,
+          expiration_date,
+          sessions,
+          attendance_records (
+            session_duration,
+            package_cycle,
+            status,
+            training_sessions (
+              package_cycle
+            )
+          ),
+          student_package_history (
+            id,
+            sessions,
+            remaining_sessions,
+            captured_at
+          )
+        `)
         .eq('branch_id', formData.branch_id)
-        .eq('package_type', formData.package_type)
         .order('name');
-      
+
       if (error) {
         console.error('Error fetching students:', error, { branch_id: formData.branch_id, package_type: formData.package_type });
         throw new Error(`Failed to fetch students: ${error.message}`);
       }
-      
-      if (!data || data.length === 0) {
-        console.warn('No students found for:', { branch_id: formData.branch_id, package_type: formData.package_type });
+
+      const filtered =
+        data?.map((s) => {
+          // Calculate current cycle remaining sessions
+          const packageHistory = s.student_package_history || [];
+          const currentCycle = packageHistory.length + 1;
+
+          // Count sessions used in current cycle
+          const currentCycleSessionsUsed = ((s.attendance_records as any) || [])
+            .filter((record: any) =>
+              record.status === 'present' &&
+              ((record.package_cycle === currentCycle) ||
+               (record.training_sessions?.package_cycle === currentCycle))
+            )
+            .reduce((total: number, record: any) => total + (record.session_duration || 1), 0);
+
+          // Current remaining sessions = total sessions - sessions used in current cycle
+          const currentRemainingSessions = Math.max(0, (s.sessions || 0) - currentCycleSessionsUsed);
+
+          return {
+            ...s,
+            current_remaining_sessions: currentRemainingSessions
+          };
+        })
+        .filter((s) => {
+          const pkg = (s.package_type || "").trim().toLowerCase();
+          const target = pkgFilter.toLowerCase();
+          const expiryOk = !s.expiration_date || new Date(s.expiration_date) >= new Date();
+          if (!expiryOk) return false;
+          if (isPersonal && !pkg) return true; // allow null/empty for personal
+          return pkg.includes(target);
+        }) || [];
+
+      if (filtered.length === 0) {
+        console.warn('No students found for:', { branch_id: formData.branch_id, package_type: formData.package_type, filteredFrom: data?.length || 0 });
       }
-      
-      return data as Student[];
+
+      return filtered as any;
     },
     enabled: !!formData.branch_id && !!formData.package_type,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
+
+  // Force-refresh student list when dialog opens or filters change
+  useEffect(() => {
+    if (isDialogOpen) {
+      queryClient.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'students-select',
+      });
+      queryClient.refetchQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'students-select',
+      });
+    }
+  }, [isDialogOpen, formData.branch_id, formData.package_type, queryClient]);
 
   const createMutation = useMutation({
     mutationFn: async (session: typeof formData) => {
@@ -305,10 +394,13 @@ const { data: sessions, isLoading, error } = useQuery({
         }
       }
 
+      // Package cycle will be determined when attendance is taken
+      const sessionPackageCycle = null;
+
       // Create a single session
       const { data: sessionResult, error: sessionError } = await supabase
         .from('training_sessions')
-        .insert([{ ...session }])
+        .insert([{ ...session, package_cycle: sessionPackageCycle }])
         .select(`
           id,
           date,
@@ -386,7 +478,8 @@ const { data: sessions, isLoading, error } = useQuery({
             selectedStudents.map(studentId => ({
               session_id: createdSession.id,
               student_id: studentId,
-              status: 'pending' as const
+              status: 'pending' as const,
+              package_cycle: sessionPackageCycle
             }))
           );
         
@@ -415,7 +508,7 @@ const { data: sessions, isLoading, error } = useQuery({
     if (!students) return;
 
     const eligibleIds = students
-      .filter(student => student.remaining_sessions > 0)
+      .filter(student => (student.current_remaining_sessions ?? student.remaining_sessions) > 0)
       .map(student => student.id);
 
     if (selectAll) {
@@ -1029,8 +1122,8 @@ const { data: sessions, isLoading, error } = useQuery({
                                       type="checkbox"
                                       id="select-all-students"
                                       checked={
-                                        students.filter(s => s.remaining_sessions > 0).every(s => selectedStudents.includes(s.id)) &&
-                                        students.filter(s => s.remaining_sessions > 0).length > 0
+                                        students.filter(s => (s.current_remaining_sessions ?? s.remaining_sessions) > 0).every(s => selectedStudents.includes(s.id)) &&
+                                        students.filter(s => (s.current_remaining_sessions ?? s.remaining_sessions) > 0).length > 0
                                       }
                                       onChange={(e) => handleSelectAllStudents(e.target.checked)}
                                       className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
@@ -1048,9 +1141,10 @@ const { data: sessions, isLoading, error } = useQuery({
                                           id={student.id}
                                           checked={selectedStudents.includes(student.id)}
                                           onChange={(e) => {
-                                            if (student.remaining_sessions <= 0) {
+                                            const currentRemaining = student.current_remaining_sessions ?? student.remaining_sessions;
+                                            if (currentRemaining <= 0) {
                                               toast.error(
-                                                `${student.name} has no remaining sessions. Please increase their session count in the Players Manager.`
+                                                `${student.name} has no remaining sessions in their current package. Please renew their package or increase their session count.`
                                               );
                                               return;
                                             }
@@ -1062,15 +1156,15 @@ const { data: sessions, isLoading, error } = useQuery({
                                           }}
                                           className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
                                           style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                                          disabled={student.remaining_sessions <= 0}
+                                          disabled={(student.current_remaining_sessions ?? student.remaining_sessions) <= 0}
                                         />
                                         <Label
                                           htmlFor={student.id}
                                           className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
-                                            student.remaining_sessions <= 0 ? 'text-gray-400' : ''
+                                            (student.current_remaining_sessions ?? student.remaining_sessions) <= 0 ? 'text-gray-400' : ''
                                           }`}
                                         >
-                                          {student.name} ({student.remaining_sessions} sessions left)
+                                          {student.name} ({student.current_remaining_sessions ?? student.remaining_sessions} sessions left)
                                         </Label>
                                       </div>
                                     ))}

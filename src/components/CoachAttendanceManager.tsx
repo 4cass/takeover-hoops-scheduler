@@ -780,12 +780,12 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                     <p className="text-xs sm:text-sm text-gray-700">
                       <span className="font-medium">Package Type:</span> {selectedSessionDetails?.package_name || 'N/A'}
                     </p>
-                    <p className="text-xs sm:text-sm text-gray-700">
+                    <div className="text-xs sm:text-sm text-gray-700">
                       <span className="font-medium">Status:</span>{" "}
                       <Badge className={`${getStatusBadgeColor(selectedSessionDetails?.status || '')} text-xs sm:text-sm`}>
                         {selectedSessionDetails?.status ? selectedSessionDetails.status.charAt(0).toUpperCase() + selectedSessionDetails.status.slice(1) : 'N/A'}
                       </Badge>
-                    </p>
+                    </div>
                   </div>
                 </div>
               </div>

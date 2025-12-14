@@ -172,6 +172,51 @@ export type Database = {
           },
         ]
       }
+      coach_attendance_records: {
+        Row: {
+          coach_id: string
+          created_at: string
+          id: string
+          marked_at: string | null
+          session_id: string
+          status: Database["public"]["Enums"]["attendance_status"]
+          updated_at: string
+        }
+        Insert: {
+          coach_id: string
+          created_at?: string
+          id?: string
+          marked_at?: string | null
+          session_id: string
+          status?: Database["public"]["Enums"]["attendance_status"]
+          updated_at?: string
+        }
+        Update: {
+          coach_id?: string
+          created_at?: string
+          id?: string
+          marked_at?: string | null
+          session_id?: string
+          status?: Database["public"]["Enums"]["attendance_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_attendance_records_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "coaches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_attendance_records_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coaches: {
         Row: {
           auth_id: string | null
@@ -394,6 +439,53 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_package_history: {
+        Row: {
+          captured_at: string
+          enrollment_date: string | null
+          expiration_date: string | null
+          id: string
+          package_type: string | null
+          reason: string | null
+          remaining_sessions: number | null
+          sessions: number | null
+          student_id: string
+          total_training_fee: number | null
+        }
+        Insert: {
+          captured_at?: string
+          enrollment_date?: string | null
+          expiration_date?: string | null
+          id?: string
+          package_type?: string | null
+          reason?: string | null
+          remaining_sessions?: number | null
+          sessions?: number | null
+          student_id: string
+          total_training_fee?: number | null
+        }
+        Update: {
+          captured_at?: string
+          enrollment_date?: string | null
+          expiration_date?: string | null
+          id?: string
+          package_type?: string | null
+          reason?: string | null
+          remaining_sessions?: number | null
+          sessions?: number | null
+          student_id?: string
+          total_training_fee?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_package_history_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
         ]

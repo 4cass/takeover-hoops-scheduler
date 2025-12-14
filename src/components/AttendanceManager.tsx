@@ -81,6 +81,7 @@ interface AttendanceRecord {
   status: AttendanceStatus;
   marked_at: string | null;
   session_duration: number | null;
+  package_cycle: number | null;
   students: { 
     name: string;
     package_type: string | null;
@@ -290,6 +291,7 @@ export function AttendanceManager() {
           status,
           marked_at,
           session_duration,
+          package_cycle,
           students (name, package_type)
         `)
         .eq("session_id", selectedSession)
@@ -301,7 +303,7 @@ export function AttendanceManager() {
         throw error;
       }
 
-      return (data || []) as AttendanceRecord[];
+      return (data as any) || [];
     },
     enabled: !!selectedSession,
   });
@@ -312,7 +314,9 @@ export function AttendanceManager() {
         status, 
         marked_at: status !== "pending" ? new Date().toISOString() : null 
       };
-      
+      // Find record for student_id and existing cycle
+      const targetRecord = attendanceRecords?.find((r) => r.id === recordId);
+
       // Always explicitly set session_duration when marking as present
       // This prevents the database default (1.0) from being used
       if (status === 'present') {
@@ -324,6 +328,16 @@ export function AttendanceManager() {
           // For non-personal packages marking as present, default to 1.0
           updateData.session_duration = 1.0;
           console.log('Using default session_duration: 1.0 for non-personal package');
+        }
+
+        // Determine package_cycle if missing
+        if (targetRecord?.package_cycle == null && targetRecord?.student_id) {
+          const { count: historyCount } = await (supabase as any)
+            .from("student_package_history")
+            .select("id", { count: "exact", head: true })
+            .eq("student_id", targetRecord.student_id);
+          const cycle = (historyCount || 0) + 1;
+          updateData.package_cycle = cycle;
         }
       }
       
@@ -482,6 +496,78 @@ export function AttendanceManager() {
     onError: (error) => {
       console.error("Update coach time error:", error);
       toast.error(`Failed to update coach time: ${error.message}`);
+    },
+  });
+
+  const markCoachAbsentMutation = useMutation<
+    void,
+    Error,
+    { sessionId: string; coachId: string }
+  >({
+    mutationFn: async ({ sessionId, coachId }) => {
+      // Mark coach as absent in coach_attendance_records
+      // First try to update if record exists
+      const { data: existingRecord, error: selectError } = await (supabase as any)
+        .from("coach_attendance_records")
+        .select("id")
+        .eq("session_id", sessionId)
+        .eq("coach_id", coachId)
+        .maybeSingle();
+
+      // If table doesn't exist or other error, provide helpful message
+      if (selectError) {
+        // Check if it's a table not found error
+        if (selectError.code === 'PGRST116' || selectError.message?.includes('relation') || selectError.message?.includes('does not exist')) {
+          throw new Error("Coach attendance table not found. Please run the database migration first.");
+        }
+        // For other errors, still try to insert/update
+        console.warn("Error checking existing record:", selectError);
+      }
+
+      if (existingRecord) {
+        // Update existing record
+        const { error } = await (supabase as any)
+          .from("coach_attendance_records")
+          .update({
+            status: "absent",
+            marked_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingRecord.id);
+
+        if (error) {
+          console.error("Mark coach absent error:", error);
+          throw new Error(error.message || "Failed to update coach attendance");
+        }
+      } else {
+        // Insert new record
+        const { error } = await (supabase as any)
+          .from("coach_attendance_records")
+          .insert({
+            session_id: sessionId,
+            coach_id: coachId,
+            status: "absent",
+            marked_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+        if (error) {
+          console.error("Mark coach absent error:", error);
+          // Check if it's a table not found error
+          if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+            throw new Error("Coach attendance table not found. Please run the database migration first.");
+          }
+          throw new Error(error.message || "Failed to mark coach as absent");
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      toast.success("Coach marked as absent");
+    },
+    onError: (error) => {
+      console.error("Mark coach absent error:", error);
+      toast.error(`Failed to mark coach as absent: ${error.message}`);
     },
   });
 
@@ -1189,6 +1275,15 @@ export function AttendanceManager() {
                                       className="bg-red-600 text-white hover:bg-red-700 flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm"
                                     >
                                       Time Out
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => markCoachAbsentMutation.mutate({ sessionId: selectedSessionDetails!.id, coachId: sc.coach_id })}
+                                      disabled={markCoachAbsentMutation.isPending}
+                                      className="bg-orange-600 text-white hover:bg-orange-700 flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm"
+                                    >
+                                      Absent
                                     </Button>
                                   </div>
                                 </div>
