@@ -258,10 +258,12 @@ export function CoachesManager() {
         .from("coaches")
         .update({ name: coach.name, email: coach.email, phone: coach.phone || null })
         .eq("id", id)
-        .select()
-        .single();
+        .select();
       if (error) throw error;
-      return data;
+      if (!data || data.length === 0) {
+        throw new Error("No coach found with that ID or you don't have permission to update");
+      }
+      return data[0];
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coaches"] });
