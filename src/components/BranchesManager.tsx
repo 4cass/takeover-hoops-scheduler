@@ -110,6 +110,30 @@ export function BranchesManager() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // First check if there are students assigned to this branch
+      const { count, error: countError } = await supabase
+        .from("students")
+        .select("*", { count: "exact", head: true })
+        .eq("branch_id", id);
+      
+      if (countError) throw countError;
+      
+      if (count && count > 0) {
+        throw new Error(`Cannot delete branch: ${count} student(s) are still assigned to this branch. Please reassign or remove them first.`);
+      }
+      
+      // Also check for training sessions
+      const { count: sessionCount, error: sessionError } = await supabase
+        .from("training_sessions")
+        .select("*", { count: "exact", head: true })
+        .eq("branch_id", id);
+      
+      if (sessionError) throw sessionError;
+      
+      if (sessionCount && sessionCount > 0) {
+        throw new Error(`Cannot delete branch: ${sessionCount} training session(s) are associated with this branch.`);
+      }
+      
       const { error } = await supabase.from("branches").delete().eq("id", id);
       if (error) throw error;
     },
@@ -119,7 +143,7 @@ export function BranchesManager() {
       toast.success("Branch deleted successfully");
     },
     onError: (error: any) => {
-      toast.error("Failed to delete branch: " + error.message);
+      toast.error(error.message || "Failed to delete branch");
     },
   });
 
