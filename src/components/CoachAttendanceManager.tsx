@@ -1001,7 +1001,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                         sessionCoaches?.map((sc) => {
                           const coachTime = coachSessionTimes?.find((cst) => cst.coach_id === sc.coach_id);
                           return (
-                            <div key={sc.id} className="flex flex-col space-y-2 p-2 border-b last:border-b-0">
+                            <div key={sc.coach_id} className="flex flex-col space-y-2 p-2 border-b last:border-b-0">
                               <div className="flex items-center justify-between">
                                 <span className="text-xs sm:text-sm font-medium text-gray-700">{sc.coaches.name}</span>
                               </div>
