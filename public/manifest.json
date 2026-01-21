@@ -1,12 +1,11 @@
-
 {
   "name": "Takeover Basketball Management",
   "short_name": "Takeover BB",
   "description": "Basketball coaching and student management system",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#181a18",
-  "theme_color": "#c2ab75",
+  "background_color": "#242833",
+  "theme_color": "#242833",
   "orientation": "portrait-primary",
   "icons": [
     {
