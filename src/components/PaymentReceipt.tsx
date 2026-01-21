@@ -173,8 +173,8 @@ export function PaymentReceipt({ student, payment, allPayments: providedPayments
             <div className="flex gap-2 flex-wrap">
               <Button
                 onClick={handlePrint}
-                className="bg-accent hover:bg-[#8e7a3f] text-white transition-all duration-300"
-                style={{ backgroundColor: '#BEA877' }}
+                className="bg-accent hover:bg-[#5bc46d] text-white transition-all duration-300"
+                style={{ backgroundColor: '#79e58f' }}
               >
                 <Printer className="w-4 h-4 mr-2" />
                 Print
@@ -270,7 +270,7 @@ function ReceiptContent({
       `}</style>
 
       {/* Header with Logo and Branding */}
-      <div className="border-b-4 mb-6 pb-4" style={{ borderColor: '#BEA877' }}>
+      <div className="border-b-4 mb-6 pb-4" style={{ borderColor: '#79e58f' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <img
@@ -279,7 +279,7 @@ function ReceiptContent({
               className="w-20 h-20 object-contain"
             />
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: '#181A18' }}>
+              <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: '#242833' }}>
                 Takeover Basketball
               </h1>
               <p className="text-sm text-gray-600">Official Payment Receipt</p>
@@ -304,7 +304,7 @@ function ReceiptContent({
 
       {/* Student Information */}
       <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: '#f5f5f5' }}>
-        <h2 className="text-lg font-bold mb-3" style={{ color: '#181A18' }}>
+        <h2 className="text-lg font-bold mb-3" style={{ color: '#242833' }}>
           Student Information
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -329,13 +329,13 @@ function ReceiptContent({
 
       {/* Payment Summary */}
       <div className="mb-6">
-        <h2 className="text-lg font-bold mb-3" style={{ color: '#181A18' }}>
+        <h2 className="text-lg font-bold mb-3" style={{ color: '#242833' }}>
           {isFullHistory ? 'Payment History' : 'Payment Details'}
         </h2>
-        <div className="border-2 rounded-lg overflow-hidden" style={{ borderColor: '#BEA877' }}>
+        <div className="border-2 rounded-lg overflow-hidden" style={{ borderColor: '#79e58f' }}>
           <table className="w-full">
             <thead>
-              <tr style={{ backgroundColor: '#181A18', color: 'white' }}>
+              <tr style={{ backgroundColor: '#242833', color: 'white' }}>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Date</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Description</th>
                 <th className="py-3 px-4 text-right font-semibold text-sm">Amount</th>
@@ -352,7 +352,7 @@ function ReceiptContent({
                   </td>
                   <td className="py-3 px-4 text-sm">
                     {payment.isDownpayment ? (
-                      <span className="font-medium" style={{ color: '#BEA877' }}>
+                      <span className="font-medium" style={{ color: '#79e58f' }}>
                         Initial Downpayment
                       </span>
                     ) : (
@@ -372,19 +372,19 @@ function ReceiptContent({
       {/* Payment Breakdown */}
       {isFullHistory && (
         <div className="mb-6">
-          <h2 className="text-lg font-bold mb-3" style={{ color: '#181A18' }}>
+          <h2 className="text-lg font-bold mb-3" style={{ color: '#242833' }}>
             Payment Breakdown
           </h2>
-          <div className="border-2 rounded-lg p-4 space-y-3" style={{ borderColor: '#BEA877', backgroundColor: '#fafafa' }}>
+          <div className="border-2 rounded-lg p-4 space-y-3" style={{ borderColor: '#79e58f', backgroundColor: '#fafafa' }}>
             <div className="flex justify-between items-center py-2 border-b">
               <span className="font-semibold text-base">Total Training Fee:</span>
               <span className="font-bold text-base">₱{totalFee.toFixed(2)}</span>
             </div>
             
-            <div className="space-y-2 pl-4 border-l-2" style={{ borderColor: '#BEA877' }}>
+            <div className="space-y-2 pl-4 border-l-2" style={{ borderColor: '#79e58f' }}>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Less: Initial Downpayment</span>
-                <span className="text-sm font-medium" style={{ color: '#BEA877' }}>
+                <span className="text-sm font-medium" style={{ color: '#79e58f' }}>
                   - ₱{(student.downpayment || 0).toFixed(2)}
                 </span>
               </div>
@@ -393,23 +393,23 @@ function ReceiptContent({
                   <span className="text-sm text-gray-600">
                     Less: Payment {index + 1} ({format(new Date(payment.payment_date), "MMM dd, yyyy")})
                   </span>
-                  <span className="text-sm font-medium" style={{ color: '#BEA877' }}>
+                  <span className="text-sm font-medium" style={{ color: '#79e58f' }}>
                     - ₱{payment.payment_amount.toFixed(2)}
                   </span>
                 </div>
               ))}
             </div>
             
-            <div className="flex justify-between items-center py-3 border-t-2 pt-3" style={{ borderColor: '#BEA877' }}>
+            <div className="flex justify-between items-center py-3 border-t-2 pt-3" style={{ borderColor: '#79e58f' }}>
               <span className="font-bold text-lg">Total Paid:</span>
-              <span className="font-bold text-lg" style={{ color: '#BEA877' }}>
+              <span className="font-bold text-lg" style={{ color: '#79e58f' }}>
                 ₱{totalPaid.toFixed(2)}
               </span>
             </div>
             
-            <div className="flex justify-between items-center py-3 border-t-2 mt-2" style={{ borderColor: '#181A18' }}>
+            <div className="flex justify-between items-center py-3 border-t-2 mt-2" style={{ borderColor: '#242833' }}>
               <span className="font-bold text-xl">Remaining Balance:</span>
-              <span className="font-bold text-xl" style={{ color: '#181A18' }}>
+              <span className="font-bold text-xl" style={{ color: '#242833' }}>
                 ₱{remainingBalance.toFixed(2)}
               </span>
             </div>
@@ -422,23 +422,23 @@ function ReceiptContent({
       )}
       {!isFullHistory && (
         <div className="mb-6">
-          <h2 className="text-lg font-bold mb-3" style={{ color: '#181A18' }}>
+          <h2 className="text-lg font-bold mb-3" style={{ color: '#242833' }}>
             Payment Summary
           </h2>
-          <div className="border-2 rounded-lg p-4 space-y-3" style={{ borderColor: '#BEA877', backgroundColor: '#fafafa' }}>
+          <div className="border-2 rounded-lg p-4 space-y-3" style={{ borderColor: '#79e58f', backgroundColor: '#fafafa' }}>
             <div className="flex justify-between items-center py-2">
               <span className="font-semibold text-base">Total Training Fee:</span>
               <span className="font-bold text-base">₱{totalFee.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between items-center py-2 border-t" style={{ borderColor: '#BEA877' }}>
+            <div className="flex justify-between items-center py-2 border-t" style={{ borderColor: '#79e58f' }}>
               <span className="font-semibold text-base">This Payment:</span>
-              <span className="font-bold text-base" style={{ color: '#BEA877' }}>
+              <span className="font-bold text-base" style={{ color: '#79e58f' }}>
                 ₱{totalPaid.toFixed(2)}
               </span>
             </div>
-            <div className="flex justify-between items-center py-3 border-t-2 mt-2" style={{ borderColor: '#181A18' }}>
+            <div className="flex justify-between items-center py-3 border-t-2 mt-2" style={{ borderColor: '#242833' }}>
               <span className="font-bold text-lg">Remaining Balance:</span>
-              <span className="font-bold text-lg" style={{ color: '#181A18' }}>
+              <span className="font-bold text-lg" style={{ color: '#242833' }}>
                 ₱{remainingBalance.toFixed(2)}
               </span>
             </div>
@@ -447,8 +447,8 @@ function ReceiptContent({
       )}
 
       {/* Footer */}
-      <div className="mt-8 pt-6 border-t-2 text-center text-sm text-gray-600" style={{ borderColor: '#BEA877' }}>
-        <p className="font-semibold mb-2" style={{ color: '#181A18' }}>
+      <div className="mt-8 pt-6 border-t-2 text-center text-sm text-gray-600" style={{ borderColor: '#79e58f' }}>
+        <p className="font-semibold mb-2" style={{ color: '#242833' }}>
           Thank you for your payment!
         </p>
         <p>This is an official receipt from Takeover Basketball.</p>

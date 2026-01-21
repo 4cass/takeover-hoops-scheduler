@@ -162,19 +162,19 @@ export function BranchesManager() {
   }
 
   return (
-    <div className="min-h-screen bg-background pt-4 p-2 sm:p-3 md:p-6">
+    <div className="min-h-screen bg-background pt-4 p-2 sm:p-3 md:p-6 pb-24 md:pb-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#181818] mb-2 tracking-tight">Branches Manager</h1>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#242833] mb-2 tracking-tight">Branches Manager</h1>
           <p className="text-xs sm:text-sm md:text-base text-gray-700">Manage training locations and branch information</p>
         </div>
 
-        <Card className="border-2 border-[#181A18] bg-white shadow-xl">
-          <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-2 sm:p-3 md:p-4">
+        <Card className="border-2 border-[#242833] bg-white shadow-xl">
+          <CardHeader className="border-b border-[#242833] bg-[#242833] p-2 sm:p-3 md:p-4">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
               <div>
                 <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
-                  <Users className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
+                  <Users className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#79e58f' }} />
                   Branch Management
                 </CardTitle>
                 <CardDescription className="text-gray-400 text-xs sm:text-sm">
@@ -186,21 +186,25 @@ export function BranchesManager() {
                   <Button
                     onClick={() => resetForm()}
                     className="bg-accent text-white hover:bg-accent/90 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                    style={{ backgroundColor: '#BEA877' }}
+                    style={{ backgroundColor: '#79e58f' }}
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Add Branch
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-md bg-white border-2 border-[#181A18] p-2 sm:p-3 md:p-4">
-                  <DialogHeader>
-                    <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
-                      {editingBranch ? "Edit Branch" : "Add New Branch"}
+                <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-md border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+                  <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+                    <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                        <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                      </div>
+                      <span className="truncate">{editingBranch ? "Edit Branch" : "Add New Branch"}</span>
                     </DialogTitle>
-                    <DialogDescription className="text-gray-600 text-xs sm:text-sm">
+                    <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
                       {editingBranch ? "Update branch information" : "Add a new training location"}
                     </DialogDescription>
                   </DialogHeader>
+                  <div className="p-3 sm:p-4 md:p-5 overflow-y-auto flex-1 custom-scrollbar">
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="min-w-0">
                       <Label htmlFor="name" className="text-gray-700 font-medium text-xs sm:text-sm">Branch Name</Label>
@@ -210,7 +214,7 @@ export function BranchesManager() {
                         onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                         required
                         className="mt-1 pl-4 pr-4 py-1.5 sm:py-2 border-2 border-accent rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-accent/20 bg-white"
-                        style={{ borderColor: '#BEA877' }}
+                        style={{ borderColor: '#79e58f' }}
                       />
                     </div>
                     <div className="min-w-0">
@@ -221,7 +225,7 @@ export function BranchesManager() {
                         onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))}
                         required
                         className="mt-1 pl-4 pr-4 py-1.5 sm:py-2 border-2 border-accent rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-accent/20 bg-white"
-                        style={{ borderColor: '#BEA877' }}
+                        style={{ borderColor: '#79e58f' }}
                       />
                     </div>
                     <div className="min-w-0">
@@ -232,7 +236,7 @@ export function BranchesManager() {
                         onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))}
                         required
                         className="mt-1 pl-4 pr-4 py-1.5 sm:py-2 border-2 border-accent rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-accent/20 bg-white"
-                        style={{ borderColor: '#BEA877' }}
+                        style={{ borderColor: '#79e58f' }}
                       />
                     </div>
                     <div className="min-w-0">
@@ -243,7 +247,7 @@ export function BranchesManager() {
                         onChange={(e) => setFormData((prev) => ({ ...prev, contact_info: e.target.value }))}
                         placeholder="Phone, email, or other contact details"
                         className="mt-1 pl-4 pr-4 py-1.5 sm:py-2 border-2 border-accent rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-accent/20 bg-white"
-                        style={{ borderColor: '#BEA877' }}
+                        style={{ borderColor: '#79e58f' }}
                       />
                     </div>
                     <div className="flex flex-row justify-end gap-2 pt-4 border-t border-gray-200">
@@ -259,12 +263,13 @@ export function BranchesManager() {
                         type="submit"
                         disabled={createMutation.isPending || updateMutation.isPending}
                         className="bg-accent text-white hover:bg-accent/90 min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
-                        style={{ backgroundColor: '#BEA877' }}
+                        style={{ backgroundColor: '#79e58f' }}
                       >
                         {createMutation.isPending || updateMutation.isPending ? "Processing..." : editingBranch ? "Update" : "Create"}
                       </Button>
                     </div>
                   </form>
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>
@@ -272,7 +277,7 @@ export function BranchesManager() {
           <CardContent className="p-2 sm:p-3 md:p-4">
             <div className="mb-6">
               <div className="flex items-center mb-4">
-                <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
+                <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#79e58f' }} />
                 <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filter Branches</h3>
               </div>
               <div className="relative max-w-md min-w-0">
@@ -283,7 +288,7 @@ export function BranchesManager() {
                   className="pl-10 pr-4 py-1.5 sm:py-2 w-full border-2 border-accent rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-accent/20 bg-white"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ borderColor: '#BEA877' }}
+                  style={{ borderColor: '#79e58f' }}
                 />
               </div>
               <p className="text-xs sm:text-sm text-gray-600 mt-3">
@@ -296,11 +301,11 @@ export function BranchesManager() {
                 <Card
                   key={branch.id}
                   className="border-2 transition-all duration-300 hover:shadow-lg rounded-xl border-accent"
-                  style={{ borderColor: '#BEA877' }}
+                  style={{ borderColor: '#79e58f' }}
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-center space-x-2 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-white font-semibold text-sm" style={{ backgroundColor: '#BEA877' }}>
+                      <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-white font-semibold text-sm" style={{ backgroundColor: '#79e58f' }}>
                         {branch.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
                       </div>
                       <h3 className="font-bold text-base sm:text-lg text-gray-900 truncate">{branch.name}</h3>
@@ -326,7 +331,7 @@ export function BranchesManager() {
                           size="sm"
                           onClick={() => handleEdit(branch)}
                           className="bg-yellow-600 text-white hover:bg-accent w-10 h-10 p-0 flex items-center justify-center"
-                          style={{ borderColor: '#BEA877' }}
+                          style={{ borderColor: '#79e58f' }}
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -335,7 +340,7 @@ export function BranchesManager() {
                           size="sm"
                           onClick={() => deleteMutation.mutate(branch.id)}
                           className="bg-red-600 text-white hover:bg-accent w-10 h-10 p-0 flex items-center justify-center"
-                          style={{ borderColor: '#BEA877' }}
+                          style={{ borderColor: '#79e58f' }}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -362,7 +367,7 @@ export function BranchesManager() {
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
                   className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                  style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                  style={{ borderColor: '#79e58f', color: '#79e58f' }}
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
@@ -377,9 +382,9 @@ export function BranchesManager() {
                         : 'border-accent text-accent hover:bg-accent hover:text-white'
                     }`}
                     style={{
-                      backgroundColor: currentPage === page ? '#BEA877' : 'transparent',
-                      borderColor: '#BEA877',
-                      color: currentPage === page ? 'white' : '#BEA877'
+                      backgroundColor: currentPage === page ? '#79e58f' : 'transparent',
+                      borderColor: '#79e58f',
+                      color: currentPage === page ? 'white' : '#79e58f'
                     }}
                   >
                     {page}
@@ -390,7 +395,7 @@ export function BranchesManager() {
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
                   className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                  style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                  style={{ borderColor: '#79e58f', color: '#79e58f' }}
                 >
                   <ChevronRight className="w-4 h-4" />
                 </Button>

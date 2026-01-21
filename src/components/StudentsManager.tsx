@@ -184,11 +184,87 @@ export function StudentsManager() {
     },
   });
 
+  // Fetch attendance records for all students to calculate accurate session usage
+  const { data: allAttendanceRecords } = useQuery({
+    queryKey: ["all-attendance-records"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("attendance_records")
+        .select(`
+          student_id,
+          session_duration,
+          status,
+          package_cycle,
+          training_sessions (date)
+        `)
+        .eq("status", "present");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch package history for all students to determine current package cycle
+  const { data: allPackageHistory } = useQuery({
+    queryKey: ["all-package-history"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("student_package_history")
+        .select("student_id, captured_at, enrollment_date, expiration_date")
+        .order("captured_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Helper function to calculate accurate session usage for a student
+  const getAccurateSessionData = (student: Student) => {
+    const total = Number(student.sessions) || 0;
+    
+    // Get package history for this student
+    const studentHistory = allPackageHistory?.filter(h => h.student_id === student.id) || [];
+    const currentCycle = studentHistory.length + 1;
+    
+    // Determine current package window
+    const latestHistoryCapture = studentHistory.length > 0 
+      ? new Date(studentHistory[0].captured_at) 
+      : null;
+    const packageStart = latestHistoryCapture 
+      ? latestHistoryCapture 
+      : student.enrollment_date 
+        ? new Date(student.enrollment_date) 
+        : null;
+    const packageEnd = student.expiration_date ? new Date(student.expiration_date) : null;
+    
+    // Get attendance records for this student in current package
+    const studentAttendance = allAttendanceRecords?.filter(record => {
+      if (record.student_id !== student.id) return false;
+      
+      // First try to match by package_cycle
+      if (record.package_cycle != null) {
+        return record.package_cycle === currentCycle;
+      }
+      
+      // Fallback to date-based matching
+      const sessionDate = record.training_sessions?.date ? new Date(record.training_sessions.date) : null;
+      if (!sessionDate) return false;
+      if (packageStart && sessionDate < packageStart) return false;
+      if (packageEnd && sessionDate > packageEnd) return false;
+      return true;
+    }) || [];
+    
+    // Calculate used sessions from attendance
+    const usedSessions = studentAttendance.reduce((sum, record) => sum + (record.session_duration ?? 1), 0);
+    const remaining = Math.max(0, total - usedSessions);
+    const progressPercentage = total > 0 ? (usedSessions / total) * 100 : 0;
+    
+    return { total, usedSessions, remaining, progressPercentage };
+  };
+
   const filteredStudents = students?.filter((student) => {
-    const totalSessions = Number(student.sessions) || 0;
-    const remainingSessions = Number(student.remaining_sessions) || 0;
+    // Use accurate session data for filtering (same as card display)
+    const sessionData = getAccurateSessionData(student);
     const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
-    const packageStatus = getPackageStatus(totalSessions, remainingSessions, expirationDate);
+    const packageStatus = getPackageStatus(sessionData.total, sessionData.remaining, expirationDate);
 
     return (
       student.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
@@ -426,18 +502,18 @@ const deleteMutation = useMutation({
 
   return (
     <StudentsErrorBoundary>
-      <div className="min-h-screen bg-background pt-4 p-3 sm:p-4 md:p-6">
+      <div className="min-h-screen bg-background pt-4 p-3 sm:p-4 md:p-6 pb-24 md:pb-6">
         <div className="max-w-7xl mx-auto space-y-6">
           <div className="mb-6">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#181818] mb-2 tracking-tight">Players Manager</h1>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#242833] mb-2 tracking-tight">Players Manager</h1>
             <p className="text-xs sm:text-sm md:text-base text-gray-700">Manage player information and session quotas</p>
           </div>
-          <Card className="border-2 border-[#181A18] bg-white shadow-xl overflow-hidden">
-            <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-5">
+          <Card className="border-2 border-[#242833] bg-white shadow-xl overflow-hidden">
+            <CardHeader className="border-b border-[#242833] bg-[#242833] p-3 sm:p-4 md:p-5">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 lg:gap-4">
                 <div>
                   <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
-                    <Users className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
+                    <Users className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#79e58f' }} />
                     Player Profiles
                   </CardTitle>
                   <CardDescription className="text-gray-400 text-xs sm:text-sm">
@@ -448,22 +524,25 @@ const deleteMutation = useMutation({
                   <DialogTrigger asChild>
                     <Button
                       onClick={() => resetForm()}
-                      className="bg-accent hover:bg-[#8e7a3f] text-white transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                      style={{ backgroundColor: '#BEA877' }}
+                      className="bg-green-600 hover:bg-green-700 text-white transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
                     >
                       <Plus className="w-4 h-4 mr-2" />
                       Add Player
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-2xl md:max-w-3xl border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden p-3 sm:p-4 md:p-5">
-                    <DialogHeader>
-                      <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
-                        {editingStudent ? "Edit Player" : "Add New Player"}
+                  <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-2xl md:max-w-3xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+                    <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+                      <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                        </div>
+                        <span className="truncate">{editingStudent ? "Edit Player" : "Add New Player"}</span>
                       </DialogTitle>
-                      <DialogDescription className="text-gray-600 text-xs sm:text-sm">
+                      <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
                         {editingStudent ? "Update player information" : "Add a new player to the system"}
                       </DialogDescription>
                     </DialogHeader>
+                    <div className="p-3 sm:p-4 md:p-5 overflow-y-auto flex-1 custom-scrollbar">
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="flex flex-col space-y-2 min-w-0">
@@ -474,7 +553,7 @@ const deleteMutation = useMutation({
                             onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                             required
                             className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                            style={{ borderColor: '#BEA877' }}
+                            style={{ borderColor: '#79e58f' }}
                           />
                         </div>
                         <div className="flex flex-col space-y-2 min-w-0">
@@ -486,7 +565,7 @@ const deleteMutation = useMutation({
                             onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
                             required
                             className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                            style={{ borderColor: '#BEA877' }}
+                            style={{ borderColor: '#79e58f' }}
                           />
                         </div>
                       </div>
@@ -498,7 +577,7 @@ const deleteMutation = useMutation({
                             value={formData.phone}
                             onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
                             className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                            style={{ borderColor: '#BEA877' }}
+                            style={{ borderColor: '#79e58f' }}
                           />
                         </div>
                         <div className="flex flex-col space-y-2 min-w-0">
@@ -507,7 +586,7 @@ const deleteMutation = useMutation({
                             value={formData.branch_id ?? undefined}
                             onValueChange={(value) => setFormData((prev) => ({ ...prev, branch_id: value }))}
                           >
-                            <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                            <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                               <SelectValue placeholder="Select Branch" />
                             </SelectTrigger>
                             <SelectContent>
@@ -527,7 +606,7 @@ const deleteMutation = useMutation({
                             value={formData.package_type ?? undefined}
                             onValueChange={(value) => setFormData((prev) => ({ ...prev, package_type: value }))}
                           >
-                            <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                            <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                               <SelectValue placeholder="Select Package Type" />
                             </SelectTrigger>
                             <SelectContent>
@@ -549,7 +628,7 @@ const deleteMutation = useMutation({
                                   "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
                                   !formData.enrollment_date && "text-muted-foreground"
                                 )}
-                                style={{ borderColor: '#BEA877' }}
+                                style={{ borderColor: '#79e58f' }}
                               >
                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                 {formData.enrollment_date ? format(formData.enrollment_date, "MM/dd/yyyy") : <span>Pick a date</span>}
@@ -577,7 +656,7 @@ const deleteMutation = useMutation({
                                     "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
                                     !formData.expiration_date && "text-muted-foreground"
                                   )}
-                                  style={{ borderColor: '#BEA877' }}
+                                  style={{ borderColor: '#79e58f' }}
                                 >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
                                   {formData.expiration_date ? format(formData.expiration_date, "MM/dd/yyyy") : <span>Pick a date</span>}
@@ -615,6 +694,7 @@ const deleteMutation = useMutation({
                         </Button>
                       </div>
                     </form>
+                    </div>
                   </DialogContent>
                 </Dialog>
               </div>
@@ -622,13 +702,13 @@ const deleteMutation = useMutation({
             <CardContent className="p-3 sm:p-4 md:p-5">
               <div className="mb-6">
                 <div className="flex items-center mb-4">
-                  <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
+                  <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#79e58f' }} />
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filter Players</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="flex flex-col space-y-2 min-w-0">
                     <Label htmlFor="search-players" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      <Search className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                      <Search className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                       Search
                     </Label>
                     <div className="relative w-full">
@@ -640,20 +720,20 @@ const deleteMutation = useMutation({
                         className="pl-10 pr-4 py-2 w-full border-2 border-accent rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-accent/20"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{ borderColor: '#BEA877' }}
+                        style={{ borderColor: '#79e58f' }}
                       />
                     </div>
                   </div>
                   <div className="flex flex-col space-y-2 min-w-0">
                     <Label htmlFor="filter-branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                      <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                       Branch
                     </Label>
                     <Select
                       value={branchFilter}
                       onValueChange={(value) => setBranchFilter(value)}
                     >
-                      <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                      <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                         <SelectValue placeholder="Select Branch" />
                       </SelectTrigger>
                       <SelectContent>
@@ -668,14 +748,14 @@ const deleteMutation = useMutation({
                   </div>
                   <div className="flex flex-col space-y-2 min-w-0">
                     <Label htmlFor="filter-package-type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                      <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                       Package Type
                     </Label>
                     <Select
                       value={packageTypeFilter}
                       onValueChange={(value) => setPackageTypeFilter(value)}
                     >
-                      <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                      <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                         <SelectValue placeholder="Select Package Type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -690,14 +770,14 @@ const deleteMutation = useMutation({
                   </div>
                   <div className="flex flex-col space-y-2 min-w-0">
                     <Label htmlFor="filter-status" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                      <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                       Package Status
                     </Label>
                     <Select
                       value={statusFilter}
                       onValueChange={(value) => setStatusFilter(value)}
                     >
-                      <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                      <SelectTrigger className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                         <SelectValue placeholder="Select Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -754,149 +834,161 @@ const deleteMutation = useMutation({
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {paginatedStudents.map((student) => {
-                      const total = Number(student.sessions) || 0;
-                      const remaining = Number(student.remaining_sessions) || 0;
-                      const usedSessions = total - remaining;
-                      const progressPercentage = total > 0 ? (usedSessions / total) * 100 : 0;
+                      // Use accurate session data calculated from attendance records
+                      const sessionData = getAccurateSessionData(student);
+                      const { total, usedSessions, remaining, progressPercentage } = sessionData;
                       const branch = branches?.find(b => b.id === student.branch_id);
+                      const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
+                      const packageStatus = getPackageStatus(total, remaining, expirationDate);
+                      
                       return (
                         <Card 
                           key={student.id} 
-                          className="border-2 transition-all duration-300 hover:shadow-lg rounded-lg border-accent overflow-hidden"
-                          style={{ borderColor: '#BEA877' }}
+                          className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden"
                         >
-                          <CardHeader className="pb-3">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
-                              <div className="flex items-center space-x-2 min-w-0">
-                                <Users className="w-4 sm:w-5 h-4 sm:h-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                                <h3 className="font-bold text-base sm:text-lg text-gray-900 truncate">
-                                  {student.name}
-                                </h3>
+                          {/* Header with Name & Status - Dark Background */}
+                          <div className="bg-[#242833] p-4">
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="w-10 h-10 bg-[#79e58f] rounded-full flex items-center justify-center flex-shrink-0">
+                                  <span className="text-sm font-bold text-white">{student.name.charAt(0).toUpperCase()}</span>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <h3 className="font-semibold text-white text-sm leading-tight line-clamp-1" title={student.name}>
+                                    {student.name}
+                                  </h3>
+                                  <p className="text-xs text-gray-400 truncate">{student.email}</p>
+                                </div>
                               </div>
-                              <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
-                                <Badge className={`font-medium ${getPackageBadgeColor(student.package_type)} text-xs sm:text-sm px-2 py-1 truncate max-w-full`}>
-                                  {student.package_type || 'N/A'}
-                                </Badge>
-                                {(() => {
-                                  const totalSessions = Number(student.sessions) || 0;
-                                  const remainingSessions = Number(student.remaining_sessions) || 0;
-                                  const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
-                                  const packageStatus = getPackageStatus(totalSessions, remainingSessions, expirationDate);
-
-                                  return (
-                                    <Badge className={`font-medium ${packageStatus.statusColor} border text-xs sm:text-sm px-2 py-1`}>
-                                      {packageStatus.statusText}
-                                    </Badge>
-                                  );
-                                })()}
-                              </div>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${
+                                packageStatus.status === 'ongoing' 
+                                  ? 'bg-emerald-500 text-white' 
+                                  : packageStatus.status === 'expired' 
+                                    ? 'bg-red-500 text-white' 
+                                    : 'bg-blue-500 text-white'
+                              }`}>
+                                {packageStatus.statusText}
+                              </span>
                             </div>
-                            <div className="flex items-center space-x-2 text-gray-600 min-w-0">
-                              <User className="w-4 h-4 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm font-medium truncate">{student.email}</span>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            <div className="flex items-center space-x-2 min-w-0">
-                              <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Branch:</span> {branch?.name || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center space-x-2 min-w-0">
-                              <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Session Progress:</span> {
-                                (() => {
-                                  const used = Number(usedSessions);
-                                  // Debug logging
-                                  if (used % 1 !== 0) {
-                                    console.log(`Student ${student.name}: usedSessions=${usedSessions}, used=${used}, remaining=${remaining}, total=${total}`);
-                                  }
-                                  // Always show one decimal place if it's not a whole number
-                                  const remainder = used % 1;
-                                  if (remainder === 0) {
-                                    return used.toString();
-                                  } else {
-                                    return used.toFixed(1);
-                                  }
-                                })()
-                              } of {total} attended</span>
-                            </div>
-                            <div>
-                              <Progress value={progressPercentage} className="h-2 w-full max-w-full" />
-                            </div>
-                            <div className="flex items-center space-x-2 min-w-0">
-                              <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm font-medium">{
-                                (() => {
-                                  const rem = Number(student.remaining_sessions) || 0;
-                                  return rem % 1 === 0 ? rem.toString() : rem.toFixed(1);
-                                })()
-                              } Remaining Sessions</span>
-                            </div>
-                            <div className="flex items-center space-x-2 min-w-0">
-                              <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                              <span className="text-xs sm:text-sm truncate"><span className="font-medium">Enrolled:</span> {student.enrollment_date ? format(new Date(student.enrollment_date), 'MM/dd/yyyy') : 'N/A'}</span>
-                            </div>
-                            <div className="border-t pt-3 space-y-2">
-                              <div className="flex items-center space-x-2 min-w-0">
-                                <DollarSign className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                                <span className="text-xs sm:text-sm truncate"><span className="font-medium">Total Fee:</span> ₱{(student.total_training_fee || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex items-center space-x-2 min-w-0">
-                                <CreditCard className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                                <span className="text-xs sm:text-sm truncate"><span className="font-medium">Downpayment:</span> ₱{(student.downpayment || 0).toFixed(2)}</span>
-                              </div>
-                              <div className="flex items-center space-x-2 min-w-0">
-                                <DollarSign className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                                <span className={`text-xs sm:text-sm truncate font-medium ${(student.remaining_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                  <span className="font-medium">Remaining:</span> ₱{(student.remaining_balance || 0).toFixed(2)}
+                            
+                            {/* Package & Branch */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="inline-flex items-center px-2 py-0.5 bg-[#79e58f]/20 text-[#79e58f] rounded text-xs font-medium">
+                                {student.package_type || 'No Package'}
+                              </span>
+                              {branch && (
+                                <span className="inline-flex items-center text-xs text-gray-400">
+                                  <MapPin className="w-3 h-3 mr-1" />
+                                  {branch.name}
                                 </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Stats Section */}
+                          <div className="p-4">
+                            {/* Session Stats Grid */}
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              <div className="text-center p-2 bg-gray-50 rounded-lg">
+                                <p className="text-[10px] text-gray-400 uppercase">Total</p>
+                                <p className="text-sm font-bold text-gray-900">{total}</p>
+                              </div>
+                              <div className="text-center p-2 bg-emerald-50 rounded-lg">
+                                <p className="text-[10px] text-emerald-600 uppercase">Used</p>
+                                <p className="text-sm font-bold text-emerald-700">{usedSessions % 1 === 0 ? usedSessions : usedSessions.toFixed(1)}</p>
+                              </div>
+                              <div className="text-center p-2 bg-gray-50 rounded-lg">
+                                <p className="text-[10px] text-gray-400 uppercase">Left</p>
+                                <p className="text-sm font-bold text-gray-900">{remaining % 1 === 0 ? remaining : remaining.toFixed(1)}</p>
                               </div>
                             </div>
-                            <div className="flex items-center justify-end flex-wrap gap-2">
-                              <div className="flex space-x-2 flex-wrap">
+                            
+                            {/* Progress Bar */}
+                            <div className="mb-3">
+                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all ${
+                                    packageStatus.status === 'ongoing' ? 'bg-[#79e58f]' : packageStatus.status === 'expired' ? 'bg-red-400' : 'bg-blue-400'
+                                  }`}
+                                  style={{ width: `${progressPercentage}%` }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-1 text-center">{Math.round(progressPercentage)}% completed</p>
+                            </div>
+                            
+                            {/* Date Info */}
+                            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                              <div className="bg-gray-50 rounded-lg p-2">
+                                <p className="text-gray-400 text-[10px] uppercase">Enrolled</p>
+                                <p className="font-medium text-gray-900">{student.enrollment_date ? format(new Date(student.enrollment_date), 'MMM dd, yy') : '—'}</p>
+                              </div>
+                              <div className="bg-gray-50 rounded-lg p-2">
+                                <p className="text-gray-400 text-[10px] uppercase">Expires</p>
+                                <p className="font-medium text-gray-900">{student.expiration_date ? format(new Date(student.expiration_date), 'MMM dd, yy') : '—'}</p>
+                              </div>
+                            </div>
+                            
+                            {/* Balance */}
+                            <div className="flex items-center justify-between py-2 border-t border-gray-100">
+                              <span className="text-xs text-gray-500">Balance</span>
+                              <span className={`text-sm font-semibold ${(student.remaining_balance || 0) > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
+                                ₱{(student.remaining_balance || 0).toLocaleString()}
+                              </span>
+                            </div>
+                            
+                            {/* Action Buttons */}
+                            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleShowRecords(student)}
+                                className="text-xs h-8 px-3 text-white"
+                                style={{ backgroundColor: '#1e3a8a', borderColor: '#1e3a8a' }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#1e40af';
+                                  e.currentTarget.style.borderColor = '#1e40af';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#1e3a8a';
+                                  e.currentTarget.style.borderColor = '#1e3a8a';
+                                }}
+                              >
+                                <Eye className="w-3.5 h-3.5 mr-1" />
+                                View
+                              </Button>
+                              <div className="flex gap-1">
                                 <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleShowRecords(student)}
-                                  className="bg-blue-600 text-white hover:bg-blue-700 w-10 h-10 p-0 flex items-center justify-center"
-                                  title="View Records"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
+                                  variant="ghost"
                                   size="sm"
                                   onClick={() => handleAddPayment(student)}
-                                  className="bg-green-600 text-white hover:bg-green-700 w-10 h-10 p-0 flex items-center justify-center"
+                                  className="h-8 w-8 p-0 text-emerald-600 hover:bg-emerald-50"
                                   title="Add Payment"
                                 >
                                   <DollarSign className="w-4 h-4" />
                                 </Button>
                                 <Button
-                                  variant="outline"
+                                  variant="ghost"
                                   size="sm"
                                   onClick={() => handleEdit(student)}
-                                  className="bg-yellow-600 text-white hover:bg-yellow-700 w-10 h-10 p-0 flex items-center justify-center"
+                                  className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"
                                   title="Edit"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
                                 <Button
-      variant="outline"
-      size="sm"
-      onClick={() => deleteMutation.mutate(student.id)}
-      // Temporarily remove disabled to test
-      // disabled={userRole !== "admin" && userRole !== "coach"}
-      className="bg-red-600 text-white hover:bg-red-700 w-10 h-10 p-0 flex items-center justify-center"
-      title="Delete"
-    >
-      <Trash2 className="w-4 h-4" />
-    </Button>
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => deleteMutation.mutate(student.id)}
+                                  className="h-8 w-8 p-0 text-red-500 hover:bg-red-50"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
                               </div>
                             </div>
-                          </CardContent>
+                          </div>
                         </Card>
                       );
                     })}
@@ -908,7 +1000,7 @@ const deleteMutation = useMutation({
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
                         className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                        style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                        style={{ borderColor: '#79e58f', color: '#79e58f' }}
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </Button>
@@ -923,9 +1015,9 @@ const deleteMutation = useMutation({
                               : 'border-accent text-accent hover:bg-accent hover:text-white'
                           }`}
                           style={{ 
-                            backgroundColor: currentPage === page ? '#BEA877' : 'transparent',
-                            borderColor: '#BEA877',
-                            color: currentPage === page ? 'white' : '#BEA877'
+                            backgroundColor: currentPage === page ? '#79e58f' : 'transparent',
+                            borderColor: '#79e58f',
+                            color: currentPage === page ? 'white' : '#79e58f'
                           }}
                         >
                           {page}
@@ -936,7 +1028,7 @@ const deleteMutation = useMutation({
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
                         className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                        style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                        style={{ borderColor: '#79e58f', color: '#79e58f' }}
                       >
                         <ChevronRight className="w-4 h-4" />
                       </Button>
@@ -950,8 +1042,4 @@ const deleteMutation = useMutation({
       </div>
     </StudentsErrorBoundary>
   );
-}
-
-function useEffect(arg0: () => void, arg1: undefined[]) {
-  throw new Error("Function not implemented.");
 }

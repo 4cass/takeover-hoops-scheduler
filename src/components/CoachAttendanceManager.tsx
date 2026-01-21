@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle, XCircle, Clock, Calendar, MapPin, Users, Filter, Search } from "lucide-react";
+import { CheckCircle, XCircle, Clock, Calendar, MapPin, Users, Filter, Search, Timer, Eye } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -102,6 +103,11 @@ export function CoachAttendanceManager() {
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [packageFilter, setPackageFilter] = useState<string | "All">("All");
   const [activeTab, setActiveTab] = useState<"coaches" | "players">("coaches");
+  const [showDurationDialog, setShowDurationDialog] = useState(false);
+  const [pendingAttendanceUpdate, setPendingAttendanceUpdate] = useState<{ recordId: string; status: AttendanceStatus } | null>(null);
+  const [selectedDuration, setSelectedDuration] = useState<number>(0);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [updatingRecordId, setUpdatingRecordId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -285,7 +291,16 @@ const { data: sessions } = useQuery<TrainingSession[]>({
       console.log("Fetching attendance for session:", selectedSession);
       const { data, error } = await supabase
         .from("attendance_records")
-        .select("id, session_id, student_id, status, marked_at, students (name)")
+        .select(`
+          id,
+          session_id,
+          student_id,
+          status,
+          marked_at,
+          session_duration,
+          package_cycle,
+          students (name, package_type)
+        `)
         .eq("session_id", selectedSession)
         .order("created_at", { ascending: true });
       
@@ -430,11 +445,53 @@ const { data: sessions } = useQuery<TrainingSession[]>({
   });
 
   const updateAttendance = useMutation({
-    mutationFn: async ({ recordId, status }: { recordId: string; status: AttendanceStatus }) => {
-      console.log("Updating attendance:", recordId, status);
+    mutationFn: async ({ recordId, status, session_duration }: { recordId: string; status: AttendanceStatus; session_duration?: number }) => {
+      console.log("Updating attendance:", recordId, status, session_duration);
+      const updateData: any = { 
+        status, 
+        marked_at: status !== "pending" ? new Date().toISOString() : null 
+      };
+      
+      // Find record for student_id and existing cycle
+      const targetRecord = attendanceRecords?.find((r) => r.id === recordId);
+      
+      // Check if this is a Personal Training package
+      const packageType = targetRecord?.students?.package_type?.toLowerCase() || '';
+      const isPersonalPackage = packageType.includes('personal');
+
+      // Only set session_duration for Personal Training packages when marking as present
+      if (status === 'present') {
+        if (isPersonalPackage) {
+          // For Personal Training packages, require duration to be provided
+          if (session_duration !== undefined && session_duration !== null && session_duration > 0) {
+            updateData.session_duration = Number(session_duration);
+            console.log('Setting session_duration to:', updateData.session_duration, 'for Personal Training package');
+          } else {
+            // If no duration provided for personal package, default to 1.0
+            updateData.session_duration = 1.0;
+            console.log('Using default session_duration: 1.0 for Personal Training package');
+          }
+        } else {
+          // For non-personal packages, always use 1.0
+          updateData.session_duration = 1.0;
+          console.log('Using default session_duration: 1.0 for non-personal package');
+        }
+
+        // Determine package_cycle if missing
+        if (targetRecord?.package_cycle == null && targetRecord?.student_id) {
+          const { count: historyCount } = await (supabase as any)
+            .from("student_package_history")
+            .select("id", { count: "exact", head: true })
+            .eq("student_id", targetRecord.student_id);
+          const cycle = (historyCount || 0) + 1;
+          updateData.package_cycle = cycle;
+        }
+      }
+      
+      console.log('Updating attendance with data:', updateData);
       const { error } = await supabase
         .from("attendance_records")
-        .update({ status, marked_at: status !== "pending" ? new Date().toISOString() : null })
+        .update(updateData)
         .eq("id", recordId);
       if (error) {
         console.error("Error updating attendance:", error);
@@ -444,10 +501,13 @@ const { data: sessions } = useQuery<TrainingSession[]>({
     onSuccess: () => {
       toast.success("Attendance updated");
       queryClient.invalidateQueries({ queryKey: ["attendance", selectedSession] });
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+      setUpdatingRecordId(null);
     },
     onError: (error) => {
       console.error("Attendance update failed:", error);
       toast.error("Failed to update attendance");
+      setUpdatingRecordId(null);
     },
   });
 
@@ -472,7 +532,40 @@ const { data: sessions } = useQuery<TrainingSession[]>({
   const pendingCount = filteredAttendanceRecords.filter((r) => r.status === "pending").length;
 
   const handleAttendanceChange = (recordId: string, status: AttendanceStatusLiteral) => {
-    updateAttendance.mutate({ recordId, status });
+    const record = attendanceRecords?.find(r => r.id === recordId);
+    const packageType = record?.students?.package_type?.toLowerCase() || '';
+    const isPersonalPackage = packageType.includes('personal');
+    
+    // If marking as present and package is personal, show duration dialog
+    if (status === 'present' && isPersonalPackage) {
+      setPendingAttendanceUpdate({ recordId, status });
+      setSelectedDuration(record?.session_duration || 0);
+      setShowDurationDialog(true);
+    } else {
+      // For non-personal packages or non-present status, update directly
+      setUpdatingRecordId(recordId);
+      updateAttendance.mutate({ recordId, status });
+    }
+  };
+
+  const handleDurationConfirm = () => {
+    if (pendingAttendanceUpdate) {
+      console.log('handleDurationConfirm - selectedDuration:', selectedDuration);
+      if (selectedDuration <= 0) {
+        console.error('Invalid duration selected:', selectedDuration);
+        toast.error('Please select a valid duration');
+        return;
+      }
+      setUpdatingRecordId(pendingAttendanceUpdate.recordId);
+      updateAttendance.mutate({ 
+        recordId: pendingAttendanceUpdate.recordId, 
+        status: pendingAttendanceUpdate.status,
+        session_duration: selectedDuration
+      });
+      setShowDurationDialog(false);
+      setPendingAttendanceUpdate(null);
+      setSelectedDuration(0);
+    }
   };
 
   const getAttendanceIcon = (status: AttendanceStatusLiteral) => {
@@ -488,7 +581,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
     switch (status) {
       case "present": return "bg-green-50 text-green-700 border-green-200";
       case "absent": return "bg-red-50 text-red-700 border-red-200";
-      case "pending": return "bg-amber-50 text-amber-700 border-amber-200";
+      case "pending": return "bg-gray-50 text-amber-700 border-amber-200";
       default: return "bg-gray-50 text-gray-700 border-gray-200";
     }
   };
@@ -507,12 +600,63 @@ const { data: sessions } = useQuery<TrainingSession[]>({
     setSelectedSessionModal(null);
   };
 
+  const handleView = (session: TrainingSession) => {
+    setSelectedSession(session.id);
+    setShowViewModal(true);
+  };
+
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6">
-      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
+    <>
+      <style>{`
+        .hide-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .hide-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .hide-scrollbar::-webkit-scrollbar-thumb {
+          background: transparent;
+          border-radius: 3px;
+        }
+        .hide-scrollbar:hover::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+        }
+        .hide-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: transparent transparent;
+        }
+        .hide-scrollbar:hover {
+          scrollbar-color: #cbd5e1 transparent;
+        }
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: #79e58f #e5e7eb;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #e5e7eb;
+          border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, #79e58f 0%, #5bc46d 100%);
+          border-radius: 8px;
+          border: 2px solid #e5e7eb;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(180deg, #5bc46d 0%, #4db35e 100%);
+        }
+        .custom-scrollbar::-webkit-scrollbar-corner {
+          background: #e5e7eb;
+        }
+      `}</style>
+      <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6 pb-24 md:pb-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
         <div className="space-y-3 sm:space-y-4">
           <div className="space-y-2">
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-[#181A18] tracking-tight">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-[#242833] tracking-tight">
               Attendance Management
             </h1>
             <p className="text-sm sm:text-base text-gray-700">
@@ -522,39 +666,39 @@ const { data: sessions } = useQuery<TrainingSession[]>({
         </div>
 
         {!sessionId && (
-          <Card className="border-2 border-[#181A18] bg-white/90 backdrop-blur-sm shadow-lg relative">
-            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          <Card className="border-2 border-[#242833] bg-white/90 backdrop-blur-sm shadow-lg relative overflow-visible">
+            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
               <rect
                 x="2"
                 y="2"
                 width="calc(100% - 4)"
                 height="calc(100% - 4)"
                 fill="none"
-                stroke="#BEA877"
+                stroke="#79e58f"
                 strokeWidth="2"
                 rx="8"
               />
             </svg>
-            <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-4 sm:p-6">
+            <CardHeader className="border-b border-[#242833] bg-[#242833] p-4 sm:p-6">
               <CardTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-[#efeff1] flex items-center">
-                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
+                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-accent" style={{ color: '#79e58f' }} />
                 Your Training Sessions
               </CardTitle>
               <CardDescription className="text-gray-400 text-sm sm:text-base">
                 Select a training session to manage player attendance
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 lg:p-8">
+            <CardContent className="p-4 sm:p-6 lg:p-8 overflow-visible">
               <div className="mb-6 space-y-4 sm:space-y-6">
                 <div className="flex items-center mb-4">
-                  <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
+                  <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-accent mr-2" style={{ color: '#79e58f' }} />
                   <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-foreground">Filter Sessions</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Branch</label>
                     <Select value={branchFilter} onValueChange={setBranchFilter}>
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#BEA877' }}>
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#79e58f' }}>
                         <SelectValue placeholder="Select branch" />
                       </SelectTrigger>
                       <SelectContent>
@@ -571,7 +715,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                       value={packageFilter}
                       onValueChange={setPackageFilter}
                     >
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#BEA877' }}>
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#79e58f' }}>
                         <SelectValue placeholder="Select package type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -585,7 +729,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                   <div className="space-y-2">
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Status</label>
                     <Select value={statusFilter} onValueChange={(value: SessionStatus) => setStatusFilter(value)}>
-                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#BEA877' }}>
+                      <SelectTrigger className="border-accent focus:border-accent focus:ring-accent/20 text-xs sm:text-sm h-8 sm:h-10" style={{ borderColor: '#79e58f' }}>
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -605,7 +749,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                     className="pl-8 sm:pl-10 pr-4 py-2 sm:py-3 w-full border-2 border-accent/40 rounded-xl text-xs sm:text-sm focus:border-accent focus:ring-accent/20 bg-white"
                     value={sessionSearchTerm}
                     onChange={(e) => setSessionSearchTerm(e.target.value)}
-                    style={{ borderColor: '#BEA877' }}
+                    style={{ borderColor: '#79e58f' }}
                   />
                 </div>
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -613,49 +757,103 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:gap-4 lg:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredSessions.map((session) => (
                   <Card
                     key={session.id}
-                    className={`cursor-pointer border-2 transition-all duration-300 hover:scale-105 hover:shadow-lg ${
-                      selectedSession === session.id
-                        ? "border-accent bg-accent/10 shadow-lg scale-105"
-                        : "border-accent/20 bg-white hover:border-accent/50"
+                    className={`bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden ${
+                      selectedSession === session.id ? "ring-2 ring-[#79e58f] ring-offset-2" : ""
                     }`}
-                    onClick={() => handleSessionCardClick(session)}
-                    style={{ borderColor: '#BEA877' }}
                   >
-                    <CardContent className="p-3 sm:p-4 lg:p-5 space-y-2 sm:space-y-3">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-accent" style={{ color: '#BEA877' }} />
-                          <span className="font-semibold text-black text-xs sm:text-sm">
-                            {format(new Date(session.date + 'T00:00:00'), 'MMM dd, yyyy')}
-                          </span>
+                    {/* Header */}
+                    <div className="bg-[#242833] p-4">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-10 h-10 bg-[#79e58f] rounded-full flex items-center justify-center flex-shrink-0">
+                            <Calendar className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-white font-semibold text-sm leading-tight">
+                              {format(new Date(session.date + 'T00:00:00'), 'MMM dd, yyyy')}
+                            </p>
+                            <p className="text-gray-400 text-xs">
+                              {format(new Date(session.date + 'T00:00:00'), 'EEEE')}
+                            </p>
+                          </div>
                         </div>
-                        <Badge className={`${getStatusBadgeColor(session.status)} text-xs font-medium`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${
+                          session.status === 'completed' 
+                            ? 'bg-emerald-500 text-white' 
+                            : session.status === 'cancelled' 
+                              ? 'bg-red-500 text-white' 
+                              : 'bg-blue-500 text-white'
+                        }`}>
                           {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
-                        </Badge>
+                        </span>
                       </div>
-                      <div className="space-y-2 text-xs sm:text-sm">
-                        <div className="flex items-center space-x-2">
-                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          <span className="text-gray-700 font-medium">
-                            {formatTime12Hour(session.start_time, session.date)} - {formatTime12Hour(session.end_time, session.date)}
-                          </span>
+                      {/* Package Type Badge */}
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2 py-0.5 bg-[#79e58f]/20 text-[#79e58f] rounded text-xs font-medium">
+                          {session.package_name || 'No Package'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Body */}
+                    <CardContent className="p-4">
+                      {/* Time Highlight */}
+                      <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg mb-3">
+                        <Clock className="w-4 h-4 text-[#79e58f] flex-shrink-0" />
+                        <span className="text-sm font-medium text-[#242833]">
+                          {formatTime12Hour(session.start_time, session.date)} - {formatTime12Hour(session.end_time, session.date)}
+                        </span>
+                      </div>
+
+                      {/* Stats Grid */}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="text-center p-2 bg-gray-50 rounded-lg">
+                          <p className="text-[10px] text-gray-400 uppercase">Branch</p>
+                          <p className="text-xs font-semibold text-gray-900 truncate">{session.branches.name}</p>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          <span className="text-gray-700 truncate">{session.branches.name}</span>
+                        <div className="text-center p-2 bg-emerald-50 rounded-lg">
+                          <p className="text-[10px] text-emerald-600 uppercase">Players</p>
+                          <p className="text-sm font-bold text-emerald-700">{session.session_participants?.length || 0}</p>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          <span className="text-gray-700 truncate">{session.package_name || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Users className="w-3 h-3 sm:w-4 sm:h-4 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                          <span className="text-gray-700 truncate">Players: {session.session_participants?.length || 0}</span>
-                        </div>
+                      </div>
+
+                      {/* Buttons */}
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleView(session);
+                          }}
+                          className="text-xs h-8 px-3 text-white"
+                          style={{ backgroundColor: '#1e3a8a', borderColor: '#1e3a8a' }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#1e40af';
+                            e.currentTarget.style.borderColor = '#1e40af';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#1e3a8a';
+                            e.currentTarget.style.borderColor = '#1e3a8a';
+                          }}
+                        >
+                          <Eye className="w-3.5 h-3.5 mr-1" />
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleManageAttendance(session.id);
+                          }}
+                          className="text-xs h-8 px-3 bg-[#79e58f] hover:bg-[#5bc46d] text-white"
+                        >
+                          Manage
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -678,21 +876,24 @@ const { data: sessions } = useQuery<TrainingSession[]>({
         )}
 
         <Dialog open={!!selectedSessionModal} onOpenChange={() => setSelectedSessionModal(null)}>
-          <DialogContent className="max-w-[95vw] sm:max-w-lg lg:max-w-2xl border-2 border-foreground bg-gradient-to-br from-[#faf0e8]/30 to-white shadow-lg">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground flex items-center">
-                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
-                Session Details
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-md md:max-w-lg lg:max-w-2xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <span className="truncate">Session Details</span>
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-sm sm:text-base">
+              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13">
                 {selectedSessionModal ? formatDate(selectedSessionModal.date) : ''}
               </DialogDescription>
             </DialogHeader>
-            {selectedSessionModal && (
-              <div className="space-y-4 sm:space-y-6">
+            <div className="p-3 sm:p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
+              {selectedSessionModal && (
+                <div className="space-y-4 sm:space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="flex items-center space-x-3">
-                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Time</p>
                       <p className="font-semibold text-black text-sm sm:text-base">
@@ -701,21 +902,21 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Branch</p>
                       <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.branches.name}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Package Type</p>
                       <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.package_name || 'N/A'}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Players</p>
                       <p className="font-semibold text-black text-sm sm:text-base">{selectedSessionModal.session_participants?.length || 0}</p>
@@ -731,13 +932,135 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                   <Button
                     onClick={() => handleManageAttendance(selectedSessionModal.id)}
                     className="bg-accent hover:bg-accent/90 text-white font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg text-sm sm:text-base px-4 sm:px-6"
-                    style={{ backgroundColor: '#BEA877' }}
+                    style={{ backgroundColor: '#79e58f' }}
                   >
                     Manage Attendance
                   </Button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Modal */}
+        <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <span className="truncate">Session Details</span>
+              </DialogTitle>
+              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13">
+                View details of the selected training session
+              </DialogDescription>
+            </DialogHeader>
+            <div className="p-3 sm:p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
+              {selectedSessionDetails && (
+                <div className="space-y-4">
+                  <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-white shadow-sm">
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-accent" style={{ color: "#79e58f" }} />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">
+                          Date: {formatDate(selectedSessionDetails.date)}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-4 h-4 text-gray-500" />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">
+                          Time: {formatTime12Hour(selectedSessionDetails.start_time, selectedSessionDetails.date)} - {formatTime12Hour(selectedSessionDetails.end_time, selectedSessionDetails.date)}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4 text-gray-500" />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">Branch: {selectedSessionDetails?.branches.name || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Users className="w-4 h-4 text-gray-500" />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">
+                          Package: {selectedSessionDetails?.package_name || "N/A"}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Users className="w-4 h-4 text-gray-500" />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">
+                          Players: {selectedSessionDetails?.session_participants?.length || 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs sm:text-sm font-medium text-gray-700">Coach Attendance</Label>
+                    <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-white shadow-sm hide-scrollbar" style={{ borderColor: "#242833" }}>
+                      {sessionCoaches?.length === 0 ? (
+                        <p className="text-xs sm:text-sm text-gray-600">No coaches assigned.</p>
+                      ) : (
+                        sessionCoaches?.map((sc) => {
+                          const coachTime = coachSessionTimes?.find((cst) => cst.coach_id === sc.coach_id);
+                          return (
+                            <div key={sc.id} className="flex flex-col space-y-2 p-2 border-b last:border-b-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs sm:text-sm font-medium text-gray-700">{sc.coaches.name}</span>
+                              </div>
+                              <div className="flex flex-col space-y-1">
+                                <span className="text-xs sm:text-sm text-gray-600">Time In: {formatDateTime(coachTime?.time_in)}</span>
+                                <span className="text-xs sm:text-sm text-gray-600">Time Out: {formatDateTime(coachTime?.time_out)}</span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs sm:text-sm font-medium text-gray-700">Participants</Label>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mb-4 gap-2">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">Present: {presentCount}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">Absent: {absentCount}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">Pending: {pendingCount}</span>
+                      </div>
+                    </div>
+                    <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-white shadow-sm hide-scrollbar" style={{ borderColor: "#242833" }}>
+                      {filteredAttendanceRecords.length === 0 ? (
+                        <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
+                      ) : (
+                        filteredAttendanceRecords.map((record) => (
+                          <div key={record.id} className="flex items-center justify-between p-2">
+                            <div className="flex items-center space-x-3">
+                              <span className="text-xs sm:text-sm text-gray-700">{record.students.name}</span>
+                              <Badge className={`font-medium ${getAttendanceBadgeColor(record.status)} text-xs`}>
+                                {getAttendanceIcon(record.status)}
+                                <span className="ml-1 capitalize">{record.status}</span>
+                              </Badge>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-4 border-t border-gray-200">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowViewModal(false)}
+                      className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -749,22 +1072,26 @@ const { data: sessions } = useQuery<TrainingSession[]>({
             navigate('/dashboard/attendance');
           }
         }}>
-          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl border-2 border-gray-200 bg-white shadow-lg p-4 sm:p-6">
-            <DialogHeader className="pb-4">
-              <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
-                Manage Attendance
-                {selectedSessionDetails && (
-                  <span className="text-xs sm:text-sm font-normal ml-2">
-                    - {formatDate(selectedSessionDetails.date)} at {formatTime12Hour(selectedSessionDetails.start_time, selectedSessionDetails.date)}
-                  </span>
-                )}
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-4xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate">Manage Attendance</span>
+                  {selectedSessionDetails && (
+                    <span className="text-[10px] sm:text-xs md:text-sm font-normal block text-gray-300 mt-0.5 truncate">
+                      {formatDate(selectedSessionDetails.date)} • {formatTime12Hour(selectedSessionDetails.start_time, selectedSessionDetails.date)}
+                    </span>
+                  )}
+                </div>
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                Update attendance for players and coaches in this training session
+              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
+                Update attendance for players and coaches
               </DialogDescription>
             </DialogHeader>
-
-            <div className="space-y-4 sm:space-y-6">
+            <div className="p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4 md:space-y-6 overflow-y-auto flex-1 custom-scrollbar">
               <div className="p-3 sm:p-4 rounded-lg bg-gray-50 border border-gray-200">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-2">
@@ -796,7 +1123,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                     onClick={() => setActiveTab('coaches')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
                       activeTab === 'coaches'
-                        ? 'border-[#BEA877] text-[#BEA877]'
+                        ? 'border-[#79e58f] text-[#79e58f]'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
@@ -811,7 +1138,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                     onClick={() => setActiveTab('players')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${
                       activeTab === 'players'
-                        ? 'border-[#BEA877] text-[#BEA877]'
+                        ? 'border-[#79e58f] text-[#79e58f]'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
@@ -828,57 +1155,54 @@ const { data: sessions } = useQuery<TrainingSession[]>({
               <div className="min-h-[300px] sm:min-h-[400px]">
                 {activeTab === 'coaches' ? (
                   <div className="space-y-4">
-                    <div className="border-2 rounded-lg p-3 sm:p-4 max-h-64 sm:max-h-80 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: "#181A18" }}>
+                    <div className="border-2 rounded-lg p-3 sm:p-4 max-h-64 sm:max-h-80 overflow-y-auto bg-white shadow-sm hide-scrollbar" style={{ borderColor: "#242833" }}>
                       {sessionCoaches?.length === 0 ? (
                         <p className="text-xs sm:text-sm text-gray-600 text-center py-8">No coaches assigned.</p>
                       ) : (
                         <div className="space-y-4">
-                          {sessionCoaches?.map((sc) => {
-                            console.log(`Checking coach: ${sc.coaches.name}, coach_id: ${sc.coach_id}, matches auth coach: ${sc.coach_id === coachId}`);
-                            return (
-                              <div key={sc.coach_id} className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200">
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-                                  <span className="text-sm sm:text-base font-medium text-gray-700">{sc.coaches.name}</span>
-                                  {sc.coach_id === coachId && (
-                                    <div className="flex gap-2">
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => selectedSession && updateCoachAttendance.mutate({ sessionId: selectedSession, field: 'time_in' })}
-                                        disabled={updateCoachAttendance.isPending || !!coachAttendance?.time_in}
-                                        className="bg-green-600 text-white hover:bg-green-700 flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm"
-                                      >
-                                        Time In
-                                      </Button>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => selectedSession && updateCoachAttendance.mutate({ sessionId: selectedSession, field: 'time_out' })}
-                                        disabled={updateCoachAttendance.isPending || !!coachAttendance?.time_out || !coachAttendance?.time_in}
-                                        className="bg-red-600 text-white hover:bg-red-700 flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm"
-                                      >
-                                        Time Out
-                                      </Button>
-                                    </div>
-                                  )}
+                          {sessionCoaches?.map((sc) => (
+                            <div key={sc.coach_id} className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                                <span className="text-sm sm:text-base font-medium text-gray-700">{sc.coaches.name}</span>
+                                {sc.coach_id === coachId && (
+                                  <div className="flex gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => selectedSession && updateCoachAttendance.mutate({ sessionId: selectedSession, field: 'time_in' })}
+                                      disabled={updateCoachAttendance.isPending || !!coachAttendance?.time_in}
+                                      className="bg-green-600 text-white hover:bg-green-700 flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm"
+                                    >
+                                      Time In
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => selectedSession && updateCoachAttendance.mutate({ sessionId: selectedSession, field: 'time_out' })}
+                                      disabled={updateCoachAttendance.isPending || !!coachAttendance?.time_out || !coachAttendance?.time_in}
+                                      className="bg-red-600 text-white hover:bg-red-700 flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm"
+                                    >
+                                      Time Out
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                                <div>
+                                  <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time In:</span>
+                                  <span className="text-xs sm:text-sm font-medium">
+                                    {sc.coach_id === coachId ? formatDateTime(coachAttendance?.time_in) : 'Restricted: Only you can view your own time records'}
+                                  </span>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
-                                  <div>
-                                    <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time In:</span>
-                                    <span className="text-xs sm:text-sm font-medium">
-                                      {sc.coach_id === coachId ? formatDateTime(coachAttendance?.time_in) : 'Restricted: Only you can view your own time records'}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time Out:</span>
-                                    <span className="text-xs sm:text-sm font-medium">
-                                      {sc.coach_id === coachId ? formatDateTime(coachAttendance?.time_out) : 'Restricted: Only you can view your own time records'}
-                                    </span>
-                                  </div>
+                                <div>
+                                  <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time Out:</span>
+                                  <span className="text-xs sm:text-sm font-medium">
+                                    {sc.coach_id === coachId ? formatDateTime(coachAttendance?.time_out) : 'Restricted: Only you can view your own time records'}
+                                  </span>
                                 </div>
                               </div>
-                            );
-                          })}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -887,8 +1211,8 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex items-center">
-                        <Search className="h-3 w-3 sm:h-4 sm:w-4 text-accent mr-2" style={{ color: '#BEA877' }} />
-                        <h3 className="text-sm sm:text-base font-semibold text-[#181A18]">Search Players</h3>
+                        <Search className="h-3 w-3 sm:h-4 sm:w-4 text-accent mr-2" style={{ color: '#79e58f' }} />
+                        <h3 className="text-sm sm:text-base font-semibold text-[#242833]">Search Players</h3>
                       </div>
                       <div className="relative max-w-sm">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
@@ -898,7 +1222,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                           className="pl-8 sm:pl-10 pr-4 py-2 w-full border-2 border-accent/40 rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-1 focus:ring-accent bg-white"
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          style={{ borderColor: '#BEA877' }}
+                          style={{ borderColor: '#79e58f' }}
                         />
                       </div>
                     </div>
@@ -916,7 +1240,7 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                         <span className="text-xs sm:text-sm font-medium text-gray-700">Pending: {pendingCount}</span>
                       </div>
                     </div>
-                    <div className="border-2 rounded-lg p-3 sm:p-4 max-h-64 sm:max-h-80 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: "#181A18" }}>
+                    <div className="border-2 rounded-lg p-3 sm:p-4 max-h-64 sm:max-h-80 overflow-y-auto bg-white shadow-sm hide-scrollbar" style={{ borderColor: "#242833" }}>
                       {filteredAttendanceRecords.length === 0 ? (
                         <p className="text-xs sm:text-sm text-gray-600 text-center py-8">
                           {searchTerm ? 'No players found.' : 'No attendance records'}
@@ -924,49 +1248,75 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                       ) : (
                         <div className="space-y-3">
                           {filteredAttendanceRecords.map((record) => (
-                            <div key={record.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-white rounded-lg border border-gray-200">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full bg-accent flex items-center justify-center text-white font-semibold text-xs sm:text-sm" style={{ backgroundColor: '#BEA877' }}>
-                                  {record.students.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <span className="font-semibold text-black text-xs sm:text-sm lg:text-base block truncate">{record.students.name}</span>
-                                  <div className="flex items-center space-x-2 mt-1">
-                                    {getAttendanceIcon(record.status)}
-                                    <Badge className={`${getAttendanceBadgeColor(record.status)} text-xs sm:text-sm capitalize`}>
-                                      {record.status}
-                                    </Badge>
+                            <div key={record.id} className="flex flex-col gap-3 p-3 sm:p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-semibold text-xs sm:text-sm" style={{ backgroundColor: '#79e58f' }}>
+                                    {record.students.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                  </div>
+                                  <div>
+                                    <span className="text-sm sm:text-base font-semibold text-gray-800 block">{record.students.name}</span>
+                                    <span className="text-xs text-gray-500">{record.students.package_type || 'No package'}</span>
                                   </div>
                                 </div>
+                                <Badge className={`font-medium ${getAttendanceBadgeColor(record.status)} text-xs hidden sm:flex`}>
+                                  {getAttendanceIcon(record.status)}
+                                  <span className="ml-1 capitalize">{record.status}</span>
+                                </Badge>
                               </div>
-                              <Select
-                                value={record.status}
-                                onValueChange={(value: AttendanceStatusLiteral) => handleAttendanceChange(record.id, value)}
-                              >
-                                <SelectTrigger className="w-24 sm:w-28 lg:w-32 h-7 sm:h-8 lg:h-9 text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pending">
-                                    <div className="flex items-center gap-2">
-                                      <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-amber-600" />
-                                      <span className="text-xs sm:text-sm">Pending</span>
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="present">
-                                    <div className="flex items-center gap-2">
-                                      <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
-                                      <span className="text-xs sm:text-sm">Present</span>
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="absent">
-                                    <div className="flex items-center gap-2">
-                                      <XCircle className="w-3 h-3 sm:w-4 sm:h-4 text-red-600" />
-                                      <span className="text-xs sm:text-sm">Absent</span>
-                                    </div>
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAttendanceChange(record.id, 'present')}
+                                  disabled={updatingRecordId === record.id}
+                                  className={`flex-1 sm:flex-none h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    record.status === 'present'
+                                      ? 'bg-green-600 text-white shadow-md ring-2 ring-green-300'
+                                      : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                                  }`}
+                                >
+                                  {updatingRecordId === record.id ? (
+                                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5" />
+                                  )}
+                                  Present
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAttendanceChange(record.id, 'absent')}
+                                  disabled={updatingRecordId === record.id}
+                                  className={`flex-1 sm:flex-none h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    record.status === 'absent'
+                                      ? 'bg-red-600 text-white shadow-md ring-2 ring-red-300'
+                                      : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                  }`}
+                                >
+                                  {updatingRecordId === record.id ? (
+                                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5" />
+                                  )}
+                                  Absent
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAttendanceChange(record.id, 'pending')}
+                                  disabled={updatingRecordId === record.id}
+                                  className={`flex-1 sm:flex-none h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    record.status === 'pending'
+                                      ? 'bg-amber-500 text-white shadow-md ring-2 ring-amber-300'
+                                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+                                  }`}
+                                >
+                                  {updatingRecordId === record.id ? (
+                                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5" />
+                                  )}
+                                  Pending
+                                </Button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -1001,8 +1351,8 @@ const { data: sessions } = useQuery<TrainingSession[]>({
                       navigate('/dashboard/attendance');
                     }
                   }}
-                  className="bg-accent hover:bg-[#8e7a3f] text-white min-w-fit w-auto px-3 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm"
-                  style={{ backgroundColor: "#BEA877" }}
+                  className="bg-accent hover:bg-[#5bc46d] text-white min-w-fit w-auto px-3 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm"
+                  style={{ backgroundColor: "#79e58f" }}
                 >
                   Save
                 </Button>
@@ -1011,16 +1361,88 @@ const { data: sessions } = useQuery<TrainingSession[]>({
           </DialogContent>
         </Dialog>
 
+        {/* Session Duration Dialog */}
+        <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
+          <DialogContent className="w-[90vw] max-w-[90vw] sm:max-w-sm md:max-w-md border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <Timer className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <span className="truncate">Session Duration</span>
+              </DialogTitle>
+              <DialogDescription className="text-[10px] sm:text-xs md:text-sm text-gray-300 mt-1 ml-9 sm:ml-11 md:ml-13">
+                Select duration for Personal Training
+              </DialogDescription>
+            </DialogHeader>
+            <div className="p-3 sm:p-4 md:p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
+              <div className="space-y-2">
+                <Label htmlFor="duration" className="text-sm font-medium text-gray-700">
+                  Duration
+                </Label>
+                <Select
+                  value={selectedDuration > 0 ? selectedDuration.toString() : undefined}
+                  onValueChange={(value) => {
+                    const duration = parseFloat(value);
+                    console.log('Duration selected:', value, 'parsed as:', duration);
+                    setSelectedDuration(duration);
+                  }}
+                >
+                  <SelectTrigger id="duration" className="w-full border-2 border-gray-200 rounded-lg focus:border-[#79e58f] focus:ring-[#79e58f]/20">
+                    <SelectValue placeholder="Select duration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0.5">0.5 Session (30 mins)</SelectItem>
+                    <SelectItem value="1">1 Session (1 hour)</SelectItem>
+                    <SelectItem value="1.5">1.5 Sessions (1.5 hours)</SelectItem>
+                    <SelectItem value="2">2 Sessions (2 hours)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-2">
+                  {selectedDuration > 0 ? (
+                    <>This will deduct {selectedDuration} {selectedDuration === 1 ? 'session' : 'sessions'} from the student's remaining sessions.</>
+                  ) : (
+                    <>Please select a duration.</>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowDurationDialog(false);
+                  setPendingAttendanceUpdate(null);
+                  setSelectedDuration(0);
+                }}
+                className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleDurationConfirm}
+                disabled={selectedDuration <= 0}
+                className="bg-green-600 hover:bg-green-700 text-white transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Confirm
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {!selectedSession && !sessionId && (
-          <div className="text-center py-8 sm:py-16">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-24 lg:h-24 rounded-full bg-accent flex items-center justify-center mx-auto mb-4 sm:mb-6" style={{ backgroundColor: '#BEA877' }}>
+          <div className="hidden md:block text-center py-8 sm:py-16">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-24 lg:h-24 rounded-full bg-accent flex items-center justify-center mx-auto mb-4 sm:mb-6" style={{ backgroundColor: '#79e58f' }}>
               <Calendar className="w-6 h-6 sm:w-8 sm:h-8 lg:w-12 lg:h-12 text-white" />
             </div>
-            <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-[#181A18] mb-2 sm:mb-3">Select a Training Session</h3>
+            <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-[#242833] mb-2 sm:mb-3">Select a Training Session</h3>
             <p className="text-sm sm:text-base lg:text-lg text-gray-600">Choose a session from above to start managing attendance.</p>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

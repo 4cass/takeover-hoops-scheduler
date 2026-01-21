@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import type { Database } from "@/integrations/supabase/types";
-import { Calendar, Clock, Eye, MapPin, Plus, Trash2, User, Users, Filter, Search, ChevronLeft, ChevronRight, Pencil, Download } from "lucide-react";
+import { Calendar, Clock, Eye, MapPin, Plus, Trash2, User, Users, Filter, Search, ChevronLeft, ChevronRight, Pencil, Download, Package } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { exportToCSV } from "@/utils/exportUtils";
 
@@ -68,12 +68,12 @@ type TrainingSession = {
   session_coaches: Array<{
     id: string;
     coach_id: string;
-    coaches: { name: string };
+    coaches: { name: string; email?: string };
   }>;
   session_participants: Array<{
     id: string;
     student_id: string;
-    students: { name: string };
+    students: { name: string; email?: string };
   }>;
   coach_session_times: Array<CoachSessionTime>;
 };
@@ -414,12 +414,12 @@ export function SessionsManager() {
           session_coaches (
             id,
             coach_id,
-            coaches (name)
+            coaches (name, email)
           ),
           session_participants (
             id,
             student_id,
-            students (name)
+            students (name, email)
           ),
           coach_session_times (
             id,
@@ -489,13 +489,102 @@ export function SessionsManager() {
         }
       }
 
+      // Send email notifications to coaches and students
+      try {
+        // Get coach emails
+        const coachEmails: Array<{ email: string; name: string }> = [];
+        const coachIds = createdSession.session_coaches.map(sc => sc.coach_id);
+        
+        if (coachIds.length > 0) {
+          const { data: coachData } = await supabase
+            .from('coaches')
+            .select('id, email, name')
+            .in('id', coachIds);
+
+          coachData?.forEach(coach => {
+            if (coach.email) {
+              const sessionCoach = createdSession.session_coaches.find(sc => sc.coach_id === coach.id);
+              coachEmails.push({ 
+                email: coach.email, 
+                name: coach.name || sessionCoach?.coaches?.name || 'Coach'
+              });
+            }
+          });
+        }
+
+        // Get student emails
+        const studentEmails: Array<{ email: string; name: string }> = [];
+        const studentIds = createdSession.session_participants.map(sp => sp.student_id);
+        
+        if (studentIds.length > 0) {
+          const { data: studentData } = await supabase
+            .from('students')
+            .select('id, email, name')
+            .in('id', studentIds);
+
+          studentData?.forEach(student => {
+            if (student.email) {
+              const sessionParticipant = createdSession.session_participants.find(sp => sp.student_id === student.id);
+              studentEmails.push({ 
+                email: student.email, 
+                name: student.name || sessionParticipant?.students?.name || 'Student'
+              });
+            }
+          });
+        }
+
+        // Send email notifications if we have recipients
+        if (coachEmails.length > 0 || studentEmails.length > 0) {
+          const { data: functionData, error: functionError } = await supabase.functions.invoke(
+            'send-session-notification',
+            {
+              body: {
+                sessionId: createdSession.id,
+                date: createdSession.date,
+                startTime: createdSession.start_time,
+                endTime: createdSession.end_time,
+                branchName: createdSession.branches?.name || 'Unknown Branch',
+                packageType: createdSession.package_type,
+                coachEmails: coachEmails.map(c => c.email),
+                studentEmails: studentEmails.map(s => s.email),
+                coachNames: coachEmails.map(c => c.name),
+                studentNames: studentEmails.map(s => s.name),
+              },
+            }
+          );
+
+          if (functionError) {
+            console.error('Error sending email notifications:', functionError);
+            // Don't fail the session creation if email fails - error is logged
+          } else {
+            console.log('Email notifications sent:', functionData);
+            const sentCount = (functionData?.results?.coaches?.filter((r: any) => r.success).length || 0) +
+                             (functionData?.results?.students?.filter((r: any) => r.success).length || 0);
+            if (sentCount > 0) {
+              console.log(`Successfully sent ${sentCount} notification email(s)`);
+              // Store success message to show in onSuccess
+              (createdSession as any).emailNotificationSent = sentCount;
+            }
+          }
+        }
+      } catch (emailError: any) {
+        console.error('Error in email notification process:', emailError);
+        // Don't fail the session creation if email fails
+      }
+
       return createdSession;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       console.log('Created session:', data);
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      toast.success(`Training session created successfully with ${selectedCoaches.length} coach${selectedCoaches.length > 1 ? 'es' : ''}`);
+      
+      const emailCount = data.emailNotificationSent || 0;
+      if (emailCount > 0) {
+        toast.success(`Training session created successfully! ${emailCount} notification email${emailCount > 1 ? 's' : ''} sent.`);
+      } else {
+        toast.success(`Training session created successfully with ${selectedCoaches.length} coach${selectedCoaches.length > 1 ? 'es' : ''}`);
+      }
       resetForm();
     },
     onError: (error) => {
@@ -523,17 +612,77 @@ export function SessionsManager() {
       if (!session.package_type) throw new Error('Package type is required');
       if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
 
-      // Validate student session limits
-      const invalidStudents = selectedStudents
-        .map(studentId => students?.find(s => s.id === studentId))
-        .filter(student => student && student.remaining_sessions <= 0);
-      
-      if (invalidStudents.length > 0) {
-        throw new Error(
-          `The following students have no remaining sessions: ${invalidStudents
-            .map(s => s!.name)
-            .join(', ')}. Please increase their session count.`
-        );
+      // Fetch fresh student data for validation
+      if (selectedStudents.length > 0) {
+        const { data: freshStudents, error: fetchStudentsError } = await supabase
+          .from('students')
+          .select(`
+            id,
+            name,
+            remaining_sessions,
+            sessions,
+            branch_id,
+            package_type,
+            expiration_date,
+            attendance_records (
+              session_duration,
+              package_cycle,
+              status,
+              training_sessions (
+                package_cycle
+              )
+            ),
+            student_package_history (
+              id,
+              sessions,
+              remaining_sessions,
+              captured_at
+            )
+          `)
+          .in('id', selectedStudents);
+
+        if (fetchStudentsError) {
+          console.error('Error fetching students for validation:', fetchStudentsError);
+          throw new Error('Failed to validate students: ' + fetchStudentsError.message);
+        }
+
+        // Calculate accurate remaining sessions for each student
+        const studentsWithAccurateSessions = (freshStudents || []).map((s: any) => {
+          const packageHistory = s.student_package_history || [];
+          const currentCycle = packageHistory.length + 1;
+
+          // Count sessions used in current cycle
+          const currentCycleSessionsUsed = ((s.attendance_records as any) || [])
+            .filter((record: any) =>
+              record.status === 'present' &&
+              ((record.package_cycle === currentCycle) ||
+               (record.training_sessions?.package_cycle === currentCycle))
+            )
+            .reduce((total: number, record: any) => total + (record.session_duration || 1), 0);
+
+          // Current remaining sessions = total sessions - sessions used in current cycle
+          const currentRemainingSessions = Math.max(0, (s.sessions || 0) - currentCycleSessionsUsed);
+
+          return {
+            ...s,
+            current_remaining_sessions: currentRemainingSessions
+          };
+        });
+
+        // Validate student session limits using accurate data
+        const invalidStudents = studentsWithAccurateSessions
+          .filter(student => {
+            const remaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
+            return remaining <= 0;
+          });
+        
+        if (invalidStudents.length > 0) {
+          throw new Error(
+            `The following students have no remaining sessions: ${invalidStudents
+              .map(s => s.name)
+              .join(', ')}. Please increase their session count.`
+          );
+        }
       }
 
       // Check for conflicts
@@ -615,45 +764,117 @@ export function SessionsManager() {
         }
       }
 
-      // Update participants
-      await supabase
+      // Get existing participants and attendance records before updating
+      const { data: existingParticipants, error: fetchParticipantsError } = await supabase
         .from('session_participants')
-        .delete()
+        .select('student_id')
         .eq('session_id', id);
 
-      if (selectedStudents.length > 0) {
-        const { error: participantsError } = await supabase
+      if (fetchParticipantsError) {
+        console.error('Error fetching existing participants:', fetchParticipantsError);
+        throw fetchParticipantsError;
+      }
+
+      const { data: existingAttendance, error: fetchAttendanceError } = await supabase
+        .from('attendance_records')
+        .select('student_id, status, session_duration, package_cycle')
+        .eq('session_id', id);
+
+      if (fetchAttendanceError) {
+        console.error('Error fetching existing attendance:', fetchAttendanceError);
+        throw fetchAttendanceError;
+      }
+
+      const existingStudentIds = (existingParticipants as { student_id: string }[] | null)?.map(p => p.student_id) || [];
+      const existingAttendanceData = Array.isArray(existingAttendance) 
+        ? (existingAttendance as unknown as Array<{ student_id: string; status: string; session_duration: number | null; package_cycle: number | null }>)
+        : [];
+      const existingAttendanceMap = new Map(
+        existingAttendanceData.map(ar => [ar.student_id, { status: ar.status, session_duration: ar.session_duration, package_cycle: ar.package_cycle }])
+      );
+
+      // Determine which students to add and remove
+      const studentsToAdd = selectedStudents.filter(id => !existingStudentIds.includes(id));
+      const studentsToRemove = existingStudentIds.filter(id => !selectedStudents.includes(id));
+
+      // Remove participants and their attendance records
+      if (studentsToRemove.length > 0) {
+        const { error: removeParticipantsError } = await supabase
+          .from('session_participants')
+          .delete()
+          .eq('session_id', id)
+          .in('student_id', studentsToRemove);
+
+        if (removeParticipantsError) {
+          console.error('Error removing participants:', removeParticipantsError);
+          throw removeParticipantsError;
+        }
+
+        const { error: removeAttendanceError } = await supabase
+          .from('attendance_records')
+          .delete()
+          .eq('session_id', id)
+          .in('student_id', studentsToRemove);
+
+        if (removeAttendanceError) {
+          console.error('Error removing attendance records:', removeAttendanceError);
+          throw removeAttendanceError;
+        }
+      }
+
+      // Add new participants and create attendance records for them
+      if (studentsToAdd.length > 0) {
+        const { error: addParticipantsError } = await supabase
           .from('session_participants')
           .insert(
-            selectedStudents.map(studentId => ({
+            studentsToAdd.map(studentId => ({
               session_id: id,
               student_id: studentId
             }))
           );
 
-        if (participantsError) {
-          console.error('Session participants update error:', participantsError);
-          throw participantsError;
+        if (addParticipantsError) {
+          console.error('Error adding participants:', addParticipantsError);
+          throw addParticipantsError;
         }
 
-        await supabase
-          .from('attendance_records')
-          .delete()
-          .eq('session_id', id);
-
-        const { error: attendanceError } = await supabase
+        // Create attendance records for new participants only
+        const { error: addAttendanceError } = await supabase
           .from('attendance_records')
           .insert(
-            selectedStudents.map(studentId => ({
+            studentsToAdd.map(studentId => ({
               session_id: id,
               student_id: studentId,
               status: 'pending' as const
             }))
           );
 
-        if (attendanceError) {
-          console.error('Attendance records update error:', attendanceError);
-          throw attendanceError;
+        if (addAttendanceError) {
+          console.error('Error adding attendance records:', addAttendanceError);
+          throw addAttendanceError;
+        }
+      }
+
+      // If no students selected, remove all participants and attendance records
+      if (selectedStudents.length === 0 && existingStudentIds.length > 0) {
+        const { error: removeAllParticipantsError } = await supabase
+          .from('session_participants')
+          .delete()
+          .eq('session_id', id);
+
+        if (removeAllParticipantsError) {
+          console.error('Error removing all participants:', removeAllParticipantsError);
+          throw removeAllParticipantsError;
+        }
+
+        const { error: removeAllAttendanceError } = await supabase
+          .from('attendance_records')
+          .delete()
+          .eq('session_id', id);
+
+        if (removeAllAttendanceError) {
+          console.error('Error removing all attendance records:', removeAllAttendanceError);
+          throw removeAllAttendanceError;
         }
       }
 
@@ -662,6 +883,8 @@ export function SessionsManager() {
     onSuccess: () => {
       console.log('Updated session, invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Training session updated successfully');
       resetForm();
     },
@@ -748,7 +971,7 @@ export function SessionsManager() {
     setIsViewDialogOpen(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.branch_id) {
@@ -776,18 +999,85 @@ export function SessionsManager() {
       return;
     }
 
-    // Validate student session limits
-    const invalidStudents = selectedStudents
-      .map(studentId => students?.find(s => s.id === studentId))
-      .filter(student => student && student.remaining_sessions <= 0);
-    
-    if (invalidStudents.length > 0) {
-      toast.error(
-        `The following students have no remaining sessions: ${invalidStudents
-          .map(s => s!.name)
-          .join(', ')}. Please increase their session count in the Players Manager.`
-      );
-      return;
+    // Fetch fresh student data for validation
+    if (selectedStudents.length > 0) {
+      try {
+        const { data: freshStudents, error: fetchStudentsError } = await supabase
+          .from('students')
+          .select(`
+            id,
+            name,
+            remaining_sessions,
+            sessions,
+            branch_id,
+            package_type,
+            expiration_date,
+            attendance_records (
+              session_duration,
+              package_cycle,
+              status,
+              training_sessions (
+                package_cycle
+              )
+            ),
+            student_package_history (
+              id,
+              sessions,
+              remaining_sessions,
+              captured_at
+            )
+          `)
+          .in('id', selectedStudents);
+
+        if (fetchStudentsError) {
+          console.error('Error fetching students for validation:', fetchStudentsError);
+          toast.error('Failed to validate students: ' + fetchStudentsError.message);
+          return;
+        }
+
+        // Calculate accurate remaining sessions for each student
+        const studentsWithAccurateSessions = (freshStudents || []).map((s: any) => {
+          const packageHistory = s.student_package_history || [];
+          const currentCycle = packageHistory.length + 1;
+
+          // Count sessions used in current cycle
+          const currentCycleSessionsUsed = ((s.attendance_records as any) || [])
+            .filter((record: any) =>
+              record.status === 'present' &&
+              ((record.package_cycle === currentCycle) ||
+               (record.training_sessions?.package_cycle === currentCycle))
+            )
+            .reduce((total: number, record: any) => total + (record.session_duration || 1), 0);
+
+          // Current remaining sessions = total sessions - sessions used in current cycle
+          const currentRemainingSessions = Math.max(0, (s.sessions || 0) - currentCycleSessionsUsed);
+
+          return {
+            ...s,
+            current_remaining_sessions: currentRemainingSessions
+          };
+        });
+
+        // Validate student session limits using accurate data
+        const invalidStudents = studentsWithAccurateSessions
+          .filter(student => {
+            const remaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
+            return remaining <= 0;
+          });
+        
+        if (invalidStudents.length > 0) {
+          toast.error(
+            `The following students have no remaining sessions: ${invalidStudents
+              .map(s => s.name)
+              .join(', ')}. Please increase their session count in the Players Manager.`
+          );
+          return;
+        }
+      } catch (error: any) {
+        console.error('Error validating students:', error);
+        toast.error('Failed to validate students: ' + (error.message || 'Unknown error'));
+        return;
+      }
     }
 
     // Check for conflicts
@@ -882,7 +1172,7 @@ export function SessionsManager() {
     return (
       <div className="min-h-screen bg-white p-3 sm:p-4 md:p-5 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#BEA877' }}></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#79e58f' }}></div>
           <span className="mt-2 text-gray-600 text-xs sm:text-sm">Loading sessions...</span>
         </div>
       </div>
@@ -890,18 +1180,18 @@ export function SessionsManager() {
   }
 
   return (
-    <div className="min-h-screen bg-background pt-4 p-3 sm:p-4 md:p-5">
+    <div className="min-h-screen bg-background pt-4 p-3 sm:p-4 md:p-5 pb-24 md:pb-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#181818] mb-2 tracking-tight">Sessions Manager</h1>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#242833] mb-2 tracking-tight">Sessions Manager</h1>
           <p className="text-xs sm:text-sm md:text-base text-gray-700">Manage session information</p>
         </div>
-        <Card className="border-2 border-[#181A18] bg-white shadow-xl overflow-hidden">
-          <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-5">
+        <Card className="border-2 border-[#242833] bg-white shadow-xl overflow-hidden">
+          <CardHeader className="border-b border-[#242833] bg-[#242833] p-3 sm:p-4 md:p-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div>
                 <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
-                  <Calendar className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
+                  <Calendar className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#79e58f' }} />
                   Training Sessions
                 </CardTitle>
                 <CardDescription className="text-gray-400 text-xs sm:text-sm">
@@ -913,29 +1203,31 @@ export function SessionsManager() {
                   <DialogTrigger asChild>
                     <Button 
                       onClick={() => resetForm()}
-                      className="bg-accent hover:bg-[#8e7a3f] text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                      style={{ backgroundColor: '#BEA877' }}
+                      className="bg-accent hover:bg-[#5bc46d] text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                      style={{ backgroundColor: '#79e58f' }}
                     >
                       <Plus className="w-4 h-4 mr-2" />
                       Schedule New Session
                     </Button>
                   </DialogTrigger>
-                <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-hidden">
-                  <ScrollArea className="max-h-[85vh] overflow-y-auto">
-                    <div className="p-3 sm:p-4 md:p-5">
-                      <DialogHeader className="pb-4">
-                        <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">
-                          {editingSession ? 'Edit Training Session' : 'Schedule New Training Session'}
-                        </DialogTitle>
-                        <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                          {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
-                        </DialogDescription>
-                      </DialogHeader>
+                <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+                    <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+                      <DialogTitle className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                          <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                        </div>
+                        <span className="truncate">{editingSession ? 'Edit Training Session' : 'Schedule New Session'}</span>
+                      </DialogTitle>
+                      <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
+                        {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="p-3 sm:p-4 md:p-5 overflow-y-auto flex-1 custom-scrollbar">
                       <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="flex flex-col space-y-2 min-w-0">
                             <Label htmlFor="branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                              <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                               Branch Location
                             </Label>
                             <Select 
@@ -946,7 +1238,7 @@ export function SessionsManager() {
                                 setSelectedCoaches([]);
                               }}
                             >
-                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                                 <SelectValue placeholder="Select branch" />
                               </SelectTrigger>
                               <SelectContent>
@@ -960,7 +1252,7 @@ export function SessionsManager() {
                           </div>
                           <div className="flex flex-col space-y-2 min-w-0">
                             <Label htmlFor="package_type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                              <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                               Package Type
                             </Label>
                             <Select
@@ -972,7 +1264,7 @@ export function SessionsManager() {
                               }}
                               disabled={!formData.branch_id || packagesLoading}
                             >
-                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                                 <SelectValue placeholder={formData.branch_id ? (packagesLoading ? "Loading packages..." : "Select package type") : "Select branch first"} />
                               </SelectTrigger>
                               <SelectContent>
@@ -990,10 +1282,10 @@ export function SessionsManager() {
                         </div>
                         <div className="flex flex-col space-y-2 min-w-0">
                           <Label htmlFor="coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                            <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                            <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                             Select Coaches
                           </Label>
-                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-white shadow-sm" style={{ borderColor: '#242833' }}>
                             {coachesLoading ? (
                               <p className="text-xs sm:text-sm text-gray-600">Loading coaches...</p>
                             ) : coachesError ? (
@@ -1010,7 +1302,7 @@ export function SessionsManager() {
                                       checked={selectedCoaches.includes(coach.id)}
                                       onChange={() => handleCoachToggle(coach.id)}
                                       className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                      style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                      style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
                                       disabled={formData.package_type === "Personal Training" && selectedCoaches.length === 1 && !selectedCoaches.includes(coach.id)}
                                     />
                                     <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
@@ -1031,7 +1323,7 @@ export function SessionsManager() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="flex flex-col space-y-2 min-w-0">
                             <Label htmlFor="date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                              <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                               Session Date
                             </Label>
                             <Input
@@ -1042,12 +1334,12 @@ export function SessionsManager() {
                               required
                               className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
                               disabled={!formData.branch_id}
-                              style={{ borderColor: '#BEA877' }}
+                              style={{ borderColor: '#79e58f' }}
                             />
                           </div>
                           <div className="flex flex-col space-y-2 min-w-0">
                             <Label htmlFor="status" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                              <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                               Session Status
                             </Label>
                             <Select 
@@ -1055,7 +1347,7 @@ export function SessionsManager() {
                               onValueChange={(value: SessionStatus) => setFormData(prev => ({ ...prev, status: value }))}
                               disabled={!formData.branch_id}
                             >
-                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                              <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1069,7 +1361,7 @@ export function SessionsManager() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="flex flex-col space-y-2 min-w-0">
                             <Label htmlFor="start_time" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                              <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                               Start Time
                             </Label>
                             <Input
@@ -1080,12 +1372,12 @@ export function SessionsManager() {
                               required
                               className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
                               disabled={!formData.branch_id}
-                              style={{ borderColor: '#BEA877' }}
+                              style={{ borderColor: '#79e58f' }}
                             />
                           </div>
                           <div className="flex flex-col space-y-2 min-w-0">
                             <Label htmlFor="end_time" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                              <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                              <Clock className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                               End Time
                             </Label>
                             <Input
@@ -1096,16 +1388,16 @@ export function SessionsManager() {
                               required
                               className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
                               disabled={!formData.branch_id}
-                              style={{ borderColor: '#BEA877' }}
+                              style={{ borderColor: '#79e58f' }}
                             />
                           </div>
                         </div>
                         <div className="flex flex-col space-y-2 min-w-0">
                           <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                            <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                            <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                             Select Players ({selectedStudents.length} selected)
                           </Label>
-                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-white shadow-sm" style={{ borderColor: '#242833' }}>
                             {formData.branch_id && formData.package_type ? (
                               studentsLoading ? (
                                 <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
@@ -1127,7 +1419,7 @@ export function SessionsManager() {
                                       }
                                       onChange={(e) => handleSelectAllStudents(e.target.checked)}
                                       className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                      style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
+                                      style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
                                     />
                                     <Label htmlFor="select-all-students" className="text-xs sm:text-sm cursor-pointer">
                                       Select All Players
@@ -1141,7 +1433,7 @@ export function SessionsManager() {
                                           id={student.id}
                                           checked={selectedStudents.includes(student.id)}
                                           onChange={(e) => {
-                                            const currentRemaining = student.current_remaining_sessions ?? student.remaining_sessions;
+                                            const currentRemaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
                                             if (currentRemaining <= 0) {
                                               toast.error(
                                                 `${student.name} has no remaining sessions in their current package. Please renew their package or increase their session count.`
@@ -1155,16 +1447,16 @@ export function SessionsManager() {
                                             }
                                           }}
                                           className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                          style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                                          disabled={(student.current_remaining_sessions ?? student.remaining_sessions) <= 0}
+                                          style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
+                                          disabled={(student.current_remaining_sessions ?? student.remaining_sessions ?? 0) <= 0}
                                         />
                                         <Label
                                           htmlFor={student.id}
                                           className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
-                                            (student.current_remaining_sessions ?? student.remaining_sessions) <= 0 ? 'text-gray-400' : ''
+                                            (student.current_remaining_sessions ?? student.remaining_sessions ?? 0) <= 0 ? 'text-gray-400' : ''
                                           }`}
                                         >
-                                          {student.name} ({student.current_remaining_sessions ?? student.remaining_sessions} sessions left)
+                                          {student.name} ({student.current_remaining_sessions ?? student.remaining_sessions ?? 0} sessions left)
                                         </Label>
                                       </div>
                                     ))}
@@ -1178,7 +1470,7 @@ export function SessionsManager() {
                         </div>
                         <div className="flex flex-col space-y-2 min-w-0">
                           <Label htmlFor="notes" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                            <Eye className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                            <Eye className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                             Session Notes (Optional)
                           </Label>
                           <Input
@@ -1188,7 +1480,7 @@ export function SessionsManager() {
                             placeholder="Add any special notes or instructions for this session..."
                             className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
                             disabled={!formData.branch_id}
-                            style={{ borderColor: '#BEA877' }}
+                            style={{ borderColor: '#79e58f' }}
                           />
                         </div>
                         <div className="flex flex-row justify-end gap-2 pt-4 border-t border-gray-200">
@@ -1228,15 +1520,14 @@ export function SessionsManager() {
                               !formData.start_time ||
                               !formData.end_time
                             }
-                            className="bg-accent hover:bg-[#8e7a3f] text-white min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
-                            style={{ backgroundColor: '#BEA877' }}
+                            className="bg-accent hover:bg-[#5bc46d] text-white min-w-fit w-auto px-2 sm:px-3 text-xs sm:text-sm"
+                            style={{ backgroundColor: '#79e58f' }}
                           >
                             {editingSession ? 'Update' : 'Create'}
                           </Button>
                         </div>
                       </form>
                     </div>
-                  </ScrollArea>
                 </DialogContent>
               </Dialog>
               )}
@@ -1245,13 +1536,13 @@ export function SessionsManager() {
           <CardContent className="p-3 sm:p-4 md:p-5">
             <div className="mb-6">
               <div className="flex items-center mb-4">
-                <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#BEA877' }} />
+                <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#79e58f' }} />
                 <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filter Sessions</h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3 md:gap-4">
                 <div className="flex flex-col space-y-2 min-w-0">
                   <Label htmlFor="search-sessions" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                    <Search className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <Search className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                     Search Sessions
                   </Label>
                   <div className="relative w-full">
@@ -1263,20 +1554,20 @@ export function SessionsManager() {
                       className="pl-10 pr-4 py-2 w-full border-2 border-accent rounded-lg text-xs sm:text-sm focus:border-accent focus:ring-accent/20"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      style={{ borderColor: '#BEA877' }}
+                      style={{ borderColor: '#79e58f' }}
                     />
                   </div>
                 </div>
                 <div className="flex flex-col space-y-2 min-w-0">
                   <Label htmlFor="filter-package" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                    <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                     Package Type
                   </Label>
                   <Select
                     value={filterPackageType}
                     onValueChange={(value) => setFilterPackageType(value)}
                   >
-                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                       <SelectValue placeholder="Select package type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1291,14 +1582,14 @@ export function SessionsManager() {
                 </div>
                 <div className="flex flex-col space-y-2 min-w-0">
                   <Label htmlFor="filter-branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                    <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <MapPin className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                     Branch
                   </Label>
                   <Select
                     value={branchFilter}
                     onValueChange={(value) => setBranchFilter(value)}
                   >
-                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                       <SelectValue placeholder="Select branch" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1314,14 +1605,14 @@ export function SessionsManager() {
                 {role === 'admin' && (
                   <div className="flex flex-col space-y-2 min-w-0">
                     <Label htmlFor="filter-coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                      <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                      <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                       Coach
                     </Label>
                     <Select
                       value={coachFilter}
                       onValueChange={(value) => setCoachFilter(value)}
                     >
-                      <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                      <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                         <SelectValue placeholder="Select coach" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1337,14 +1628,14 @@ export function SessionsManager() {
                 )}
                 <div className="flex flex-col space-y-2 min-w-0">
                   <Label htmlFor="sort-order" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                    <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
+                    <Calendar className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
                     Sort Order
                   </Label>
                   <Select
                     value={sortOrder}
                     onValueChange={(value: "Newest to Oldest" | "Oldest to Newest") => setSortOrder(value)}
                   >
-                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                       <SelectValue placeholder="Select sort order" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1399,8 +1690,8 @@ export function SessionsManager() {
                 </p>
                 <Button 
                   onClick={() => setIsDialogOpen(true)}
-                  className="bg-accent hover:bg-[#8e7a3f] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                  style={{ backgroundColor: '#BEA877' }}
+                  className="bg-accent hover:bg-[#5bc46d] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                  style={{ backgroundColor: '#79e58f' }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Schedule First Session
@@ -1412,79 +1703,134 @@ export function SessionsManager() {
                   {paginatedSessions.map((session) => (
                     <Card 
                       key={session.id} 
-                      className="border-2 transition-all duration-300 hover:shadow-lg rounded-lg border-accent overflow-hidden"
-                      style={{ borderColor: '#BEA877' }}
+                      className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
                     >
-                      <CardHeader className="pb-3">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <Calendar className="w-4 sm:w-5 h-4 sm:h-5 text-accent flex-shrink-0" style={{ color: '#BEA877' }} />
-                            <h3 className="font-bold text-base sm:text-lg text-gray-900 truncate">
-                              {formatDisplayDate(session.date)}
-                            </h3>
+                      {/* Header with Date & Status - Dark Background */}
+                      <div className="bg-[#242833] p-4">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 bg-[#79e58f] rounded-full flex items-center justify-center flex-shrink-0">
+                              <Calendar className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-semibold text-white text-sm leading-tight line-clamp-1">
+                                {formatDisplayDate(session.date)}
+                              </h3>
+                              <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                                <Clock className="w-3 h-3" />
+                                {formatDisplayTime(session.start_time)} - {formatDisplayTime(session.end_time)}
+                              </p>
+                            </div>
                           </div>
-                          <span className={`font-medium text-xs sm:text-sm ${getStatusStyles(session.status)} truncate max-w-full capitalize`}>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 capitalize ${
+                            session.status === 'scheduled' 
+                              ? 'bg-emerald-500 text-white' 
+                              : session.status === 'cancelled' 
+                                ? 'bg-red-500 text-white' 
+                                : 'bg-blue-500 text-white'
+                          }`}>
                             {session.status}
                           </span>
                         </div>
-                        <div className="flex items-center space-x-2 text-gray-600 min-w-0">
-                          <Clock className="w-4 h-4 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate">
-                            {formatDisplayTime(session.start_time)} - {formatDisplayTime(session.end_time)}
+                        
+                        {/* Package & Branch */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center px-2 py-0.5 bg-[#79e58f]/20 text-[#79e58f] rounded text-xs font-medium">
+                            {session.package_type || 'No Package'}
+                          </span>
+                          <span className="inline-flex items-center text-xs text-gray-400">
+                            <MapPin className="w-3 h-3 mr-1" />
+                            {session.branches.name}
                           </span>
                         </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate">
-                            <span className="font-medium">Coaches:</span> {session.session_coaches.length > 0 ? session.session_coaches.map(sc => sc.coaches.name).join(', ') : 'No coaches assigned'}
-                          </span>
+                      </div>
+                      
+                      {/* Stats Section */}
+                      <div className="p-4 flex-1 flex flex-col">
+                        {/* Session Stats Grid */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <div className="text-center p-2.5 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-100">
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Coaches</p>
+                            <p className="text-lg font-bold text-slate-700">{session.session_coaches.length}</p>
+                          </div>
+                          <div className="text-center p-2.5 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-100">
+                            <p className="text-[10px] text-emerald-600 uppercase font-medium">Players</p>
+                            <p className="text-lg font-bold text-emerald-600">{session.session_participants?.length || 0}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Branch:</span> {session.branches.name}</span>
+                        
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          {/* Coaches Info */}
+                          <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                            <p className="text-slate-400 text-[10px] uppercase font-medium mb-1 flex items-center gap-1">
+                              <User className="w-3 h-3" />
+                              Coaches
+                            </p>
+                            <p className="font-medium text-slate-700 text-xs line-clamp-2">
+                              {session.session_coaches.length > 0 
+                                ? session.session_coaches.map(sc => sc.coaches.name).join(', ') 
+                                : <span className="text-slate-400">None</span>}
+                            </p>
+                          </div>
+                          
+                          {/* Notes - Always show area for consistent height */}
+                          <div className={`rounded-lg p-2.5 border ${session.notes ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+                            <p className={`text-[10px] uppercase font-medium mb-1 flex items-center gap-1 ${session.notes ? 'text-amber-500' : 'text-slate-400'}`}>
+                              <Eye className="w-3 h-3" />
+                              Notes
+                            </p>
+                            <p className={`text-xs line-clamp-2 ${session.notes ? 'text-amber-700' : 'text-slate-400 italic'}`}>
+                              {session.notes || 'No notes'}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm truncate"><span className="font-medium">Package:</span> {session.package_type || 'Not specified'}</span>
-                        </div>
-                        <div className="flex items-center space-x-2 min-w-0">
-                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="text-xs sm:text-sm font-medium">{session.session_participants?.length || 0} Players</span>
-                        </div>
-                        <div className="flex justify-end gap-2">
+                        
+                        {/* Spacer to push buttons to bottom */}
+                        <div className="flex-1" />
+                        
+                        {/* Action Buttons */}
+                        <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-auto">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleView(session)}
-                            className="bg-blue-600 text-white hover:bg-blue-700 w-8 sm:w-9 md:w-10 h-8 sm:h-9 md:h-10 p-0 flex items-center justify-center"
+                            className="text-xs h-8 px-3 text-white"
+                            style={{ backgroundColor: '#1e3a8a', borderColor: '#1e3a8a' }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#1e40af';
+                              e.currentTarget.style.borderColor = '#1e40af';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#1e3a8a';
+                              e.currentTarget.style.borderColor = '#1e3a8a';
+                            }}
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-3.5 h-3.5 mr-1" />
+                            View
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(session)}
-                            className="bg-yellow-600 text-white hover:bg-yellow-700 w-8 sm:w-9 md:w-10 h-8 sm:h-9 md:h-10 p-0 flex items-center justify-center"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleManageParticipants(session)}
-                            className="bg-green-600 text-white hover:bg-green-700 w-8 sm:w-9 md:w-10 h-8 sm:h-9 md:h-10 p-0 flex items-center justify-center"
-                          >
-                            <Users className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        {session.notes && (
-                          <div className="mt-3 p-2 bg-white rounded-md border border-accent overflow-hidden" style={{ borderColor: '#BEA877' }}>
-                            <p className="text-xs text-gray-600 italic truncate">"{session.notes}"</p>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(session)}
+                              className="h-8 w-8 p-0 text-amber-600 hover:bg-amber-50 rounded-lg"
+                              title="Edit"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleManageParticipants(session)}
+                              className="h-8 w-8 p-0 text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                              title="Manage Participants"
+                            >
+                              <Users className="w-4 h-4" />
+                            </Button>
                           </div>
-                        )}
-                      </CardContent>
+                        </div>
+                      </div>
                     </Card>
                   ))}
                 </div>
@@ -1495,7 +1841,7 @@ export function SessionsManager() {
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
                       className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                      style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                      style={{ borderColor: '#79e58f', color: '#79e58f' }}
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </Button>
@@ -1510,9 +1856,9 @@ export function SessionsManager() {
                             : 'border-accent text-accent hover:bg-accent hover:text-white'
                         }`}
                         style={{ 
-                          backgroundColor: currentPage === page ? '#BEA877' : 'transparent',
-                          borderColor: '#BEA877',
-                          color: currentPage === page ? 'white' : '#BEA877'
+                          backgroundColor: currentPage === page ? '#79e58f' : 'transparent',
+                          borderColor: '#79e58f',
+                          color: currentPage === page ? 'white' : '#79e58f'
                         }}
                       >
                         {page}
@@ -1523,7 +1869,7 @@ export function SessionsManager() {
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}
                       className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                      style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                      style={{ borderColor: '#79e58f', color: '#79e58f' }}
                     >
                       <ChevronRight className="w-4 h-4" />
                     </Button>
@@ -1534,14 +1880,19 @@ export function SessionsManager() {
           </CardContent>
         </Card>
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-2xl md:max-w-3xl border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden p-3 sm:p-4 md:p-5">
-            <DialogHeader className="pb-4">
-              <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">Session Details</DialogTitle>
-              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-2xl md:max-w-3xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <span className="truncate">Session Details</span>
+              </DialogTitle>
+              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
                 View all details for the selected training session
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="p-3 sm:p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4">
               <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50 overflow-x-auto">
                 <div className="space-y-2 min-w-0">
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
@@ -1573,7 +1924,7 @@ export function SessionsManager() {
               </div>
               <div className="space-y-2">
                 <Label className="text-xs sm:text-sm font-medium text-gray-700">Participants</Label>
-                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50" style={{ borderColor: '#242833' }}>
                   {selectedSession?.session_participants?.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
                   ) : (
@@ -1589,7 +1940,7 @@ export function SessionsManager() {
               </div>
               <div className="space-y-2">
                 <Label className="text-xs sm:text-sm font-medium text-gray-700">Coach Attendance Records</Label>
-                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50" style={{ borderColor: '#242833' }}>
                   {selectedSession?.session_coaches?.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-600">No coaches assigned.</p>
                   ) : (
@@ -1639,14 +1990,19 @@ export function SessionsManager() {
           </DialogContent>
         </Dialog>
         <Dialog open={isParticipantsDialogOpen} onOpenChange={setIsParticipantsDialogOpen}>
-          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-2 border-gray-200 bg-white shadow-lg overflow-x-hidden p-3 sm:p-4 md:p-5">
-            <DialogHeader className="pb-4">
-              <DialogTitle className="text-base sm:text-lg md:text-xl font-bold text-gray-900">Manage Session Participants</DialogTitle>
-              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
+          <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <span className="truncate">Manage Session Participants</span>
+              </DialogTitle>
+              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
                 Add or remove players from this training session
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="p-3 sm:p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4">
               <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50 overflow-x-auto">
                 <div className="space-y-2 min-w-0">
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
@@ -1666,7 +2022,7 @@ export function SessionsManager() {
               </div>
               <div className="space-y-2">
                 <Label className="text-xs sm:text-sm font-medium text-gray-700">Available Players</Label>
-                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-[#faf0e8]" style={{ borderColor: '#181A18' }}>
+                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50" style={{ borderColor: '#242833' }}>
                   {studentsLoading ? (
                     <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
                   ) : studentsError ? (
@@ -1684,7 +2040,8 @@ export function SessionsManager() {
                             id={`participant-${student.id}`}
                             checked={selectedStudents.includes(student.id)}
                             onChange={(e) => {
-                              if (student.remaining_sessions <= 0) {
+                              const remainingSessions = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
+                              if (remainingSessions <= 0) {
                                 toast.error(
                                   `${student.name} has no remaining sessions. Please increase their session count in the Players Manager.`
                                 );
@@ -1697,16 +2054,16 @@ export function SessionsManager() {
                               }
                             }}
                             className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                            style={{ borderColor: '#BEA877', accentColor: '#BEA877' }}
-                            disabled={student.remaining_sessions <= 0}
+                            style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
+                            disabled={(student.current_remaining_sessions ?? student.remaining_sessions ?? 0) <= 0}
                           />
                           <Label 
                             htmlFor={`participant-${student.id}`} 
                             className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
-                              student.remaining_sessions <= 0 ? 'text-gray-400' : ''
+                              (student.current_remaining_sessions ?? student.remaining_sessions ?? 0) <= 0 ? 'text-gray-400' : ''
                             }`}
                           >
-                            {student.name} ({student.remaining_sessions} sessions left)
+                            {student.name} ({student.current_remaining_sessions ?? student.remaining_sessions ?? 0} sessions left)
                           </Label>
                         </div>
                       ))}
@@ -1726,69 +2083,216 @@ export function SessionsManager() {
                   onClick={async () => {
                     if (!selectedSession) return;
 
-                    // Validate student session limits
-                    const invalidStudents = selectedStudents
-                      .map(studentId => students?.find(s => s.id === studentId))
-                      .filter(student => student && student.remaining_sessions <= 0);
+                    // Fetch fresh student data for validation
+                    const { data: freshStudents, error: fetchStudentsError } = await supabase
+                      .from('students')
+                      .select(`
+                        id,
+                        name,
+                        remaining_sessions,
+                        sessions,
+                        branch_id,
+                        package_type,
+                        expiration_date,
+                        attendance_records (
+                          session_duration,
+                          package_cycle,
+                          status,
+                          training_sessions (
+                            package_cycle
+                          )
+                        ),
+                        student_package_history (
+                          id,
+                          sessions,
+                          remaining_sessions,
+                          captured_at
+                        )
+                      `)
+                      .in('id', selectedStudents);
+
+                    if (fetchStudentsError) {
+                      console.error('Error fetching students for validation:', fetchStudentsError);
+                      toast.error('Failed to validate students: ' + fetchStudentsError.message);
+                      return;
+                    }
+
+                    // Calculate accurate remaining sessions for each student
+                    const studentsWithAccurateSessions = (freshStudents || []).map((s: any) => {
+                      const packageHistory = s.student_package_history || [];
+                      const currentCycle = packageHistory.length + 1;
+
+                      // Count sessions used in current cycle
+                      const currentCycleSessionsUsed = ((s.attendance_records as any) || [])
+                        .filter((record: any) =>
+                          record.status === 'present' &&
+                          ((record.package_cycle === currentCycle) ||
+                           (record.training_sessions?.package_cycle === currentCycle))
+                        )
+                        .reduce((total: number, record: any) => total + (record.session_duration || 1), 0);
+
+                      // Current remaining sessions = total sessions - sessions used in current cycle
+                      const currentRemainingSessions = Math.max(0, (s.sessions || 0) - currentCycleSessionsUsed);
+
+                      return {
+                        ...s,
+                        current_remaining_sessions: currentRemainingSessions,
+                        calculated_remaining: currentRemainingSessions > 0
+                      };
+                    });
+
+                    // Validate student session limits using accurate data
+                    const invalidStudents = studentsWithAccurateSessions
+                      .filter(student => {
+                        const remaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
+                        return remaining <= 0;
+                      });
                     
                     if (invalidStudents.length > 0) {
                       toast.error(
                         `The following students have no remaining sessions: ${invalidStudents
-                          .map(s => s!.name)
+                          .map(s => s.name)
                           .join(', ')}. Please increase their session count in the Players Manager.`
                       );
                       return;
                     }
 
-                    await supabase
-                      .from('session_participants')
-                      .delete()
-                      .eq('session_id', selectedSession.id);
-                    
-                    if (selectedStudents.length > 0) {
-                      const { error: participantsError } = await supabase
+                    try {
+                      // Get existing participants and attendance records before updating
+                      const { data: existingParticipants, error: fetchParticipantsError } = await supabase
                         .from('session_participants')
-                        .insert(
-                          selectedStudents.map(studentId => ({
-                            session_id: selectedSession.id,
-                            student_id: studentId
-                          }))
-                        );
-
-                      if (participantsError) {
-                        console.error('Participants update error:', participantsError);
-                        toast.error('Failed to update participants: ' + participantsError.message);
-                        return;
-                      }
-
-                      await supabase
-                        .from('attendance_records')
-                        .delete()
+                        .select('student_id')
                         .eq('session_id', selectedSession.id);
 
-                      const { error: attendanceError } = await supabase
-                        .from('attendance_records')
-                        .insert(
-                          selectedStudents.map(studentId => ({
-                            session_id: selectedSession.id,
-                            student_id: studentId,
-                            status: 'pending' as const
-                          }))
-                        );
-
-                      if (attendanceError) {
-                        console.error('Attendance update error:', attendanceError);
-                        toast.error('Failed to update attendance: ' + attendanceError.message);
+                      if (fetchParticipantsError) {
+                        console.error('Error fetching existing participants:', fetchParticipantsError);
+                        toast.error('Failed to fetch existing participants: ' + fetchParticipantsError.message);
                         return;
                       }
-                    }
 
-                    queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
-                    toast.success('Participants updated successfully');
-                    setIsParticipantsDialogOpen(false);
+                      const { data: existingAttendance, error: fetchAttendanceError } = await supabase
+                        .from('attendance_records')
+                        .select('student_id, status, session_duration, package_cycle')
+                        .eq('session_id', selectedSession.id);
+
+                      if (fetchAttendanceError) {
+                        console.error('Error fetching existing attendance:', fetchAttendanceError);
+                        toast.error('Failed to fetch existing attendance: ' + fetchAttendanceError.message);
+                        return;
+                      }
+
+                      const existingStudentIds = Array.isArray(existingParticipants)
+                        ? (existingParticipants as { student_id: string }[]).map(p => p.student_id)
+                        : [];
+                      const existingAttendanceData = Array.isArray(existingAttendance) 
+                        ? (existingAttendance as unknown as Array<{ student_id: string; status: string; session_duration: number | null; package_cycle: number | null }>)
+                        : [];
+                      const existingAttendanceMap = new Map(
+                        existingAttendanceData.map(ar => [ar.student_id, { status: ar.status, session_duration: ar.session_duration, package_cycle: ar.package_cycle }])
+                      );
+
+                      // Determine which students to add and remove
+                      const studentsToAdd = selectedStudents.filter(id => !existingStudentIds.includes(id));
+                      const studentsToRemove = existingStudentIds.filter(id => !selectedStudents.includes(id));
+
+                      // Remove participants and their attendance records
+                      if (studentsToRemove.length > 0) {
+                        const { error: removeParticipantsError } = await supabase
+                          .from('session_participants')
+                          .delete()
+                          .eq('session_id', selectedSession.id)
+                          .in('student_id', studentsToRemove);
+
+                        if (removeParticipantsError) {
+                          console.error('Error removing participants:', removeParticipantsError);
+                          toast.error('Failed to remove participants: ' + removeParticipantsError.message);
+                          return;
+                        }
+
+                        const { error: removeAttendanceError } = await supabase
+                          .from('attendance_records')
+                          .delete()
+                          .eq('session_id', selectedSession.id)
+                          .in('student_id', studentsToRemove);
+
+                        if (removeAttendanceError) {
+                          console.error('Error removing attendance records:', removeAttendanceError);
+                          toast.error('Failed to remove attendance records: ' + removeAttendanceError.message);
+                          return;
+                        }
+                      }
+
+                      // Add new participants and create attendance records for them
+                      if (studentsToAdd.length > 0) {
+                        const { error: addParticipantsError } = await supabase
+                          .from('session_participants')
+                          .insert(
+                            studentsToAdd.map(studentId => ({
+                              session_id: selectedSession.id,
+                              student_id: studentId
+                            }))
+                          );
+
+                        if (addParticipantsError) {
+                          console.error('Error adding participants:', addParticipantsError);
+                          toast.error('Failed to add participants: ' + addParticipantsError.message);
+                          return;
+                        }
+
+                        // Create attendance records for new participants only
+                        const { error: addAttendanceError } = await supabase
+                          .from('attendance_records')
+                          .insert(
+                            studentsToAdd.map(studentId => ({
+                              session_id: selectedSession.id,
+                              student_id: studentId,
+                              status: 'pending' as const
+                            }))
+                          );
+
+                        if (addAttendanceError) {
+                          console.error('Error adding attendance records:', addAttendanceError);
+                          toast.error('Failed to add attendance records: ' + addAttendanceError.message);
+                          return;
+                        }
+                      }
+
+                      // If no students selected, remove all participants and attendance records
+                      if (selectedStudents.length === 0 && existingStudentIds.length > 0) {
+                        const { error: removeAllParticipantsError } = await supabase
+                          .from('session_participants')
+                          .delete()
+                          .eq('session_id', selectedSession.id);
+
+                        if (removeAllParticipantsError) {
+                          console.error('Error removing all participants:', removeAllParticipantsError);
+                          toast.error('Failed to remove all participants: ' + removeAllParticipantsError.message);
+                          return;
+                        }
+
+                        const { error: removeAllAttendanceError } = await supabase
+                          .from('attendance_records')
+                          .delete()
+                          .eq('session_id', selectedSession.id);
+
+                        if (removeAllAttendanceError) {
+                          console.error('Error removing all attendance records:', removeAllAttendanceError);
+                          toast.error('Failed to remove all attendance records: ' + removeAllAttendanceError.message);
+                          return;
+                        }
+                      }
+
+                      queryClient.invalidateQueries({ queryKey: ['training-sessions'] });
+                      queryClient.invalidateQueries({ queryKey: ['attendance-records'] });
+                      toast.success('Participants updated successfully');
+                      setIsParticipantsDialogOpen(false);
+                    } catch (error: any) {
+                      console.error('Error updating participants:', error);
+                      toast.error('Failed to update participants: ' + (error.message || 'Unknown error'));
+                    }
                   }}
-                  className="bg-accent hover:bg-[#8e7a3f] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                  style={{ backgroundColor: '#BEA877' }}
+                  className="bg-accent hover:bg-[#5bc46d] text-white w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                  style={{ backgroundColor: '#79e58f' }}
                 >
                   Save Changes
                 </Button>

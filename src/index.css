@@ -209,3 +209,45 @@
     @apply px-4 py-3;    
   }
 }
+
+/* Safe area padding for devices with notch/home indicator */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-area-pt {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Bottom navigation specific styles */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-pb {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Custom scrollbar styles */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #79e58f 0%, #5bc46d 100%);
+  border-radius: 10px;
+  border: 2px solid #e5e7eb;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #5bc46d 0%, #4db35e 100%);
+}
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: #e5e7eb;
+}
+/* Firefox support */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #79e58f #e5e7eb;
+}

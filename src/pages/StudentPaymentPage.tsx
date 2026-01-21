@@ -196,7 +196,7 @@ export default function StudentPaymentPage() {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto mb-4" style={{ borderColor: '#BEA877' }}></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto mb-4" style={{ borderColor: '#79e58f' }}></div>
           <p className="text-gray-600 text-xs sm:text-sm">Loading student information...</p>
         </div>
       </div>
@@ -208,7 +208,7 @@ export default function StudentPaymentPage() {
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
           <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Student not found</h3>
-          <Button onClick={() => navigate("/dashboard/students")} className="bg-accent hover:bg-[#8e7a3f] text-white" style={{ backgroundColor: '#BEA877' }}>
+          <Button onClick={() => navigate("/dashboard/students")} className="bg-accent hover:bg-[#5bc46d] text-white" style={{ backgroundColor: '#79e58f' }}>
             Back to Players
           </Button>
         </div>
@@ -217,19 +217,19 @@ export default function StudentPaymentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pt-4 p-3 sm:p-4 md:p-6">
+    <div className="min-h-screen bg-background pt-4 p-3 sm:p-4 md:p-6 pb-24 md:pb-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="mb-6">
           <Button
             variant="outline"
             onClick={() => navigate("/dashboard/students")}
             className="mb-4 border-2 border-accent text-accent hover:bg-accent hover:text-white"
-            style={{ borderColor: '#BEA877', color: '#BEA877' }}
+            style={{ borderColor: '#79e58f', color: '#79e58f' }}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Players
           </Button>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#181818] mb-2 tracking-tight">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#242833] mb-2 tracking-tight">
             Payment Management - {student.name}
           </h1>
           <p className="text-xs sm:text-sm md:text-base text-gray-700">Manage payments and view payment history</p>
@@ -237,10 +237,10 @@ export default function StudentPaymentPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Payment Information Card */}
-          <Card className="border-2 border-[#181A18] bg-white shadow-xl lg:col-span-1">
-            <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-5">
+          <Card className="border-2 border-[#242833] bg-white shadow-xl lg:col-span-1">
+            <CardHeader className="border-b border-[#242833] bg-[#242833] p-3 sm:p-4 md:p-5">
               <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
-                <DollarSign className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
+                <DollarSign className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#79e58f' }} />
                 Payment Information
               </CardTitle>
               <CardDescription className="text-gray-400 text-xs sm:text-sm">
@@ -278,7 +278,7 @@ export default function StudentPaymentPage() {
                     }}
                     disabled={!isEditingPaymentInfo}
                     className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm disabled:bg-gray-50 disabled:cursor-not-allowed"
-                    style={{ borderColor: '#BEA877' }}
+                    style={{ borderColor: '#79e58f' }}
                   />
                 </div>
                 <div className="flex flex-col space-y-2 min-w-0">
@@ -302,7 +302,7 @@ export default function StudentPaymentPage() {
                     }}
                     disabled={!isEditingPaymentInfo}
                     className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm disabled:bg-gray-50 disabled:cursor-not-allowed"
-                    style={{ borderColor: '#BEA877' }}
+                    style={{ borderColor: '#79e58f' }}
                   />
                 </div>
                 <div className="flex flex-col space-y-2 min-w-0">
@@ -317,15 +317,15 @@ export default function StudentPaymentPage() {
                     value={paymentInfoFormData.remaining_balance}
                     readOnly
                     className="border-2 border-gray-200 rounded-lg bg-gray-50 w-full text-xs sm:text-sm"
-                    style={{ borderColor: '#BEA877' }}
+                    style={{ borderColor: '#79e58f' }}
                   />
                 </div>
                 {!isEditingPaymentInfo ? (
                   <Button
                     type="button"
                     onClick={() => setIsEditingPaymentInfo(true)}
-                    className="bg-accent hover:bg-[#8e7a3f] text-white transition-all duration-300 w-full text-xs sm:text-sm flex items-center justify-center"
-                    style={{ backgroundColor: '#BEA877' }}
+                    className="bg-accent hover:bg-[#5bc46d] text-white transition-all duration-300 w-full text-xs sm:text-sm flex items-center justify-center"
+                    style={{ backgroundColor: '#79e58f' }}
                   >
                     <Edit className="w-4 h-4 mr-1" />
                     Edit
@@ -376,10 +376,10 @@ export default function StudentPaymentPage() {
           </Card>
 
           {/* Add Payment Form */}
-          <Card className="border-2 border-[#181A18] bg-white shadow-xl lg:col-span-2">
-            <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-5">
+          <Card className="border-2 border-[#242833] bg-white shadow-xl lg:col-span-2">
+            <CardHeader className="border-b border-[#242833] bg-[#242833] p-3 sm:p-4 md:p-5">
               <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
-                <CreditCard className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
+                <CreditCard className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#79e58f' }} />
                 Add Payment
               </CardTitle>
               <CardDescription className="text-gray-400 text-xs sm:text-sm">
@@ -408,7 +408,7 @@ export default function StudentPaymentPage() {
                       onChange={(e) => setPaymentFormData((prev) => ({ ...prev, payment_amount: parseFloat(e.target.value) || 0 }))}
                       required
                       className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                      style={{ borderColor: '#BEA877' }}
+                      style={{ borderColor: '#79e58f' }}
                     />
                   </div>
                   <div className="flex flex-col space-y-2 min-w-0">
@@ -421,7 +421,7 @@ export default function StudentPaymentPage() {
                             "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
                             !paymentFormData.payment_date && "text-muted-foreground"
                           )}
-                          style={{ borderColor: '#BEA877' }}
+                          style={{ borderColor: '#79e58f' }}
                         >
                           <CalendarIcon className="mr-2 h-4 w-4" />
                           {paymentFormData.payment_date ? format(paymentFormData.payment_date, "MM/dd/yyyy") : <span>Pick a date</span>}
@@ -448,7 +448,7 @@ export default function StudentPaymentPage() {
                     value={paymentFormData.notes}
                     onChange={(e) => setPaymentFormData((prev) => ({ ...prev, notes: e.target.value }))}
                     className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                    style={{ borderColor: '#BEA877' }}
+                    style={{ borderColor: '#79e58f' }}
                   />
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg space-y-2">
@@ -474,12 +474,12 @@ export default function StudentPaymentPage() {
         </div>
 
         {/* Payment History */}
-        <Card className="border-2 border-[#181A18] bg-white shadow-xl">
-          <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-5">
+        <Card className="border-2 border-[#242833] bg-white shadow-xl">
+          <CardHeader className="border-b border-[#242833] bg-[#242833] p-3 sm:p-4 md:p-5">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
-                  <CreditCard className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
+                  <CreditCard className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" style={{ color: '#79e58f' }} />
                   Payment History
                 </CardTitle>
                 <CardDescription className="text-gray-400 text-xs sm:text-sm">
@@ -503,7 +503,7 @@ export default function StudentPaymentPage() {
           <CardContent className="p-3 sm:p-4 md:p-5">
             {paymentsLoading ? (
               <div className="text-center py-8 sm:py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#BEA877' }}></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#79e58f' }}></div>
                 <p className="text-gray-600 mt-2 text-xs sm:text-sm">Loading payment history...</p>
               </div>
             ) : (() => {
@@ -550,8 +550,8 @@ export default function StudentPaymentPage() {
 
               return (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] rounded-lg border-2 border-[#181A18]">
-                  <thead className="bg-[#181A18] text-[#efeff1]">
+                <table className="w-full min-w-[700px] rounded-lg border-2 border-[#242833]">
+                  <thead className="bg-[#242833] text-[#efeff1]">
                     <tr>
                       <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
                         <CalendarIcon className="w-4 h-4 inline mr-2" />Date

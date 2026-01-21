@@ -287,12 +287,12 @@ export function AdminDashboardStats() {
 
   return (
     <DashboardErrorBoundary>
-      <div className="min-h-screen bg-background pt-2 sm:pt-4 p-3 sm:p-4 md:p-6">
+      <div className="min-h-screen bg-background pt-2 sm:pt-4 p-3 sm:p-4 md:p-6 pb-24 md:pb-6">
         <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 md:space-y-8">
           
           {/* Header */}
           <div className="mb-4 sm:mb-6 md:mb-8">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#181A18] mb-2 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#242833] mb-2 tracking-tight">
               Admin Dashboard
             </h1>
             <p className="text-sm sm:text-base md:text-lg text-muted-foreground">
@@ -334,10 +334,10 @@ export function AdminDashboardStats() {
           </div>
 
           {/* Quick Actions */}
-          <Card className="border-2 border-[#181A18] bg-white shadow-xl">
-            <CardHeader className="border-b border-foreground bg-[#181A18] p-3 sm:p-4 md:p-6">
+          <Card className="border-2 border-[#242833] bg-white shadow-xl">
+            <CardHeader className="border-b border-foreground bg-[#242833] p-3 sm:p-4 md:p-6">
               <CardTitle className="text-lg sm:text-xl md:text-2xl font-bold text-primary-foreground flex items-center">
-                <Calendar className="h-5 sm:h-6 w-5 sm:w-6 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
+                <Calendar className="h-5 sm:h-6 w-5 sm:w-6 mr-2 sm:mr-3 text-accent" style={{ color: '#79e58f' }} />
                 Quick Actions
               </CardTitle>
               <CardDescription className="text-muted text-sm sm:text-base">
@@ -362,7 +362,7 @@ export function AdminDashboardStats() {
                         transition-all duration-300 hover:scale-105 hover:shadow-lg
                         flex flex-col items-center gap-1.5 sm:gap-2 border-none
                       "
-                      style={{ backgroundColor: '#BEA877' }}
+                      style={{ backgroundColor: '#79e58f' }}
                     >
                       <IconComponent className="h-4 sm:h-5 w-4 sm:w-5" />
                       <span className="text-xs sm:text-sm text-center">{action.label}</span>
@@ -376,12 +376,12 @@ export function AdminDashboardStats() {
           <div className="grid gap-4 sm:gap-6 md:gap-8 lg:grid-cols-2">
             
             {/* Upcoming Sessions */}
-            <Card className="border-2 border-[#181A18] bg-white shadow-xl">
-              <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-6">
+            <Card className="border-2 border-[#242833] bg-white shadow-xl">
+              <CardHeader className="border-b border-[#242833] bg-[#242833] p-3 sm:p-4 md:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-primary-foreground flex items-center">
-                      <Clock className="h-4 sm:h-5 w-4 sm:w-5 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
+                      <Clock className="h-4 sm:h-5 w-4 sm:w-5 mr-2 sm:mr-3 text-accent" style={{ color: '#79e58f' }} />
                       Upcoming Sessions
                     </CardTitle>
                     <CardDescription className="text-muted mt-1 text-xs sm:text-sm">
@@ -392,7 +392,7 @@ export function AdminDashboardStats() {
                     variant="outline" 
                     onClick={() => navigate('/dashboard/sessions')}
                     className="border-accent text-accent hover:bg-accent hover:text-accent-foreground transition-colors text-xs sm:text-sm w-full sm:w-auto"
-                    style={{ borderColor: '#BEA877', color: '#BEA877' }}
+                    style={{ borderColor: '#79e58f', color: '#79e58f' }}
                   >
                     View All
                   </Button>
@@ -447,10 +447,10 @@ export function AdminDashboardStats() {
             </Card>
 
             {/* Recent Activity */}
-            <Card className="border-2 border-[#181A18] bg-white shadow-xl">
-              <CardHeader className="border-b border-[#181A18] bg-[#181A18] p-3 sm:p-4 md:p-6">
+            <Card className="border-2 border-[#242833] bg-white shadow-xl">
+              <CardHeader className="border-b border-[#242833] bg-[#242833] p-3 sm:p-4 md:p-6">
                 <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-primary-foreground flex items-center">
-                  <Activity className="h-4 sm:h-5 w-4 sm:w-5 mr-2 sm:mr-3 text-accent" style={{ color: '#BEA877' }} />
+                  <Activity className="h-4 sm:h-5 w-4 sm:w-5 mr-2 sm:mr-3 text-accent" style={{ color: '#79e58f' }} />
                   Recent Activity
                 </CardTitle>
                 <CardDescription className="text-muted mt-1 text-xs sm:text-sm">

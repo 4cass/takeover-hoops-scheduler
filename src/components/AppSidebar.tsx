@@ -54,8 +54,8 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
   }
 
   return (
-    <Sidebar className="border-r bg-[#181A18]">
-      <SidebarHeader className="p-3 sm:p-4 md:p-6 border-b bg-[#181A18] border-[#181A18]">
+    <Sidebar className="border-r bg-[#242833]">
+      <SidebarHeader className="p-3 sm:p-4 md:p-6 border-b bg-[#242833] border-[#242833]">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 flex items-center justify-center flex-shrink-0">
             <img 
@@ -71,7 +71,7 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="pt-2 sm:pt-4 bg-[#181A18]">
+      <SidebarContent className="pt-2 sm:pt-4 bg-[#242833]">
         <SidebarGroup>
           <SidebarGroupLabel className="px-4 sm:px-6 text-xs font-bold uppercase tracking-wider text-white/60">
             Navigation
@@ -86,9 +86,25 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
                     isActive={activeTab === item.value}
                     className={`w-full justify-start py-2 sm:py-3 px-4 sm:px-6 rounded-lg transition-all duration-200 ${
                       activeTab === item.value
-                        ? "bg-accent text-white font-medium"
-                        : "text-white/70 hover:bg-accent hover:text-white"
+                        ? "text-white font-medium"
+                        : "text-white/70"
                     }`}
+                    style={activeTab === item.value 
+                      ? { backgroundColor: '#79e58f' }
+                      : {} 
+                    }
+                    onMouseEnter={(e) => {
+                      if (activeTab !== item.value) {
+                        e.currentTarget.style.backgroundColor = '#79e58f';
+                        e.currentTarget.style.color = 'white';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeTab !== item.value) {
+                        e.currentTarget.style.backgroundColor = '';
+                        e.currentTarget.style.color = '';
+                      }
+                    }}
                   >
                     <item.icon className="w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3" />
                     <span className="text-xs sm:text-sm">{item.title}</span>
@@ -100,13 +116,13 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-3 sm:p-4 border-t bg-[#181A18]">
+      <SidebarFooter className="p-3 sm:p-4 border-t bg-[#242833]">
         <div className="flex flex-col space-y-2 sm:space-y-3">
           {user && (
             <div className="px-2 py-1">
               <p className="text-xs text-white/60 uppercase tracking-wider">Logged in as</p>
               <p className="text-xs sm:text-sm text-white font-medium truncate">{user.email}</p>
-              <p className="text-xs text-accent capitalize">{role}</p>
+              <p className="text-xs capitalize" style={{ color: '#79e58f' }}>{role}</p>
             </div>
           )}
           <SidebarMenuButton

@@ -9,7 +9,7 @@ console.log("Running Vite config from:", __dirname); // Add this line
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8080,
+    port: 8081,
   },
   plugins: [
     react(),

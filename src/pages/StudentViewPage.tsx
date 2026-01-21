@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { ArrowLeft, Filter, MapPin, Users, Calendar, Clock, User, ChevronLeft, ChevronRight, DollarSign, CreditCard, Edit, Plus, CalendarIcon, Mail, Phone, Building2, Package, Target, TrendingUp, Trash2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Filter, MapPin, Users, Calendar, Clock, User, ChevronLeft, ChevronRight, DollarSign, CreditCard, Edit, Plus, CalendarIcon, Mail, Phone, Building2, Package, Target, TrendingUp, Trash2, RefreshCw, Eye, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, addMonths, addDays } from "date-fns";
@@ -101,6 +101,7 @@ export default function StudentViewPage() {
   const [isNewPackageDialogOpen, setIsNewPackageDialogOpen] = useState(false);
   const [isEditPackageDialogOpen, setIsEditPackageDialogOpen] = useState(false);
   const [isRetrieveDialogOpen, setIsRetrieveDialogOpen] = useState(false);
+  const [isSessionHistoryModalOpen, setIsSessionHistoryModalOpen] = useState(false);
   const [isPackageHistoryModalOpen, setIsPackageHistoryModalOpen] = useState(false);
   const [packageSessionsModal, setPackageSessionsModal] = useState<{
     open: boolean;
@@ -490,10 +491,12 @@ export default function StudentViewPage() {
         const now = new Date();
 
         let endReason = "renewal";
-        if (remainingSessions <= 0 || usedSessions >= totalSessions) {
-          endReason = "renewal - completed";
-        } else if (expirationDate && now > expirationDate) {
+        // Check expired FIRST - if expiration date has passed, it's expired (even if remaining is 0)
+        if (expirationDate && now > expirationDate) {
           endReason = "renewal - expired";
+        } else if (remainingSessions <= 0 || usedSessions >= totalSessions) {
+          // Only mark as completed if not expired and all sessions are used
+          endReason = "renewal - completed";
         } else {
           endReason = "renewal - early";
         }
@@ -661,11 +664,10 @@ export default function StudentViewPage() {
 
   if (studentLoading) {
     return (
-      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
-        <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#BEA877' }}></div>
-          <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3 mt-4">Loading player details...</h3>
-          <p className="text-sm sm:text-base md:text-lg text-gray-600">Please wait while we fetch the player data.</p>
+      <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="w-10 h-10 rounded-full border-2 border-gray-200 border-t-[#79e58f] animate-spin mx-auto"></div>
+          <p className="text-sm text-gray-500 mt-4">Loading player...</p>
         </div>
       </div>
     );
@@ -673,10 +675,18 @@ export default function StudentViewPage() {
 
   if (!student) {
     return (
-      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
-        <div className="max-w-7xl mx-auto text-center py-12 sm:py-16">
-          <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-black mb-3">Player not found</h3>
-          <Button onClick={() => navigate("/dashboard/students")} className="bg-accent hover:bg-[#8e7a3f] text-white" style={{ backgroundColor: '#BEA877' }}>
+      <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <div className="w-20 h-20 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+            <User className="w-10 h-10 text-gray-400" />
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">Player not found</h3>
+          <p className="text-sm text-gray-500 mb-6">The player you're looking for doesn't exist or has been removed.</p>
+          <Button 
+            onClick={() => navigate("/dashboard/students")} 
+            className="bg-[#79e58f] hover:bg-[#5bc46d] text-white px-6"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Players
           </Button>
         </div>
@@ -705,260 +715,109 @@ export default function StudentViewPage() {
   const remaining = Math.max(0, total - usedSessions);
   const progressPercentage = total > 0 ? (usedSessions / total) * 100 : 0;
 
+  const packageStatus = getPackageStatus(total, remaining, student.expiration_date ? new Date(student.expiration_date) : null);
+  
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pt-4 p-3 sm:p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-        {/* Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-2">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={() => navigate("/dashboard/students")}
-              className="border-2 border-accent text-accent hover:bg-accent hover:text-white text-xs sm:text-sm"
-              style={{ borderColor: '#BEA877', color: '#BEA877' }}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Back</span>
-            </Button>
-            <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#181818] tracking-tight">
-                {student.name}
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-600 mt-0.5">Player profile and records</p>
+    <div className="min-h-screen bg-[#FAFAF9] p-3 sm:p-4 md:p-6 pb-24 md:pb-6">
+      <div className="max-w-6xl mx-auto space-y-5">
+        
+        {/* Back Button */}
+        <Button
+          variant="ghost"
+          onClick={() => navigate("/dashboard/students")}
+          className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 -ml-2"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Players
+        </Button>
+
+        {/* Player Profile Header */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* Dark Header */}
+          <div className="bg-[#242833] px-5 py-5 sm:px-6 sm:py-6">
+            <div className="flex flex-col items-center sm:flex-row sm:items-center gap-4 sm:gap-5">
+              {/* Avatar */}
+              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#79e58f] rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-xl sm:text-2xl font-bold text-white">
+                  {student.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              
+              {/* Name & Status */}
+              <div className="flex-1 min-w-0 text-center sm:text-left">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 mb-1.5">
+                  <h1 className="text-lg sm:text-xl font-bold text-white truncate">{student.name}</h1>
+                  <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${
+                    packageStatus.status === 'ongoing' 
+                      ? 'bg-emerald-500 text-white' 
+                      : packageStatus.status === 'expired'
+                        ? 'bg-red-500 text-white'
+                        : 'bg-blue-500 text-white'
+                  }`}>
+                    {packageStatus.statusText}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-sm text-gray-400">
+                  {student.email && (
+                    <span className="flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-gray-500" />
+                      {student.email}
+                    </span>
+                  )}
+                  {student.phone && (
+                    <span className="flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-gray-500" />
+                      {student.phone}
+                    </span>
+                  )}
+                  {branches?.find(b => b.id === student.branch_id)?.name && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-gray-500" />
+                      {branches?.find(b => b.id === student.branch_id)?.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Quick Stats Bar */}
+          <div className="grid grid-cols-3 divide-x divide-gray-100">
+            <div className="px-4 py-3.5 text-center">
+              <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider mb-0.5">Package</p>
+              <p className="text-sm font-semibold text-gray-900 truncate">{student.package_type || '—'}</p>
+            </div>
+            <div className="px-4 py-3.5 text-center">
+              <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider mb-0.5">Sessions</p>
+              <p className="text-sm font-semibold text-gray-900">
+                <span className="text-[#79e58f]">{remaining % 1 === 0 ? remaining : remaining.toFixed(1)}</span> / {total}
+              </p>
+            </div>
+            <div className="px-4 py-3.5 text-center">
+              <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider mb-0.5">Expires</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {student.expiration_date ? format(new Date(student.expiration_date), 'MMM dd') : '—'}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Personal & Training Information Card */}
-        <Card className="border-2 border-[#181A18] bg-white shadow-lg overflow-hidden">
-          <CardHeader className="border-b border-[#181A18] bg-gradient-to-r from-[#181A18] to-[#2a2c2a] p-4 sm:p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <CardTitle className="text-lg sm:text-xl font-bold text-white flex items-center">
-                  <Users className="h-5 w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
-                  Personal & Training Information
-                </CardTitle>
-                <CardDescription className="text-gray-300 text-xs sm:text-sm mt-1">
-                  Complete player profile and training details
-                </CardDescription>
-              </div>
-              <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="border-2 border-yellow-500 text-yellow-600 hover:bg-yellow-500 hover:text-white text-xs sm:text-sm whitespace-nowrap"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Player
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="w-[95vw] max-w-2xl border-2 border-gray-200 bg-white shadow-lg overflow-y-auto max-h-[90vh] p-4 sm:p-5">
-                  <DialogHeader>
-                    <DialogTitle className="text-base sm:text-lg font-bold text-gray-900">Edit Player</DialogTitle>
-                    <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                      Update player information
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleEditSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="name" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Name</Label>
-                        <Input
-                          id="name"
-                          value={editFormData.name}
-                          onChange={(e) => setEditFormData((prev) => ({ ...prev, name: e.target.value }))}
-                          required
-                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                          style={{ borderColor: '#BEA877' }}
-                        />
-                      </div>
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="email" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Email</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          value={editFormData.email}
-                          onChange={(e) => setEditFormData((prev) => ({ ...prev, email: e.target.value }))}
-                          required
-                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                          style={{ borderColor: '#BEA877' }}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="phone" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Phone</Label>
-                        <Input
-                          id="phone"
-                          value={editFormData.phone}
-                          onChange={(e) => setEditFormData((prev) => ({ ...prev, phone: e.target.value }))}
-                          className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                          style={{ borderColor: '#BEA877' }}
-                        />
-                      </div>
-                      <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="branch_id" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Branch</Label>
-                        <Select
-                          value={editFormData.branch_id ?? undefined}
-                          onValueChange={(value) => setEditFormData((prev) => ({ ...prev, branch_id: value }))}
-                        >
-                          <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                            <SelectValue placeholder="Select Branch" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {branches?.map((branch) => (
-                              <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
-                                {branch.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="flex flex-col space-y-2 min-w-0">
-                      <Label htmlFor="package_type" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Package Type</Label>
-                      <Select
-                        value={editFormData.package_type ?? undefined}
-                        onValueChange={(value) => setEditFormData((prev) => ({ ...prev, package_type: value }))}
-                      >
-                        <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                          <SelectValue placeholder="Select Package Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {packages?.map((pkg) => (
-                            <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
-                              {pkg.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex flex-col space-y-2 min-w-0">
-                      <Label htmlFor="sessions" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Total Sessions</Label>
-                      <Input
-                        id="sessions"
-                        type="number"
-                        min="0"
-                        value={editFormData.sessions}
-                        onChange={(e) => setEditFormData((prev) => ({ ...prev, sessions: parseInt(e.target.value) || 0 }))}
-                        className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                        style={{ borderColor: '#BEA877' }}
-                        disabled={role === 'coach'}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Remaining sessions will be calculated automatically based on attendance records</p>
-                    </div>
-                    <div className="flex flex-col space-y-2 min-w-0">
-                      <Label className="text-gray-700 font-medium text-xs sm:text-sm truncate">Enrollment Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
-                              !editFormData.enrollment_date && "text-muted-foreground"
-                            )}
-                            style={{ borderColor: '#BEA877' }}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {editFormData.enrollment_date ? format(editFormData.enrollment_date, "MM/dd/yyyy") : <span>Pick a date</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <CalendarComponent
-                            mode="single"
-                            selected={editFormData.enrollment_date || undefined}
-                            onSelect={(date) => setEditFormData((prev) => ({ ...prev, enrollment_date: date || null }))}
-                            initialFocus
-                            className={cn("p-3 pointer-events-auto")}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setIsEditDialogOpen(false)}
-                        className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={updateMutation.isPending}
-                        className="bg-green-600 hover:bg-green-700 text-white transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                      >
-                        {updateMutation.isPending ? "Updating..." : "Update"}
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            {/* Session Progress */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                </div>
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900">Session Progress</h3>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
-                  <p className="text-xs text-gray-600 mb-1">Total Sessions</p>
-                  <p className="text-xl sm:text-2xl font-bold text-blue-700">{total}</p>
-                </div>
-                <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
-                  <p className="text-xs text-gray-600 mb-1">Attended</p>
-                  <p className="text-xl sm:text-2xl font-bold text-green-700">
-                    {(() => {
-                      const used = Number(usedSessions);
-                      const remainder = used % 1;
-                      if (remainder === 0) {
-                        return used.toString();
-                      } else {
-                        return used.toFixed(1);
-                      }
-                    })()}
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg">
-                  <p className="text-xs text-gray-600 mb-1">Remaining</p>
-                  <p className="text-xl sm:text-2xl font-bold text-orange-700">
-                    {(() => {
-                      const rem = Number(remaining) || 0;
-                      return rem % 1 === 0 ? rem.toString() : rem.toFixed(1);
-                    })()}
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
-                  <p className="text-xs text-gray-600 mb-1">Progress</p>
-                  <p className="text-xl sm:text-2xl font-bold text-purple-700">{progressPercentage.toFixed(1)}%</p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <Progress value={progressPercentage} className="h-3 w-full max-w-full" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-
         {/* Package History Modal */}
         <Dialog open={isPackageHistoryModalOpen} onOpenChange={setIsPackageHistoryModalOpen}>
-          <DialogContent className="w-[95vw] max-w-4xl border-2 border-gray-200 bg-white shadow-lg p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl font-bold text-gray-900 flex items-center">
-                <Clock className="h-5 w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
-                Package History
+          <DialogContent className="w-[95vw] max-w-4xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <span className="truncate">Package History</span>
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
+              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
                 Previous package sessions are stored when renewing
               </DialogDescription>
             </DialogHeader>
-            <div className="mt-4">
+            <div className="p-3 sm:p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
             {packageHistory && packageHistory.length > 0 ? (
               (() => {
                 const sortedHistory = [...packageHistory].sort(
@@ -1101,832 +960,628 @@ export default function StudentViewPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Session Records Card */}
-        <Card className="border-2 border-[#181A18] bg-white shadow-lg overflow-hidden">
-          <CardHeader className="border-b border-[#181A18] bg-gradient-to-r from-[#181A18] to-[#2a2c2a] p-4 sm:p-5">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 lg:gap-4">
-              <div>
-                <CardTitle className="text-lg sm:text-xl font-bold text-white flex items-center">
-                  <Calendar className="h-5 w-5 mr-2 text-accent" style={{ color: '#BEA877' }} />
-                  Session Records
-                </CardTitle>
-                <CardDescription className="text-gray-300 text-xs sm:text-sm mt-1">
-                  View package sessions and attendance history for this player
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => setIsPackageHistoryModalOpen(true)}
-                className="border-2 border-white/20 text-white hover:bg-white hover:text-gray-900 text-xs sm:text-sm whitespace-nowrap"
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                Package History
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-
-            {/* Package Sessions Section */}
+        {/* Main Content - Two Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          
+          {/* Left Column - Current Package */}
+          <div className="lg:col-span-2 space-y-5">
+            
+            {/* Current Package Card */}
             {student && (() => {
               const totalSessions = Number(student.sessions) || 0;
-              const usedSessions =
+              const usedSessionsCalc =
                 attendanceInCurrentPackage
                   ?.filter((record) => record.status === "present")
                   ?.reduce((sum, record) => sum + (record.session_duration ?? 1), 0) || 0;
-              const remainingSessions = Math.max(0, totalSessions - usedSessions);
+              const remainingSessions = Math.max(0, totalSessions - usedSessionsCalc);
               const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
               const enrollmentDate = student.enrollment_date ? new Date(student.enrollment_date) : null;
-              const packageStatus = getPackageStatus(totalSessions, remainingSessions, expirationDate);
-              const isCurrent = packageStatus.status === 'ongoing';
+              const pkgStatus = getPackageStatus(totalSessions, remainingSessions, expirationDate);
+              const isCurrent = pkgStatus.status === 'ongoing';
+              
+              const progressPercent = totalSessions > 0 ? Math.min(100, (usedSessionsCalc / totalSessions) * 100) : 0;
               
               return (
-                <div className="mb-6 space-y-4">
-                  {/* Current/Latest Package Session */}
-                  <div className={`p-3 sm:p-4 rounded-lg border-2 ${
-                    isCurrent
-                      ? 'bg-gradient-to-br from-green-50 to-green-100 border-green-200'
-                      : 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200'
-                  }`}>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className={`p-2 rounded-lg ${
-                          isCurrent ? 'bg-green-200' : 'bg-gray-200'
-                        }`}>
-                          <Package className={`h-5 w-5 ${
-                            isCurrent ? 'text-green-700' : 'text-gray-600'
-                          }`} />
-                        </div>
-                        <div>
-                          <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-900">
-                            {isCurrent ? 'Current Package Session' : 'Latest Package Session'}
-                          </h3>
-                          <p className="text-xs text-gray-600">
-                            {isCurrent ? 'Active package in use' : `${packageStatus.statusText} package`}
-                          </p>
-                        </div>
+                <Card className="border border-gray-200 bg-white rounded-xl shadow-sm overflow-hidden">
+                  <CardHeader className="pb-3 pt-4 px-5 bg-gray-50/50 border-b border-gray-100/50">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                        <Package className="w-4 h-4 text-[#79e58f]" />
+                        Current Package
+                      </CardTitle>
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                        isCurrent
+                          ? 'bg-emerald-500 text-white'
+                          : pkgStatus.status === 'expired'
+                            ? 'bg-red-500 text-white'
+                            : 'bg-blue-500 text-white'
+                      }`}>
+                        {pkgStatus.statusText}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    {/* Package Name */}
+                    <p className="text-lg font-bold text-[#79e58f] mb-4">{student.package_type || 'No package assigned'}</p>
+
+                    {/* Session Progress */}
+                    <div className="mb-5">
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="text-gray-600">Session Progress</span>
+                        <span className="font-semibold text-gray-900">
+                          {usedSessionsCalc % 1 === 0 ? usedSessionsCalc : usedSessionsCalc.toFixed(1)} of {totalSessions} used
+                        </span>
                       </div>
-                          <div className="flex gap-2 flex-wrap justify-end">
+                      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isCurrent ? 'bg-[#79e58f]' : pkgStatus.status === 'expired' ? 'bg-red-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${progressPercent}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        <span className="font-medium text-[#79e58f]">{remainingSessions % 1 === 0 ? remainingSessions : remainingSessions.toFixed(1)}</span> sessions remaining
+                      </p>
+                    </div>
+
+                    {/* Date & Branch Info */}
+                    <div className="grid grid-cols-3 gap-2 mb-5">
+                      <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+                        <p className="text-[10px] sm:text-xs text-emerald-600 mb-0.5 font-medium">Start Date</p>
+                        <p className="text-xs sm:text-sm font-semibold text-gray-900">
+                          {enrollmentDate ? format(enrollmentDate, 'MMM dd, yy') : '—'}
+                        </p>
+                      </div>
+                      <div className="bg-orange-50 rounded-lg p-3 border border-orange-100">
+                        <p className="text-[10px] sm:text-xs text-orange-600 mb-0.5 font-medium">Expiry Date</p>
+                        <p className="text-xs sm:text-sm font-semibold text-gray-900">
+                          {expirationDate ? format(expirationDate, 'MMM dd, yy') : '—'}
+                        </p>
+                      </div>
+                      <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+                        <p className="text-[10px] sm:text-xs text-purple-600 mb-0.5 font-medium">Branch</p>
+                        <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
+                          {branches?.find(b => b.id === student.branch_id)?.name || '—'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsSessionHistoryModalOpen(true)}
+                        className="text-xs text-white"
+                        style={{ backgroundColor: '#1e3a8a', borderColor: '#1e3a8a' }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#1e40af';
+                          e.currentTarget.style.borderColor = '#1e40af';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#1e3a8a';
+                          e.currentTarget.style.borderColor = '#1e3a8a';
+                        }}
+                      >
+                        <Eye className="w-3.5 h-3.5 mr-1.5" />
+                        View Sessions
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (student) {
+                            setEditPackageFormData({
+                              package_type: student.package_type,
+                              sessions: student.sessions || 8,
+                              enrollment_date: student.enrollment_date ? new Date(student.enrollment_date) : new Date(),
+                              expiration_date: student.expiration_date ? new Date(student.expiration_date) : addMonths(new Date(), 1),
+                            });
+                            setIsEditPackageDialogOpen(true);
+                          }
+                        }}
+                        className="text-xs bg-blue-500 text-white hover:bg-blue-600"
+                      >
+                        <Edit className="w-3.5 h-3.5 mr-1.5" />
+                        Edit Package
+                      </Button>
+                      {isCurrent && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs border-red-200 text-red-600 hover:bg-red-50"
+                          disabled={expireCurrentPackageMutation.isPending}
+                          onClick={() => {
+                            const confirmed = window.confirm("Expire the current package now?");
+                            if (!confirmed) return;
+                            expireCurrentPackageMutation.mutate();
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                          Expire
+                        </Button>
+                      )}
+                      {pkgStatus.status === 'expired' && (
+                        <Dialog open={isRetrieveDialogOpen} onOpenChange={setIsRetrieveDialogOpen}>
+                          <DialogTrigger asChild>
                             <Button
-                              onClick={() => {
-                                if (student) {
-                                  setEditPackageFormData({
-                                    package_type: student.package_type,
-                                    sessions: student.sessions || 8,
-                                    enrollment_date: student.enrollment_date ? new Date(student.enrollment_date) : new Date(),
-                                    expiration_date: student.expiration_date ? new Date(student.expiration_date) : addMonths(new Date(), 1),
-                                  });
-                                  setIsEditPackageDialogOpen(true);
-                                }
-                              }}
-                              variant="outline"
-                              className="border-blue-500 text-blue-600 hover:bg-blue-500 hover:text-white text-xs sm:text-sm whitespace-nowrap"
+                              size="sm"
+                              className="text-xs bg-orange-500 hover:bg-orange-600 text-white"
                             >
-                              <Edit className="w-4 h-4 mr-2" />
-                              Edit Package
+                              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                              Retrieve
                             </Button>
-                            {isCurrent && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-xs sm:text-sm text-red-600 border-red-200 hover:bg-red-50"
-                                disabled={expireCurrentPackageMutation.isPending}
-                                onClick={() => {
-                                  const confirmed = window.confirm("Expire the current package now?");
-                                  if (!confirmed) return;
-                                  expireCurrentPackageMutation.mutate();
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Expire Package
-                              </Button>
-                            )}
-                            {packageStatus.status === 'expired' && (
-                              <Dialog open={isRetrieveDialogOpen} onOpenChange={setIsRetrieveDialogOpen}>
-                                <DialogTrigger asChild>
-                                  <Button
-                                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm whitespace-nowrap mr-2"
-                                  >
-                                    <RefreshCw className="w-4 h-4 mr-2" />
-                                    Retrieve Package
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent className="w-[95vw] max-w-md border-2 border-gray-200 bg-white shadow-lg p-4 sm:p-5">
-                                  <DialogHeader>
-                                    <DialogTitle className="text-base sm:text-lg font-bold text-gray-900">Retrieve Expired Package</DialogTitle>
-                                    <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                                      Extend the expiration date and optionally set session limits to reactivate this expired package
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <form onSubmit={handleRetrievePackageSubmit} className="space-y-4">
-                                    <div className="flex flex-col space-y-2">
-                                      <Label htmlFor="extend_days" className="text-gray-700 font-medium text-xs sm:text-sm">Extend by (days)</Label>
-                                      <Input
-                                        id="extend_days"
-                                        type="number"
-                                        min="1"
-                                        max="365"
-                                        value={retrieveFormData.extendDays}
-                                        onChange={(e) => {
-                                          const extendDays = parseInt(e.target.value) || 30;
-                                          setRetrieveFormData((prev) => ({ ...prev, extendDays }));
-                                        }}
-                                        className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                                        style={{ borderColor: '#BEA877' }}
-                                        placeholder="30"
-                                      />
-                                      <p className="text-xs text-gray-500">
-                                        New expiration date: {retrieveFormData.extendDays > 0 && student.expiration_date ?
-                                          format(addDays(new Date(student.expiration_date), retrieveFormData.extendDays), 'MMM dd, yyyy') :
-                                          'Select days to see new date'}
-                                      </p>
-                                    </div>
-                                    <div className="flex flex-col space-y-2">
-                                      <Label htmlFor="allowed_sessions" className="text-gray-700 font-medium text-xs sm:text-sm">Allowed Sessions (optional)</Label>
-                                      <Input
-                                        id="allowed_sessions"
-                                        type="number"
-                                        min="1"
-                                        value={retrieveFormData.allowedSessions}
-                                        onChange={(e) => {
-                                          setRetrieveFormData((prev) => ({ ...prev, allowedSessions: e.target.value }));
-                                        }}
-                                        className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                                        style={{ borderColor: '#BEA877' }}
-                                        placeholder={`${student.sessions || 'Current sessions'}`}
-                                      />
-                                      <p className="text-xs text-gray-500">
-                                        Leave empty to keep current ({student.sessions || '0'} sessions) or enter new session limit
-                                      </p>
-                                    </div>
-                                    <div className="flex gap-3 pt-4">
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => setIsRetrieveDialogOpen(false)}
-                                        className="flex-1 border-2 border-gray-300 text-gray-700 hover:bg-gray-50 text-xs sm:text-sm"
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        type="submit"
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm"
-                                        disabled={retrievePackageMutation.isPending}
-                                      >
-                                        {retrievePackageMutation.isPending ? "Retrieving..." : "Retrieve Package"}
-                                      </Button>
-                                    </div>
-                                  </form>
-                                </DialogContent>
-                              </Dialog>
-                            )}
-                            {packageStatus.status !== 'ongoing' && (
-                              <Dialog open={isNewPackageDialogOpen} onOpenChange={setIsNewPackageDialogOpen}>
-                                <DialogTrigger asChild>
-                                  <Button
-                                    className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm whitespace-nowrap"
-                                  >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Renew Package
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent className="w-[95vw] max-w-md border-2 border-gray-200 bg-white shadow-lg p-4 sm:p-5">
-                                  <DialogHeader>
-                                    <DialogTitle className="text-base sm:text-lg font-bold text-gray-900">Create New Package Session</DialogTitle>
-                                    <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                                      Create a new package session for this player (renewal)
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <form onSubmit={handleNewPackageSubmit} className="space-y-4">
-                                    <div className="flex flex-col space-y-2">
-                                      <Label htmlFor="new_package_type" className="text-gray-700 font-medium text-xs sm:text-sm">Package Type</Label>
-                                      <Select
-                                        value={newPackageFormData.package_type ?? undefined}
-                                        onValueChange={(value) => setNewPackageFormData((prev) => ({ ...prev, package_type: value }))}
-                                      >
-                                        <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                                          <SelectValue placeholder="Select Package Type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {packages?.map((pkg) => (
-                                            <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
-                                              {pkg.name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div className="flex flex-col space-y-2">
-                                      <Label htmlFor="new_sessions" className="text-gray-700 font-medium text-xs sm:text-sm">Total Sessions</Label>
-                                      <Input
-                                        id="new_sessions"
-                                        type="number"
-                                        min="0"
-                                        value={newPackageFormData.sessions}
-                                        onChange={(e) => {
-                                          const sessions = parseInt(e.target.value) || 0;
-                                          setNewPackageFormData((prev) => ({ ...prev, sessions }));
-                                        }}
-                                        required
-                                        className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                                        style={{ borderColor: '#BEA877' }}
-                                      />
-                                      <p className="text-xs text-gray-500 mt-1">Remaining sessions will be set equal to total sessions for new packages</p>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                      <div className="flex flex-col space-y-2">
-                                        <Label className="text-gray-700 font-medium text-xs sm:text-sm">Start Date</Label>
-                                        <Popover>
-                                          <PopoverTrigger asChild>
-                                            <Button
-                                              variant="outline"
-                                              className={cn(
-                                                "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
-                                                !newPackageFormData.enrollment_date && "text-muted-foreground"
-                                              )}
-                                              style={{ borderColor: '#BEA877' }}
-                                            >
-                                              <CalendarIcon className="mr-2 h-4 w-4" />
-                                              {newPackageFormData.enrollment_date ? format(newPackageFormData.enrollment_date, "MM/dd/yyyy") : <span>Pick a date</span>}
-                                            </Button>
-                                          </PopoverTrigger>
-                                          <PopoverContent className="w-auto p-0" align="start">
-                                            <CalendarComponent
-                                              mode="single"
-                                              selected={newPackageFormData.enrollment_date || undefined}
-                                              onSelect={(date) => setNewPackageFormData((prev) => ({ ...prev, enrollment_date: date || new Date() }))}
-                                              initialFocus
-                                              className={cn("p-3 pointer-events-auto")}
-                                            />
-                                          </PopoverContent>
-                                        </Popover>
-                                      </div>
-                                      <div className="flex flex-col space-y-2">
-                                        <Label className="text-gray-700 font-medium text-xs sm:text-sm">Expiry Date</Label>
-                                        <Popover>
-                                          <PopoverTrigger asChild>
-                                            <Button
-                                              variant="outline"
-                                              className={cn(
-                                                "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
-                                                !newPackageFormData.expiration_date && "text-muted-foreground"
-                                              )}
-                                              style={{ borderColor: '#BEA877' }}
-                                            >
-                                              <CalendarIcon className="mr-2 h-4 w-4" />
-                                              {newPackageFormData.expiration_date ? format(newPackageFormData.expiration_date, "MM/dd/yyyy") : <span>Pick a date</span>}
-                                            </Button>
-                                          </PopoverTrigger>
-                                          <PopoverContent className="w-auto p-0" align="start">
-                                            <CalendarComponent
-                                              mode="single"
-                                              selected={newPackageFormData.expiration_date || undefined}
-                                              onSelect={(date) => setNewPackageFormData((prev) => ({ ...prev, expiration_date: date || null }))}
-                                              initialFocus
-                                              className={cn("p-3 pointer-events-auto")}
-                                            />
-                                          </PopoverContent>
-                                        </Popover>
-                                      </div>
-                                    </div>
-                                    <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => setIsNewPackageDialogOpen(false)}
-                                        className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        type="submit"
-                                        disabled={createNewPackageMutation.isPending}
-                                        className="bg-green-600 hover:bg-green-700 text-white transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                                      >
-                                        {createNewPackageMutation.isPending ? "Creating..." : "Create Package"}
-                                      </Button>
-                                    </div>
-                                  </form>
-                                </DialogContent>
-                              </Dialog>
-                            )}
-                        </div>
-                        <Dialog open={isEditPackageDialogOpen} onOpenChange={setIsEditPackageDialogOpen}>
-                          <DialogContent className="w-[95vw] max-w-md border-2 border-gray-200 bg-white shadow-lg p-4 sm:p-5">
-                            <DialogHeader>
-                              <DialogTitle className="text-base sm:text-lg font-bold text-gray-900">Edit Package Session</DialogTitle>
-                              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                                Edit the current package session details
+                          </DialogTrigger>
+                          <DialogContent className="w-[95vw] max-w-md border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+                            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+                              <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                                  <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                                </div>
+                                <span className="truncate">Retrieve Expired Package</span>
+                              </DialogTitle>
+                              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
+                                Extend the expiration date to reactivate this package
                               </DialogDescription>
                             </DialogHeader>
-                            <form onSubmit={handleEditPackageSubmit} className="space-y-4">
-                              <div className="flex flex-col space-y-2">
-                                <Label htmlFor="edit_package_type" className="text-gray-700 font-medium text-xs sm:text-sm">Package Type</Label>
+                            <div className="p-3 sm:p-4 md:p-5 overflow-y-auto flex-1 custom-scrollbar">
+                            <form onSubmit={handleRetrievePackageSubmit} className="space-y-4 mt-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="extend_days" className="text-gray-700 text-sm">Extend by (days)</Label>
+                                <Input
+                                  id="extend_days"
+                                  type="number"
+                                  min="1"
+                                  max="365"
+                                  value={retrieveFormData.extendDays}
+                                  onChange={(e) => setRetrieveFormData((prev) => ({ ...prev, extendDays: parseInt(e.target.value) || 30 }))}
+                                  className="border-gray-200"
+                                  placeholder="30"
+                                />
+                                <p className="text-xs text-gray-500">
+                                  New expiration: {retrieveFormData.extendDays > 0 && student.expiration_date ?
+                                    format(addDays(new Date(student.expiration_date), retrieveFormData.extendDays), 'MMM dd, yyyy') :
+                                    '—'}
+                                </p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="allowed_sessions" className="text-gray-700 text-sm">New Sessions (optional)</Label>
+                                <Input
+                                  id="allowed_sessions"
+                                  type="number"
+                                  min="1"
+                                  value={retrieveFormData.allowedSessions}
+                                  onChange={(e) => setRetrieveFormData((prev) => ({ ...prev, allowedSessions: e.target.value }))}
+                                  className="border-gray-200"
+                                  placeholder={`${student.sessions || '—'}`}
+                                />
+                              </div>
+                              <div className="flex gap-3 pt-2">
+                                <Button type="button" variant="outline" onClick={() => setIsRetrieveDialogOpen(false)} className="flex-1">
+                                  Cancel
+                                </Button>
+                                <Button type="submit" className="flex-1 bg-orange-500 hover:bg-orange-600 text-white" disabled={retrievePackageMutation.isPending}>
+                                  {retrievePackageMutation.isPending ? "..." : "Retrieve"}
+                                </Button>
+                              </div>
+                            </form>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      )}
+                      {pkgStatus.status !== 'ongoing' && (
+                        <Dialog open={isNewPackageDialogOpen} onOpenChange={setIsNewPackageDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button size="sm" className="text-xs bg-emerald-500 text-white hover:bg-emerald-600">
+                              <Plus className="w-3.5 h-3.5 mr-1.5" />
+                              New Package
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="w-[95vw] max-w-md border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+                            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+                              <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                                </div>
+                                <span className="truncate">Create New Package</span>
+                              </DialogTitle>
+                              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
+                                Start a new package session (renewal)
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="p-3 sm:p-4 md:p-5 overflow-y-auto flex-1 custom-scrollbar">
+                            <form onSubmit={handleNewPackageSubmit} className="space-y-4">
+                              <div className="space-y-2">
+                                <Label className="text-gray-700 text-sm">Package Type</Label>
                                 <Select
-                                  value={editPackageFormData.package_type ?? undefined}
-                                  onValueChange={(value) => setEditPackageFormData((prev) => ({ ...prev, package_type: value }))}
+                                  value={newPackageFormData.package_type ?? undefined}
+                                  onValueChange={(value) => setNewPackageFormData((prev) => ({ ...prev, package_type: value }))}
                                 >
-                                  <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#BEA877' }}>
-                                    <SelectValue placeholder="Select Package Type" />
+                                  <SelectTrigger className="border-gray-200">
+                                    <SelectValue placeholder="Select package" />
                                   </SelectTrigger>
                                   <SelectContent>
                                     {packages?.map((pkg) => (
-                                      <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
-                                        {pkg.name}
-                                      </SelectItem>
+                                      <SelectItem key={pkg.id} value={pkg.name}>{pkg.name}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               </div>
-                              <div className="flex flex-col space-y-2">
-                                <Label htmlFor="edit_sessions" className="text-gray-700 font-medium text-xs sm:text-sm">Total Sessions</Label>
+                              <div className="space-y-2">
+                                <Label className="text-gray-700 text-sm">Total Sessions</Label>
                                 <Input
-                                  id="edit_sessions"
                                   type="number"
                                   min="0"
-                                  value={editPackageFormData.sessions}
-                                  onChange={(e) => {
-                                    const sessions = parseInt(e.target.value) || 0;
-                                    setEditPackageFormData((prev) => ({ ...prev, sessions }));
-                                  }}
+                                  value={newPackageFormData.sessions}
+                                  onChange={(e) => setNewPackageFormData((prev) => ({ ...prev, sessions: parseInt(e.target.value) || 0 }))}
                                   required
-                                  className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                                  style={{ borderColor: '#BEA877' }}
+                                  className="border-gray-200"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">Remaining sessions will be recalculated based on attendance records</p>
                               </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="flex flex-col space-y-2">
-                                  <Label className="text-gray-700 font-medium text-xs sm:text-sm">Start Date</Label>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-2">
+                                  <Label className="text-gray-700 text-sm">Start Date</Label>
                                   <Popover>
                                     <PopoverTrigger asChild>
-                                      <Button
-                                        variant="outline"
-                                        className={cn(
-                                          "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
-                                          !editPackageFormData.enrollment_date && "text-muted-foreground"
-                                        )}
-                                        style={{ borderColor: '#BEA877' }}
-                                      >
+                                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !newPackageFormData.enrollment_date && "text-muted-foreground")}>
                                         <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {editPackageFormData.enrollment_date ? format(editPackageFormData.enrollment_date, "MM/dd/yyyy") : <span>Pick a date</span>}
+                                        {newPackageFormData.enrollment_date ? format(newPackageFormData.enrollment_date, "MM/dd/yy") : "Pick"}
                                       </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0" align="start">
-                                      <CalendarComponent
-                                        mode="single"
-                                        selected={editPackageFormData.enrollment_date || undefined}
-                                        onSelect={(date) => setEditPackageFormData((prev) => ({ ...prev, enrollment_date: date || new Date() }))}
-                                        initialFocus
-                                        className={cn("p-3 pointer-events-auto")}
-                                      />
+                                      <CalendarComponent mode="single" selected={newPackageFormData.enrollment_date || undefined} onSelect={(date) => setNewPackageFormData((prev) => ({ ...prev, enrollment_date: date || new Date() }))} initialFocus />
                                     </PopoverContent>
                                   </Popover>
                                 </div>
-                                <div className="flex flex-col space-y-2">
-                                  <Label className="text-gray-700 font-medium text-xs sm:text-sm">Expiry Date</Label>
+                                <div className="space-y-2">
+                                  <Label className="text-gray-700 text-sm">Expiry Date</Label>
                                   <Popover>
                                     <PopoverTrigger asChild>
-                                      <Button
-                                        variant="outline"
-                                        className={cn(
-                                          "w-full justify-start text-left font-normal border-2 rounded-lg text-xs sm:text-sm",
-                                          !editPackageFormData.expiration_date && "text-muted-foreground"
-                                        )}
-                                        style={{ borderColor: '#BEA877' }}
-                                      >
+                                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !newPackageFormData.expiration_date && "text-muted-foreground")}>
                                         <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {editPackageFormData.expiration_date ? format(editPackageFormData.expiration_date, "MM/dd/yyyy") : <span>Pick a date</span>}
+                                        {newPackageFormData.expiration_date ? format(newPackageFormData.expiration_date, "MM/dd/yy") : "Pick"}
                                       </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0" align="start">
-                                      <CalendarComponent
-                                        mode="single"
-                                        selected={editPackageFormData.expiration_date || undefined}
-                                        onSelect={(date) => setEditPackageFormData((prev) => ({ ...prev, expiration_date: date || addMonths(new Date(), 1) }))}
-                                        initialFocus
-                                        className={cn("p-3 pointer-events-auto")}
-                                      />
+                                      <CalendarComponent mode="single" selected={newPackageFormData.expiration_date || undefined} onSelect={(date) => setNewPackageFormData((prev) => ({ ...prev, expiration_date: date || null }))} initialFocus />
                                     </PopoverContent>
                                   </Popover>
                                 </div>
                               </div>
-                              <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => setIsEditPackageDialogOpen(false)}
-                                  className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="submit"
-                                  disabled={editPackageMutation.isPending}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                                >
-                                  {editPackageMutation.isPending ? "Updating..." : "Update Package"}
+                              <div className="flex gap-3 pt-2">
+                                <Button type="button" variant="outline" onClick={() => setIsNewPackageDialogOpen(false)} className="flex-1">Cancel</Button>
+                                <Button type="submit" disabled={createNewPackageMutation.isPending} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white">
+                                  {createNewPackageMutation.isPending ? "..." : "Create"}
                                 </Button>
                               </div>
                             </form>
+                            </div>
                           </DialogContent>
                         </Dialog>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-3">
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Player Name</p>
-                            <p className="text-sm font-semibold text-gray-900">{student.name}</p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Branch</p>
-                            <p className="text-sm font-semibold text-gray-900">{branches?.find(b => b.id === student.branch_id)?.name || 'N/A'}</p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Package Type</p>
-                            <p className="text-sm font-semibold text-gray-900">{student.package_type || 'N/A'}</p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Total Sessions</p>
-                            <p className="text-sm font-semibold text-gray-900">{totalSessions}</p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Used Sessions</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {usedSessions % 1 === 0 ? usedSessions.toString() : usedSessions.toFixed(1)}
-                            </p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Remaining Sessions</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {remainingSessions % 1 === 0 ? remainingSessions.toString() : remainingSessions.toFixed(1)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Start Date</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {enrollmentDate ? format(enrollmentDate, 'MMM dd, yyyy') : 'N/A'}
-                            </p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Expiry Date</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {expirationDate ? format(expirationDate, 'MMM dd, yyyy') : 'N/A'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Package Status</p>
-                            <Badge className={`${packageStatus.statusColor} border px-3 py-1 text-xs sm:text-sm font-medium`}>
-                              {packageStatus.statusText}
-                            </Badge>
-                          </div>
-                        </div>
-                        {totalSessions > 0 && (
-                          <div className="mt-2">
-                            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                              <span>Progress</span>
-                              <span>{((usedSessions / totalSessions) * 100).toFixed(1)}%</span>
-                            </div>
-                            <Progress value={(usedSessions / totalSessions) * 100} className="h-2" />
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
-
-
-                  {/* Past Package Sessions (when renewing is possible) */}
-                  {packageStatus.status === 'expired' && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 bg-gray-100 rounded-lg">
-                          <Package className="h-5 w-5 text-gray-600" />
-                        </div>
-                        <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-900">Expired Package Session</h3>
-                      </div>
-                      <div className="p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3">
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Package Type</p>
-                            <p className="text-sm font-semibold text-gray-900">{student.package_type || 'N/A'}</p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Total Sessions</p>
-                            <p className="text-sm font-semibold text-gray-900">{totalSessions}</p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Used Sessions</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {usedSessions % 1 === 0 ? usedSessions.toString() : usedSessions.toFixed(1)}
-                            </p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Remaining Sessions</p>
-                            <p className={`text-sm font-semibold ${packageStatus.status === 'expired' ? 'text-red-600' : 'text-gray-900'}`}>
-                              {remainingSessions % 1 === 0 ? remainingSessions.toString() : remainingSessions.toFixed(1)}
-                              {packageStatus.status === 'expired' && (
-                                <span className="text-xs text-red-500 ml-1">(Unusable)</span>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Start Date</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {enrollmentDate ? format(enrollmentDate, 'MMM dd, yyyy') : 'N/A'}
-                            </p>
-                          </div>
-                          <div className="p-2 bg-white rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 mb-1">Expiry Date</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {expirationDate ? format(expirationDate, 'MMM dd, yyyy') : 'N/A'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Package Status</p>
-                            <Badge className={`${packageStatus.statusColor} border px-3 py-1 text-xs sm:text-sm font-medium`}>
-                              {packageStatus.statusText}
-                            </Badge>
-                          </div>
-                          {packageStatus.status === 'expired' && (
-                            <p className="text-xs text-red-600 font-medium">
-                              ⚠️ Remaining sessions cannot be used
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  </CardContent>
+                </Card>
               );
             })()}
 
-            {recordsLoading ? (
-              <div className="text-center py-8 sm:py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#BEA877' }}></div>
-                <p className="text-gray-600 mt-2 text-xs sm:text-sm">Loading attendance records...</p>
-              </div>
-            ) : recordsError ? (
-              <p className="text-red-600 text-xs sm:text-sm">Error loading records: {(recordsError as Error).message}</p>
-            ) : !filteredAttendanceRecords || filteredAttendanceRecords.length === 0 ? (
-              <div className="text-center py-8 sm:py-12">
-                <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-600 text-xs sm:text-sm">No attendance records found for this player.</p>
-              </div>
-            ) : null}
-
-            {/* Session History Table */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="mb-4">
-                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-900">Session History</h3>
-                <p className="text-xs sm:text-sm text-gray-600">Player attendance records with durations</p>
-              </div>
-              <div className="space-y-2">
-                <div className="px-1 sm:px-2">
-                  <table className="w-full rounded-lg border-2 border-[#181A18]">
-                    <thead className="bg-[#181A18] text-[#efeff1]">
-                      <tr>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          <Calendar className="w-4 h-4 inline mr-2" />Date
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          <Clock className="w-4 h-4 inline mr-2" />Time
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          <MapPin className="w-4 h-4 inline mr-2" />Branch
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          <User className="w-4 h-4 inline mr-2" />Coaches
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          Duration
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedRecords.map((record, index) => (
-                        <tr
-                          key={record.session_id}
-                          className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100`}
-                        >
-                          <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                            {format(new Date(record.training_sessions.date), "MMM dd, yyyy")}
-                          </td>
-                          <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                            {format(new Date(`1970-01-01T${record.training_sessions.start_time}`), "hh:mm a")} -
-                            {format(new Date(`1970-01-01T${record.training_sessions.end_time}`), "hh:mm a")}
-                          </td>
-                          <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">{record.training_sessions.branches?.name || 'N/A'}</td>
-                          <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                            {record.training_sessions.session_coaches.length > 0
-                              ? record.training_sessions.session_coaches.map(sc => sc.coaches?.name || 'Unknown').join(', ')
-                              : 'No coaches assigned'}
-                          </td>
-                          <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                            {(() => {
-                              const dur = record.session_duration ?? 1;
-                              const hours = Math.floor(dur);
-                              const minutes = Math.round((dur - hours) * 60);
-                              const parts = [];
-                              if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
-                              if (minutes > 0) parts.push(`${minutes} mins`);
-                              const label = parts.length > 0 ? parts.join(" ") : "0 mins";
-                              const sessionsLabel = dur % 1 === 0 ? dur.toString() : dur.toFixed(1);
-                              return `${label} (${sessionsLabel} session${dur === 1 ? "" : "s"})`;
-                            })()}
-                          </td>
-                          <td className="py-2 sm:py-3 px-2 sm:px-4">
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs sm:text-sm font-medium truncate max-w-full ${
-                                record.status === "present"
-                                  ? "bg-green-50 text-green-700 border border-green-200"
-                                  : record.status === "absent"
-                                  ? "bg-red-50 text-red-700 border border-red-200"
-                                  : "bg-amber-50 text-amber-700 border border-amber-200"
-                              }`}
-                            >
-                              {record.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {recordsTotalPages > 1 && (
-                  <div className="flex justify-center items-center mt-4 sm:mt-6 space-x-2 flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleRecordsPageChange(recordsCurrentPage - 1)}
-                      disabled={recordsCurrentPage === 1}
-                      className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-8 h-8 sm:w-10 sm:h-10 p-0 flex items-center justify-center"
-                      style={{ borderColor: '#BEA877', color: '#BEA877' }}
-                    >
-                      <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-                    </Button>
-                    {getPaginationRange(recordsCurrentPage, recordsTotalPages).map((page) => (
-                      <Button
-                        key={page}
-                        variant={recordsCurrentPage === page ? "default" : "outline"}
-                        onClick={() => handleRecordsPageChange(page)}
-                        className={`border-2 w-8 h-8 sm:w-10 sm:h-10 p-0 flex items-center justify-center text-xs sm:text-sm ${
-                          recordsCurrentPage === page
-                            ? 'bg-accent text-white'
-                            : 'border-accent text-accent hover:bg-accent hover:text-white'
-                        }`}
-                        style={{
-                          backgroundColor: recordsCurrentPage === page ? '#BEA877' : 'transparent',
-                          borderColor: '#BEA877',
-                          color: recordsCurrentPage === page ? 'white' : '#BEA877'
-                        }}
-                      >
-                        {page}
-                      </Button>
-                    ))}
-                    <Button
-                      variant="outline"
-                      onClick={() => handleRecordsPageChange(recordsCurrentPage + 1)}
-                      disabled={recordsCurrentPage === recordsTotalPages}
-                      className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-8 h-8 sm:w-10 sm:h-10 p-0 flex items-center justify-center"
-                      style={{ borderColor: '#BEA877', color: '#BEA877' }}
-                    >
-                      <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
+            {/* Edit Package Dialog */}
+            <Dialog open={isEditPackageDialogOpen} onOpenChange={setIsEditPackageDialogOpen}>
+              <DialogContent className="w-[95vw] max-w-md border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+                <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+                  <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                      <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                    </div>
+                    <span className="truncate">Edit Package</span>
+                  </DialogTitle>
+                  <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">Update the current package details</DialogDescription>
+                </DialogHeader>
+                <div className="p-3 sm:p-4 md:p-5 overflow-y-auto flex-1 custom-scrollbar">
+                <form onSubmit={handleEditPackageSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 text-sm">Package Type</Label>
+                    <Select value={editPackageFormData.package_type ?? undefined} onValueChange={(value) => setEditPackageFormData((prev) => ({ ...prev, package_type: value }))}>
+                      <SelectTrigger className="border-gray-200"><SelectValue placeholder="Select package" /></SelectTrigger>
+                      <SelectContent>
+                        {packages?.map((pkg) => (<SelectItem key={pkg.id} value={pkg.name}>{pkg.name}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-700 text-sm">Total Sessions</Label>
+                    <Input type="number" min="0" value={editPackageFormData.sessions} onChange={(e) => setEditPackageFormData((prev) => ({ ...prev, sessions: parseInt(e.target.value) || 0 }))} required className="border-gray-200" />
+                    <p className="text-xs text-gray-500">Remaining will be recalculated from attendance</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-gray-700 text-sm">Start Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !editPackageFormData.enrollment_date && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {editPackageFormData.enrollment_date ? format(editPackageFormData.enrollment_date, "MM/dd/yy") : "Pick"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent mode="single" selected={editPackageFormData.enrollment_date || undefined} onSelect={(date) => setEditPackageFormData((prev) => ({ ...prev, enrollment_date: date || new Date() }))} initialFocus />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-gray-700 text-sm">Expiry Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !editPackageFormData.expiration_date && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {editPackageFormData.expiration_date ? format(editPackageFormData.expiration_date, "MM/dd/yy") : "Pick"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent mode="single" selected={editPackageFormData.expiration_date || undefined} onSelect={(date) => setEditPackageFormData((prev) => ({ ...prev, expiration_date: date || addMonths(new Date(), 1) }))} initialFocus />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setIsEditPackageDialogOpen(false)} className="flex-1">Cancel</Button>
+                    <Button type="submit" disabled={editPackageMutation.isPending} className="flex-1 bg-[#242833] hover:bg-[#2a2c2a] text-white">
+                      {editPackageMutation.isPending ? "..." : "Update"}
                     </Button>
                   </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                </form>
+                </div>
+              </DialogContent>
+            </Dialog>
 
+          </div>
+
+          {/* Right Column - Package History & Quick Info */}
+          <div className="space-y-5">
+            
+            {/* Package History Card */}
+            <Card className="border border-gray-200 bg-white rounded-xl shadow-sm overflow-hidden">
+              <CardHeader className="pb-3 pt-4 px-5 bg-blue-50/50 border-b border-blue-100/50">
+                <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-500" />
+                  Package History
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5">
+                {packageHistory && packageHistory.length > 0 ? (
+                  (() => {
+                    const sortedHistory = [...packageHistory].sort(
+                      (a, b) => new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime()
+                    );
+
+                    const historyWithSessions = sortedHistory.map((pkg, idx) => {
+                      const next = sortedHistory[idx + 1];
+                      const start = pkg.enrollment_date ? new Date(pkg.enrollment_date) : pkg.captured_at ? new Date(pkg.captured_at) : null;
+                      const nextCapture = next ? new Date(next.captured_at) : null;
+                      const end = nextCapture ? nextCapture : pkg.expiration_date ? new Date(pkg.expiration_date) : null;
+                      return { pkg, start, end };
+                    });
+
+                    const displayHistory = [...historyWithSessions].reverse();
+
+                    return (
+                      <div className="space-y-3">
+                        {displayHistory.slice(0, 5).map((entry, idx) => {
+                          const totalCount = displayHistory.length;
+                          const sequenceNumber = totalCount - idx;
+                          const { pkg, start, end } = entry;
+                          const cycleNumber = sequenceNumber;
+                          const packageCycleMatches = attendanceRecords?.filter((r) => r.package_cycle === cycleNumber);
+                          const sessionsInPackage = (packageCycleMatches && packageCycleMatches.length > 0 ? packageCycleMatches : attendanceRecords?.filter((r) => {
+                            const d = r.training_sessions?.date ? new Date(r.training_sessions.date) : null;
+                            if (!d) return false;
+                            if (start && d < start) return false;
+                            if (end && d >= end) return false;
+                            return true;
+                          })) || [];
+                          const attended = sessionsInPackage.filter((r) => r.status === "present").reduce((s, r) => s + (r.session_duration ?? 1), 0);
+                          
+                          // Determine package status - check expired FIRST
+                          const totalSess = pkg.sessions ?? 0;
+                          const remainingSess = pkg.remaining_sessions ?? 0;
+                          const expDate = pkg.expiration_date ? new Date(pkg.expiration_date) : null;
+                          // Check if reason contains "expired" for accurate status
+                          const reasonIndicatesExpired = pkg.reason?.toLowerCase().includes('expired');
+                          const isExpired = reasonIndicatesExpired || (expDate && new Date() > expDate);
+                          const isCompleted = !isExpired && (remainingSess <= 0 || attended >= totalSess);
+                          const statusText = isExpired ? 'Expired' : isCompleted ? 'Completed' : 'Ended';
+                          const statusColor = isExpired ? 'bg-red-500 text-white' : isCompleted ? 'bg-blue-500 text-white' : 'bg-gray-500 text-white';
+
+                          return (
+                            <div key={pkg.id} className="p-4 bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors shadow-sm">
+                              {/* Header Row */}
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#79e58f] text-white text-xs font-bold">{sequenceNumber}</span>
+                                  <div>
+                                    <p className="text-sm font-semibold text-gray-900">{pkg.package_type || 'Package'}</p>
+                                    <p className="text-xs text-gray-400">{pkg.reason || 'Archived'}</p>
+                                  </div>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusColor}`}>
+                                  {statusText}
+                                </span>
+                              </div>
+                              
+                              {/* Stats Row */}
+                              <div className="grid grid-cols-3 gap-2 mb-3">
+                                <div className="text-center p-2 bg-gray-50 rounded-lg">
+                                  <p className="text-[10px] text-gray-400 uppercase">Total</p>
+                                  <p className="text-sm font-bold text-gray-900">{totalSess}</p>
+                                </div>
+                                <div className="text-center p-2 bg-emerald-50 rounded-lg">
+                                  <p className="text-[10px] text-emerald-600 uppercase">Used</p>
+                                  <p className="text-sm font-bold text-emerald-700">{attended % 1 === 0 ? attended : attended.toFixed(1)}</p>
+                                </div>
+                                <div className="text-center p-2 bg-orange-50 rounded-lg">
+                                  <p className="text-[10px] text-orange-600 uppercase">Left</p>
+                                  <p className="text-sm font-bold text-orange-700">{remainingSess}</p>
+                                </div>
+                              </div>
+                              
+                              {/* Dates & Actions */}
+                              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                                <p className="text-xs text-gray-500">
+                                  {start ? format(start, "MMM dd") : "—"} → {end ? format(end, "MMM dd, yyyy") : "—"}
+                                </p>
+                                <div className="flex items-center gap-1">
+                                  {sessionsInPackage.length > 0 && (
+                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-white" style={{ backgroundColor: '#1e3a8a' }} onClick={() => setPackageSessionsModal({ open: true, title: `Package #${sequenceNumber} Sessions`, sessions: sessionsInPackage })} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1e40af'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#1e3a8a'; }}>
+                                      <Eye className="w-3 h-3 mr-1" />
+                                      View
+                                    </Button>
+                                  )}
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => { if (!deleteHistoryMutation.isPending && window.confirm("Delete this package history?")) deleteHistoryMutation.mutate(pkg.id); }}>
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {displayHistory.length > 5 && (
+                          <Button variant="outline" className="w-full text-xs border-[#79e58f] text-[#79e58f] hover:bg-[#79e58f] hover:text-white" onClick={() => setIsPackageHistoryModalOpen(true)}>
+                            View all {displayHistory.length} packages
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                    <Package className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm text-gray-500">No previous packages</p>
+                    <p className="text-xs text-gray-400 mt-1">History will appear here after renewals</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+          </div>
+        </div>
+
+        {/* Package Sessions Modal */}
         <Dialog open={packageSessionsModal.open} onOpenChange={(open) => setPackageSessionsModal((prev) => ({ ...prev, open }))}>
-          <DialogContent className="w-[98vw] max-w-5xl border-2 border-gray-200 bg-white shadow-lg p-4 sm:p-6">
-            <DialogHeader>
-              <DialogTitle className="text-base sm:text-lg font-bold text-gray-900">
-                {packageSessionsModal.title || "Package Sessions"}
+          <DialogContent className="w-[98vw] max-w-4xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <span className="truncate">{packageSessionsModal.title || "Package Sessions"}</span>
               </DialogTitle>
-              <DialogDescription className="text-gray-600 text-xs sm:text-sm">
-                Sessions recorded in this package window
+              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
+                {packageSessionsModal.sessions.length} sessions • Total: {(() => {
+                  const total = packageSessionsModal.sessions.filter(s => s.status === 'present').reduce((sum, s) => sum + (s.session_duration ?? 1), 0);
+                  return total % 1 === 0 ? total : total.toFixed(1);
+                })()} attended
               </DialogDescription>
             </DialogHeader>
-            <div className="text-xs sm:text-sm text-gray-700 mb-3">
-              {(() => {
-                const totalDur = packageSessionsModal.sessions.reduce((sum, s) => sum + (s.session_duration ?? 1), 0);
-                const hours = Math.floor(totalDur);
-                const minutes = Math.round((totalDur - hours) * 60);
-                const parts = [];
-                if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
-                if (minutes > 0) parts.push(`${minutes} mins`);
-                const label = parts.length > 0 ? parts.join(" ") : "0 mins";
-                return <>Total duration: {label}</>;
-              })()}
-            </div>
-            <div className="space-y-2 max-h-[70vh] overflow-auto">
+            <div className="p-3 sm:p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
               {packageSessionsModal.sessions.length > 0 ? (
-                <div className="px-1 sm:px-2">
-                  <table className="w-full rounded-lg border-2 border-[#181A18]">
-                    <thead className="bg-[#181A18] text-[#efeff1]">
-                      <tr>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          <Calendar className="w-4 h-4 inline mr-2" />Date
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          <Clock className="w-4 h-4 inline mr-2" />Time
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          <MapPin className="w-4 h-4 inline mr-2" />Branch
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          <User className="w-4 h-4 inline mr-2" />Coaches
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
-                          Duration
-                        </th>
-                        <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {packageSessionsModal.sessions.map((session, index) => {
-                        const dateLabel = session.training_sessions?.date
-                          ? format(new Date(session.training_sessions.date), "MMM dd, yyyy")
-                          : "N/A";
-                        const timeLabel =
-                          session.training_sessions?.start_time && session.training_sessions?.end_time
-                            ? `${format(new Date(`1970-01-01T${session.training_sessions.start_time}`), "hh:mm a")} - ${format(new Date(`1970-01-01T${session.training_sessions.end_time}`), "hh:mm a")}`
-                            : "N/A";
-                        const branchLabel = session.training_sessions?.branches?.name || "N/A";
-                        const coachesLabel =
-                          session.training_sessions?.session_coaches
-                            ?.map((sc) => sc.coaches?.name)
-                            .filter(Boolean)
-                            .join(", ") || "No coaches assigned";
-
-                        return (
-                          <tr
-                            key={session.session_id}
-                            className={`transition-all duration-300 ${
-                              index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                            } hover:bg-gray-100`}
-                          >
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                              {dateLabel}
-                            </td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                              {timeLabel}
-                            </td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                              {branchLabel}
-                            </td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                              {coachesLabel}
-                            </td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm truncate">
-                              {(() => {
-                                const dur = session.session_duration ?? 1;
-                                const hours = Math.floor(dur);
-                                const minutes = Math.round((dur - hours) * 60);
-                                const parts = [];
-                                if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
-                                if (minutes > 0) parts.push(`${minutes} mins`);
-                                const label = parts.length > 0 ? parts.join(" ") : "0 mins";
-                                const sessionsLabel = dur % 1 === 0 ? dur.toString() : dur.toFixed(1);
-                                return `${label} (${sessionsLabel} session${dur === 1 ? "" : "s"})`;
-                              })()}
-                            </td>
-                            <td className="py-2 sm:py-3 px-2 sm:px-4">
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs sm:text-sm font-medium truncate max-w-full ${
-                                  session.status === "present"
-                                    ? "bg-green-50 text-green-700 border border-green-200"
-                                    : session.status === "absent"
-                                    ? "bg-red-50 text-red-700 border border-red-200"
-                                    : "bg-amber-50 text-amber-700 border border-amber-200"
-                                }`}
-                              >
-                                {session.status}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="space-y-2">
+                  {packageSessionsModal.sessions.map((session) => (
+                    <div key={session.session_id} className={`flex items-center justify-between p-3 rounded-lg transition-colors border ${
+                      session.status === "present" ? "bg-emerald-50/50 border-emerald-100 hover:bg-emerald-100/50" : session.status === "absent" ? "bg-red-50/50 border-red-100 hover:bg-red-100/50" : "bg-gray-50/50 border-gray-100 hover:bg-gray-100/50"
+                    }`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-gray-900">
+                            {session.training_sessions?.date ? format(new Date(session.training_sessions.date), "MMM dd, yyyy") : "N/A"}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {session.training_sessions?.start_time && session.training_sessions?.end_time 
+                              ? `${format(new Date(`1970-01-01T${session.training_sessions.start_time}`), "h:mm a")} - ${format(new Date(`1970-01-01T${session.training_sessions.end_time}`), "h:mm a")}`
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+                          <span>{session.training_sessions?.branches?.name || "—"}</span>
+                          <span>•</span>
+                          <span>{session.training_sessions?.session_coaches?.map((sc) => sc.coaches?.name).filter(Boolean).join(", ") || "No coach"}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-xs font-medium text-[#79e58f]">{session.session_duration ?? 1} hr</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                          session.status === "present" ? "bg-emerald-500 text-white" : session.status === "absent" ? "bg-red-500 text-white" : "bg-amber-500 text-white"
+                        }`}>{session.status}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <p className="text-xs sm:text-sm text-gray-600">No sessions recorded.</p>
+                <p className="text-sm text-gray-500 text-center py-8">No sessions recorded</p>
               )}
             </div>
-            <div className="flex justify-end pt-3">
-              <Button variant="outline" onClick={() => setPackageSessionsModal({ open: false, title: "", sessions: [] })}>
-                Close
-              </Button>
+          </DialogContent>
+        </Dialog>
+
+        {/* Session History Modal */}
+        <Dialog open={isSessionHistoryModalOpen} onOpenChange={setIsSessionHistoryModalOpen}>
+          <DialogContent className="w-[98vw] max-w-4xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+            <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
+              <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
+                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
+                </div>
+                <span className="truncate">Session History</span>
+              </DialogTitle>
+              <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
+                Current package attendance records ({filteredAttendanceRecords.length} sessions)
+              </DialogDescription>
+            </DialogHeader>
+            <div className="p-3 sm:p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
+              {paginatedRecords.length > 0 ? (
+                <div className="space-y-2">
+                  {paginatedRecords.map((record, idx) => (
+                    <div key={record.session_id} className={`flex items-center justify-between p-3 rounded-lg transition-colors border ${
+                      record.status === "present" ? "bg-emerald-50/50 border-emerald-100 hover:bg-emerald-100/50" : record.status === "absent" ? "bg-red-50/50 border-red-100 hover:bg-red-100/50" : "bg-gray-50/50 border-gray-100 hover:bg-gray-100/50"
+                    }`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-gray-900">
+                            {format(new Date(record.training_sessions.date), "MMM dd, yyyy")}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {format(new Date(`1970-01-01T${record.training_sessions.start_time}`), "h:mm a")} - {format(new Date(`1970-01-01T${record.training_sessions.end_time}`), "h:mm a")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+                          <span>{record.training_sessions.branches?.name || "—"}</span>
+                          <span>•</span>
+                          <span>{record.training_sessions.session_coaches.length > 0 ? record.training_sessions.session_coaches.map(sc => sc.coaches?.name).filter(Boolean).join(', ') : 'No coach'}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-xs font-medium text-[#79e58f]">{record.session_duration ?? 1} hr</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                          record.status === "present" ? "bg-emerald-500 text-white" : record.status === "absent" ? "bg-red-500 text-white" : "bg-amber-500 text-white"
+                        }`}>{record.status}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-8">No sessions in current package</p>
+              )}
             </div>
+            {recordsTotalPages > 1 && (
+              <div className="flex justify-center items-center pt-4 gap-1 flex-shrink-0">
+                <Button variant="ghost" size="sm" onClick={() => handleRecordsPageChange(recordsCurrentPage - 1)} disabled={recordsCurrentPage === 1} className="h-8 w-8 p-0">
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm text-gray-600 px-3">{recordsCurrentPage} / {recordsTotalPages}</span>
+                <Button variant="ghost" size="sm" onClick={() => handleRecordsPageChange(recordsCurrentPage + 1)} disabled={recordsCurrentPage === recordsTotalPages} className="h-8 w-8 p-0">
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 
