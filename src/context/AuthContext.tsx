@@ -134,7 +134,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log("Setting role to:", dbRole);
           setRole(dbRole);
           setCoachData(coachRecord);
-          toast.success(`Welcome back! Logged in as ${dbRole}`);
         } else {
           console.log("Invalid or missing role in database:", dbRole);
           // Check if this specific email should be admin
@@ -154,8 +153,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } else {
               console.log("Successfully updated role to admin");
             }
-            
-            toast.success("Welcome back, Admin!");
           } else {
             console.log("Setting default role to 'coach'");
             setRole('coach');
