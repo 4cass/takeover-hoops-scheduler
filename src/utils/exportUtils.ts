@@ -66,7 +66,8 @@ export function exportToExcel(
     const isEvenRow = rowIndex % 2 === 0;
     
     const styledRow = rowData.map((cellValue, colIndex) => {
-      // Special styling for Remaining Balance column (index 3)
+      // Special styling for Name column (index 0) and Remaining Balance column (index 3)
+      const isNameColumn = colIndex === 0;
       const isBalanceColumn = colIndex === 3;
       
       return {
@@ -75,12 +76,12 @@ export function exportToExcel(
         s: {
           font: { 
             sz: 10, 
-            color: { rgb: isBalanceColumn ? '242833' : '333333' },
-            bold: isBalanceColumn
+            color: { rgb: '333333' },
+            bold: isNameColumn || isBalanceColumn
           },
           fill: { fgColor: { rgb: isEvenRow ? 'F8F9FA' : 'FFFFFF' } },
           alignment: { 
-            horizontal: isBalanceColumn ? 'right' : (colIndex < 4 ? 'center' : 'left'), 
+            horizontal: 'center', 
             vertical: 'center' 
           },
           border: {
