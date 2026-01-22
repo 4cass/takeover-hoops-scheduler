@@ -1,7 +1,67 @@
 import * as XLSX from 'xlsx';
 
 /**
- * Export data to Excel file (.xlsx)
+ * Apply styling to Excel worksheet
+ */
+function applyWorksheetStyles(worksheet: XLSX.WorkSheet, headers: string[], dataRowCount: number) {
+  // Define styles
+  const headerStyle = {
+    fill: { fgColor: { rgb: '242833' } },
+    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: {
+      top: { style: 'thin', color: { rgb: '000000' } },
+      bottom: { style: 'thin', color: { rgb: '000000' } },
+      left: { style: 'thin', color: { rgb: '000000' } },
+      right: { style: 'thin', color: { rgb: '000000' } }
+    }
+  };
+
+  const dataStyle = {
+    font: { sz: 11 },
+    alignment: { horizontal: 'left', vertical: 'center' },
+    border: {
+      top: { style: 'thin', color: { rgb: 'CCCCCC' } },
+      bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
+      left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+      right: { style: 'thin', color: { rgb: 'CCCCCC' } }
+    }
+  };
+
+  const alternateRowStyle = {
+    ...dataStyle,
+    fill: { fgColor: { rgb: 'F8F9FA' } }
+  };
+
+  // Apply header styles
+  headers.forEach((_, colIndex) => {
+    const cellRef = XLSX.utils.encode_cell({ r: 0, c: colIndex });
+    if (worksheet[cellRef]) {
+      worksheet[cellRef].s = headerStyle;
+    }
+  });
+
+  // Apply data styles with alternating row colors
+  for (let rowIndex = 1; rowIndex <= dataRowCount; rowIndex++) {
+    headers.forEach((_, colIndex) => {
+      const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+      if (worksheet[cellRef]) {
+        worksheet[cellRef].s = rowIndex % 2 === 0 ? alternateRowStyle : dataStyle;
+      }
+    });
+  }
+
+  // Set row heights
+  worksheet['!rows'] = [
+    { hpt: 25 }, // Header row height
+    ...Array(dataRowCount).fill({ hpt: 20 }) // Data row heights
+  ];
+
+  return worksheet;
+}
+
+/**
+ * Export data to Excel file (.xlsx) with styling
  */
 export function exportToExcel(
   data: any[],
@@ -31,13 +91,16 @@ export function exportToExcel(
         return cellValue ? String(cellValue).length : 0;
       })
     );
-    return { wch: Math.min(Math.max(maxLength + 2, 10), 50) }; // Min 10, Max 50
+    return { wch: Math.min(Math.max(maxLength + 3, 12), 50) }; // Min 12, Max 50
   });
   worksheet['!cols'] = columnWidths;
 
+  // Apply styling
+  applyWorksheetStyles(worksheet, headers, data.length);
+
   // Create workbook
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Players Report');
 
   // Generate Excel file and download
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
