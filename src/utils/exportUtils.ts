@@ -1,67 +1,7 @@
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 
 /**
- * Apply styling to Excel worksheet
- */
-function applyWorksheetStyles(worksheet: XLSX.WorkSheet, headers: string[], dataRowCount: number) {
-  // Define styles
-  const headerStyle = {
-    fill: { fgColor: { rgb: '242833' } },
-    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 },
-    alignment: { horizontal: 'center', vertical: 'center' },
-    border: {
-      top: { style: 'thin', color: { rgb: '000000' } },
-      bottom: { style: 'thin', color: { rgb: '000000' } },
-      left: { style: 'thin', color: { rgb: '000000' } },
-      right: { style: 'thin', color: { rgb: '000000' } }
-    }
-  };
-
-  const dataStyle = {
-    font: { sz: 11 },
-    alignment: { horizontal: 'left', vertical: 'center' },
-    border: {
-      top: { style: 'thin', color: { rgb: 'CCCCCC' } },
-      bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
-      left: { style: 'thin', color: { rgb: 'CCCCCC' } },
-      right: { style: 'thin', color: { rgb: 'CCCCCC' } }
-    }
-  };
-
-  const alternateRowStyle = {
-    ...dataStyle,
-    fill: { fgColor: { rgb: 'F8F9FA' } }
-  };
-
-  // Apply header styles
-  headers.forEach((_, colIndex) => {
-    const cellRef = XLSX.utils.encode_cell({ r: 0, c: colIndex });
-    if (worksheet[cellRef]) {
-      worksheet[cellRef].s = headerStyle;
-    }
-  });
-
-  // Apply data styles with alternating row colors
-  for (let rowIndex = 1; rowIndex <= dataRowCount; rowIndex++) {
-    headers.forEach((_, colIndex) => {
-      const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
-      if (worksheet[cellRef]) {
-        worksheet[cellRef].s = rowIndex % 2 === 0 ? alternateRowStyle : dataStyle;
-      }
-    });
-  }
-
-  // Set row heights
-  worksheet['!rows'] = [
-    { hpt: 25 }, // Header row height
-    ...Array(dataRowCount).fill({ hpt: 20 }) // Data row heights
-  ];
-
-  return worksheet;
-}
-
-/**
- * Export data to Excel file (.xlsx) with styling
+ * Export data to Excel file (.xlsx) with professional styling
  */
 export function exportToExcel(
   data: any[],
@@ -73,16 +13,111 @@ export function exportToExcel(
     return;
   }
 
-  // Prepare data for Excel
-  const worksheetData = [
-    headers, // Header row
-    ...data.map(item => getRowData(item))
-  ];
+  // Create worksheet data with styling
+  const worksheetData: any[][] = [];
+
+  // Add title row
+  const titleRow = [{ 
+    v: 'TAKEOVER BASKETBALL - PLAYERS REPORT', 
+    t: 's',
+    s: {
+      font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: '242833' } },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    }
+  }];
+  worksheetData.push(titleRow);
+
+  // Add date row
+  const dateRow = [{
+    v: `Generated: ${formatDate(new Date(), 'MM/dd/yyyy HH:mm')}`,
+    t: 's',
+    s: {
+      font: { italic: true, sz: 10, color: { rgb: '666666' } },
+      alignment: { horizontal: 'center' }
+    }
+  }];
+  worksheetData.push(dateRow);
+
+  // Add empty row for spacing
+  worksheetData.push([]);
+
+  // Add header row with styling
+  const headerRow = headers.map(header => ({
+    v: header,
+    t: 's',
+    s: {
+      font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: '79E58F' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: {
+        top: { style: 'thin', color: { rgb: '242833' } },
+        bottom: { style: 'thin', color: { rgb: '242833' } },
+        left: { style: 'thin', color: { rgb: '242833' } },
+        right: { style: 'thin', color: { rgb: '242833' } }
+      }
+    }
+  }));
+  worksheetData.push(headerRow);
+
+  // Add data rows with alternating colors
+  data.forEach((item, rowIndex) => {
+    const rowData = getRowData(item);
+    const isEvenRow = rowIndex % 2 === 0;
+    
+    const styledRow = rowData.map((cellValue, colIndex) => {
+      // Special styling for Remaining Balance column (index 3)
+      const isBalanceColumn = colIndex === 3;
+      
+      return {
+        v: cellValue,
+        t: 's',
+        s: {
+          font: { 
+            sz: 10, 
+            color: { rgb: isBalanceColumn ? '242833' : '333333' },
+            bold: isBalanceColumn
+          },
+          fill: { fgColor: { rgb: isEvenRow ? 'F8F9FA' : 'FFFFFF' } },
+          alignment: { 
+            horizontal: isBalanceColumn ? 'right' : (colIndex < 4 ? 'center' : 'left'), 
+            vertical: 'center' 
+          },
+          border: {
+            top: { style: 'thin', color: { rgb: 'E0E0E0' } },
+            bottom: { style: 'thin', color: { rgb: 'E0E0E0' } },
+            left: { style: 'thin', color: { rgb: 'E0E0E0' } },
+            right: { style: 'thin', color: { rgb: 'E0E0E0' } }
+          }
+        }
+      };
+    });
+    worksheetData.push(styledRow);
+  });
+
+  // Add summary footer
+  worksheetData.push([]); // Empty row
+  const totalPlayers = [{
+    v: `Total Players: ${data.length}`,
+    t: 's',
+    s: {
+      font: { bold: true, sz: 11, color: { rgb: '242833' } },
+      fill: { fgColor: { rgb: 'E8E8E8' } },
+      alignment: { horizontal: 'left' },
+      border: {
+        top: { style: 'medium', color: { rgb: '242833' } },
+        bottom: { style: 'medium', color: { rgb: '242833' } },
+        left: { style: 'medium', color: { rgb: '242833' } },
+        right: { style: 'medium', color: { rgb: '242833' } }
+      }
+    }
+  }];
+  worksheetData.push(totalPlayers);
 
   // Create worksheet
   const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
-  // Set column widths (auto-width based on content)
+  // Set column widths
   const columnWidths = headers.map((header, colIndex) => {
     const maxLength = Math.max(
       header.length,
@@ -91,12 +126,27 @@ export function exportToExcel(
         return cellValue ? String(cellValue).length : 0;
       })
     );
-    return { wch: Math.min(Math.max(maxLength + 3, 12), 50) }; // Min 12, Max 50
+    return { wch: Math.min(Math.max(maxLength + 4, 14), 45) };
   });
   worksheet['!cols'] = columnWidths;
 
-  // Apply styling
-  applyWorksheetStyles(worksheet, headers, data.length);
+  // Merge title and date cells across all columns
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }, // Title row merge
+    { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } }, // Date row merge
+    { s: { r: worksheetData.length - 1, c: 0 }, e: { r: worksheetData.length - 1, c: 2 } } // Footer merge
+  ];
+
+  // Set row heights
+  worksheet['!rows'] = [
+    { hpt: 30 }, // Title row
+    { hpt: 18 }, // Date row
+    { hpt: 10 }, // Spacer row
+    { hpt: 25 }, // Header row
+    ...Array(data.length).fill({ hpt: 22 }), // Data rows
+    { hpt: 10 }, // Spacer
+    { hpt: 22 }  // Footer
+  ];
 
   // Create workbook
   const workbook = XLSX.utils.book_new();
@@ -154,4 +204,3 @@ function formatDate(date: Date, formatStr: string): string {
 export function format(date: Date, formatStr: string): string {
   return formatDate(date, formatStr);
 }
-
