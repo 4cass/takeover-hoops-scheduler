@@ -796,7 +796,7 @@ const deleteMutation = useMutation({
                   {filteredStudents.length > 0 && (
                     <Button
                       onClick={() => {
-                        const headers = ['Name', 'Remaining Sessions', 'Total Sessions', 'Email', 'Phone', 'Branch', 'Package Type', 'Enrollment Date', 'Remaining Balance'];
+                        const headers = ['Name', 'Remaining Sessions', 'Total Sessions', 'Remaining Balance', 'Email', 'Phone', 'Branch', 'Package Type', 'Enrollment Date'];
                         exportToCSV(
                           filteredStudents,
                           'players_report',
@@ -805,12 +805,12 @@ const deleteMutation = useMutation({
                             student.name || '',
                             String(student.remaining_sessions || 0),
                             String(student.sessions || 0),
+                            `₱${Number(student.remaining_balance || 0).toLocaleString()}`,
                             student.email || '',
                             student.phone || '',
                             branches?.find(b => b.id === student.branch_id)?.name || '',
                             student.package_type || '',
-                            student.enrollment_date ? format(new Date(student.enrollment_date), 'yyyy-MM-dd') : '',
-                            String(student.remaining_balance || 0)
+                            student.enrollment_date ? format(new Date(student.enrollment_date), 'yyyy-MM-dd') : ''
                           ]
                         );
                         toast.success('Players report exported to Excel successfully');
