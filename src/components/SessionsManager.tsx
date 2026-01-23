@@ -612,8 +612,22 @@ export function SessionsManager() {
       if (!session.package_type) throw new Error('Package type is required');
       if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
 
-      // Fetch fresh student data for validation
-      if (selectedStudents.length > 0) {
+      // First, get existing participants to determine which students are NEW
+      const { data: existingParticipantsForValidation, error: fetchExistingError } = await supabase
+        .from('session_participants')
+        .select('student_id')
+        .eq('session_id', id);
+
+      if (fetchExistingError) {
+        console.error('Error fetching existing participants for validation:', fetchExistingError);
+        throw new Error('Failed to fetch existing participants: ' + fetchExistingError.message);
+      }
+
+      const existingStudentIdsForValidation = (existingParticipantsForValidation || []).map(p => p.student_id);
+      const newStudentsToValidate = selectedStudents.filter(studentId => !existingStudentIdsForValidation.includes(studentId));
+
+      // Only validate NEW students (not existing ones who were already validated when first added)
+      if (newStudentsToValidate.length > 0) {
         const { data: freshStudents, error: fetchStudentsError } = await supabase
           .from('students')
           .select(`
@@ -639,7 +653,7 @@ export function SessionsManager() {
               captured_at
             )
           `)
-          .in('id', selectedStudents);
+          .in('id', newStudentsToValidate);
 
         if (fetchStudentsError) {
           console.error('Error fetching students for validation:', fetchStudentsError);
@@ -669,7 +683,7 @@ export function SessionsManager() {
           };
         });
 
-        // Validate student session limits using accurate data
+        // Validate student session limits using accurate data - only for NEW students
         const invalidStudents = studentsWithAccurateSessions
           .filter(student => {
             const remaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
