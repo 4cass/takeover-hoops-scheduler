@@ -29,6 +29,7 @@ interface StudentPayment {
   id: string;
   student_id: string;
   payment_amount: number;
+  extra_charges: number | null;
   payment_date: string;
   notes: string | null;
   created_at: string;
@@ -42,6 +43,7 @@ export default function StudentPaymentPage() {
 
   const [paymentFormData, setPaymentFormData] = useState({
     payment_amount: 0,
+    extra_charges: 0,
     payment_date: new Date(),
     notes: "",
   });
@@ -117,6 +119,7 @@ export default function StudentPaymentPage() {
         .insert([{
           student_id: payment.student_id,
           payment_amount: payment.payment_amount,
+          extra_charges: payment.extra_charges || 0,
           payment_date: format(payment.payment_date, 'yyyy-MM-dd\'T\'HH:mm:ss'),
           notes: payment.notes || null,
         }])
@@ -136,6 +139,7 @@ export default function StudentPaymentPage() {
         id: data.id,
         student_id: data.student_id,
         payment_amount: data.payment_amount,
+        extra_charges: data.extra_charges,
         payment_date: data.payment_date,
         notes: data.notes,
         created_at: data.created_at,
@@ -145,6 +149,7 @@ export default function StudentPaymentPage() {
       
       setPaymentFormData({
         payment_amount: 0,
+        extra_charges: 0,
         payment_date: new Date(),
         notes: "",
       });
@@ -439,17 +444,34 @@ export default function StudentPaymentPage() {
                     </Popover>
                   </div>
                 </div>
-                <div className="flex flex-col space-y-2 min-w-0">
-                  <Label htmlFor="payment_notes" className="text-gray-700 font-medium text-xs sm:text-sm truncate">
-                    Notes (Optional)
-                  </Label>
-                  <Input
-                    id="payment_notes"
-                    value={paymentFormData.notes}
-                    onChange={(e) => setPaymentFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                    className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                    style={{ borderColor: '#79e58f' }}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col space-y-2 min-w-0">
+                    <Label htmlFor="extra_charges" className="text-gray-700 font-medium text-xs sm:text-sm truncate">
+                      Extra Charges (Optional)
+                    </Label>
+                    <Input
+                      id="extra_charges"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={paymentFormData.extra_charges}
+                      onChange={(e) => setPaymentFormData((prev) => ({ ...prev, extra_charges: parseFloat(e.target.value) || 0 }))}
+                      className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                      style={{ borderColor: '#79e58f' }}
+                    />
+                  </div>
+                  <div className="flex flex-col space-y-2 min-w-0">
+                    <Label htmlFor="payment_notes" className="text-gray-700 font-medium text-xs sm:text-sm truncate">
+                      Notes (Optional)
+                    </Label>
+                    <Input
+                      id="payment_notes"
+                      value={paymentFormData.notes}
+                      onChange={(e) => setPaymentFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                      className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                      style={{ borderColor: '#79e58f' }}
+                    />
+                  </div>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                   <p className="text-xs sm:text-sm text-gray-600">
@@ -550,7 +572,7 @@ export default function StudentPaymentPage() {
 
               return (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] rounded-lg border-2 border-[#242833]">
+                <table className="w-full min-w-[800px] rounded-lg border-2 border-[#242833]">
                   <thead className="bg-[#242833] text-[#efeff1]">
                     <tr>
                       <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
@@ -561,6 +583,9 @@ export default function StudentPaymentPage() {
                       </th>
                       <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
                         <DollarSign className="w-4 h-4 inline mr-2" />Amount
+                      </th>
+                      <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">
+                        Extra Charges
                       </th>
                       <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm">Notes</th>
                       <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-xs sm:text-sm whitespace-nowrap">Actions</th>
@@ -585,6 +610,9 @@ export default function StudentPaymentPage() {
                           ₱{payment.payment_amount.toFixed(2)}
                         </td>
                         <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm">
+                          {payment.isDownpayment ? '—' : `₱${((payment as any).extra_charges || 0).toFixed(2)}`}
+                        </td>
+                        <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-600 text-xs sm:text-sm">
                           <span className="truncate block max-w-[200px]" title={payment.notes || 'N/A'}>
                             {payment.notes || 'N/A'}
                           </span>
@@ -599,6 +627,7 @@ export default function StudentPaymentPage() {
                                   id: 'downpayment',
                                   student_id: student.id,
                                   payment_amount: payment.payment_amount,
+                                  extra_charges: 0,
                                   payment_date: payment.payment_date,
                                   notes: 'Initial Downpayment',
                                   created_at: payment.payment_date,

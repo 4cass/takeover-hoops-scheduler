@@ -34,6 +34,7 @@ interface Student {
   total_training_fee: number | null;
   downpayment: number | null;
   remaining_balance: number | null;
+  notes: string | null;
 }
 
 
@@ -310,6 +311,7 @@ export function StudentsManager() {
           package_type: student.package_type,
           enrollment_date: student.enrollment_date ? format(student.enrollment_date, 'yyyy-MM-dd') : null,
           expiration_date: student.expiration_date ? format(student.expiration_date, 'yyyy-MM-dd') : null,
+          notes: student.notes || null,
         }])
         .select()
         .single();
@@ -338,6 +340,7 @@ export function StudentsManager() {
           branch_id: student.branch_id,
           package_type: student.package_type,
           enrollment_date: student.enrollment_date ? format(student.enrollment_date, 'yyyy-MM-dd') : null,
+          notes: student.notes || null,
         })
         .eq("id", id)
         .select()
@@ -410,6 +413,7 @@ const deleteMutation = useMutation({
       package_type: null,
       enrollment_date: null,
       expiration_date: addMonths(new Date(), 1), // Default to 1 month from now
+      notes: "",
     });
     setEditingStudent(null);
     setIsDialogOpen(false);
@@ -437,6 +441,7 @@ const deleteMutation = useMutation({
       package_type: student.package_type || null,
       enrollment_date: student.enrollment_date ? new Date(student.enrollment_date) : null,
       expiration_date: addMonths(new Date(), 1),
+      notes: student.notes || "",
     });
     setIsDialogOpen(true);
   };
@@ -459,6 +464,7 @@ const deleteMutation = useMutation({
     package_type: null as string | null,
     enrollment_date: null as Date | null,
     expiration_date: addMonths(new Date(), 1), // Default to 1 month from now
+    notes: "",
   });
 
   const getPackageBadgeColor = (packageType: string | null) => {
@@ -675,6 +681,17 @@ const deleteMutation = useMutation({
                             <p className="text-xs text-gray-500 mt-1">Expiry date for the initial package session</p>
                           </div>
                         )}
+                        <div className="flex flex-col space-y-2 min-w-0">
+                          <Label htmlFor="notes" className="text-gray-700 font-medium text-xs sm:text-sm truncate">Notes (Optional)</Label>
+                          <Input
+                            id="notes"
+                            value={formData.notes}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                            placeholder="Add notes about this player..."
+                            className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                            style={{ borderColor: '#79e58f' }}
+                          />
+                        </div>
                       </div>
                       <div className="flex justify-end space-x-3 pt-4 flex-wrap gap-2">
                         <Button
