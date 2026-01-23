@@ -2106,78 +2106,98 @@ export function SessionsManager() {
                   onClick={async () => {
                     if (!selectedSession) return;
 
-                    // Fetch fresh student data for validation
-                    const { data: freshStudents, error: fetchStudentsError } = await supabase
-                      .from('students')
-                      .select(`
-                        id,
-                        name,
-                        remaining_sessions,
-                        sessions,
-                        branch_id,
-                        package_type,
-                        expiration_date,
-                        attendance_records (
-                          session_duration,
-                          package_cycle,
-                          status,
-                          training_sessions (
-                            package_cycle
-                          )
-                        ),
-                        student_package_history (
-                          id,
-                          sessions,
-                          remaining_sessions,
-                          captured_at
-                        )
-                      `)
-                      .in('id', selectedStudents);
+                    // Get existing participants to determine which students are NEW
+                    const { data: existingParticipantsData, error: existingParticipantsError } = await supabase
+                      .from('session_participants')
+                      .select('student_id')
+                      .eq('session_id', selectedSession.id);
 
-                    if (fetchStudentsError) {
-                      console.error('Error fetching students for validation:', fetchStudentsError);
-                      toast.error('Failed to validate students: ' + fetchStudentsError.message);
+                    if (existingParticipantsError) {
+                      console.error('Error fetching existing participants:', existingParticipantsError);
+                      toast.error('Failed to fetch existing participants: ' + existingParticipantsError.message);
                       return;
                     }
 
-                    // Calculate accurate remaining sessions for each student
-                    const studentsWithAccurateSessions = (freshStudents || []).map((s: any) => {
-                      const packageHistory = s.student_package_history || [];
-                      const currentCycle = packageHistory.length + 1;
-
-                      // Count sessions used in current cycle
-                      const currentCycleSessionsUsed = ((s.attendance_records as any) || [])
-                        .filter((record: any) =>
-                          record.status === 'present' &&
-                          ((record.package_cycle === currentCycle) ||
-                           (record.training_sessions?.package_cycle === currentCycle))
-                        )
-                        .reduce((total: number, record: any) => total + (record.session_duration || 1), 0);
-
-                      // Current remaining sessions = total sessions - sessions used in current cycle
-                      const currentRemainingSessions = Math.max(0, (s.sessions || 0) - currentCycleSessionsUsed);
-
-                      return {
-                        ...s,
-                        current_remaining_sessions: currentRemainingSessions,
-                        calculated_remaining: currentRemainingSessions > 0
-                      };
-                    });
-
-                    // Validate student session limits using accurate data
-                    const invalidStudents = studentsWithAccurateSessions
-                      .filter(student => {
-                        const remaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
-                        return remaining <= 0;
-                      });
+                    const existingStudentIds = existingParticipantsData?.map(p => p.student_id) || [];
                     
-                    if (invalidStudents.length > 0) {
-                      toast.error(
-                        `The following students have no remaining sessions: ${invalidStudents
-                          .map(s => s.name)
-                          .join(', ')}. Please increase their session count in the Players Manager.`
-                      );
-                      return;
+                    // Only validate NEW students (students being added to this session)
+                    const newStudentIds = selectedStudents.filter(id => !existingStudentIds.includes(id));
+
+                    // Only perform validation if there are new students being added
+                    if (newStudentIds.length > 0) {
+                      // Fetch fresh student data for validation - only for NEW students
+                      const { data: freshStudents, error: fetchStudentsError } = await supabase
+                        .from('students')
+                        .select(`
+                          id,
+                          name,
+                          remaining_sessions,
+                          sessions,
+                          branch_id,
+                          package_type,
+                          expiration_date,
+                          attendance_records (
+                            session_duration,
+                            package_cycle,
+                            status,
+                            training_sessions (
+                              package_cycle
+                            )
+                          ),
+                          student_package_history (
+                            id,
+                            sessions,
+                            remaining_sessions,
+                            captured_at
+                          )
+                        `)
+                        .in('id', newStudentIds);
+
+                      if (fetchStudentsError) {
+                        console.error('Error fetching students for validation:', fetchStudentsError);
+                        toast.error('Failed to validate students: ' + fetchStudentsError.message);
+                        return;
+                      }
+
+                      // Calculate accurate remaining sessions for each NEW student
+                      const studentsWithAccurateSessions = (freshStudents || []).map((s: any) => {
+                        const packageHistory = s.student_package_history || [];
+                        const currentCycle = packageHistory.length + 1;
+
+                        // Count sessions used in current cycle
+                        const currentCycleSessionsUsed = ((s.attendance_records as any) || [])
+                          .filter((record: any) =>
+                            record.status === 'present' &&
+                            ((record.package_cycle === currentCycle) ||
+                             (record.training_sessions?.package_cycle === currentCycle))
+                          )
+                          .reduce((total: number, record: any) => total + (record.session_duration || 1), 0);
+
+                        // Current remaining sessions = total sessions - sessions used in current cycle
+                        const currentRemainingSessions = Math.max(0, (s.sessions || 0) - currentCycleSessionsUsed);
+
+                        return {
+                          ...s,
+                          current_remaining_sessions: currentRemainingSessions,
+                          calculated_remaining: currentRemainingSessions > 0
+                        };
+                      });
+
+                      // Validate student session limits using accurate data - only for NEW students
+                      const invalidStudents = studentsWithAccurateSessions
+                        .filter(student => {
+                          const remaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
+                          return remaining <= 0;
+                        });
+                      
+                      if (invalidStudents.length > 0) {
+                        toast.error(
+                          `The following students have no remaining sessions: ${invalidStudents
+                            .map(s => s.name)
+                            .join(', ')}. Please increase their session count in the Players Manager.`
+                        );
+                        return;
+                      }
                     }
 
                     try {

@@ -33,6 +33,7 @@ interface Student {
   total_training_fee: number | null;
   downpayment: number | null;
   remaining_balance: number | null;
+  notes: string | null;
 }
 
 interface Branch {
@@ -801,6 +802,19 @@ export default function StudentViewPage() {
               </p>
             </div>
           </div>
+          
+          {/* Notes Section */}
+          {student.notes && (
+            <div className="px-5 py-3 bg-amber-50/50 border-t border-amber-100">
+              <div className="flex items-start gap-2">
+                <FileText className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-amber-700 mb-0.5">Notes</p>
+                  <p className="text-sm text-amber-900 whitespace-pre-wrap">{student.notes}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Package History Modal */}

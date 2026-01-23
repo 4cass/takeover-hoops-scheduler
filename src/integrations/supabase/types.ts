@@ -393,6 +393,7 @@ export type Database = {
       student_payments: {
         Row: {
           created_at: string
+          extra_charges: number | null
           id: string
           notes: string | null
           payment_amount: number
@@ -402,6 +403,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          extra_charges?: number | null
           id?: string
           notes?: string | null
           payment_amount: number
@@ -411,6 +413,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          extra_charges?: number | null
           id?: string
           notes?: string | null
           payment_amount?: number
@@ -438,6 +441,7 @@ export type Database = {
           expiration_date: string | null
           id: string
           name: string
+          notes: string | null
           package_type: string | null
           phone: string | null
           remaining_balance: number | null
@@ -455,6 +459,7 @@ export type Database = {
           expiration_date?: string | null
           id?: string
           name: string
+          notes?: string | null
           package_type?: string | null
           phone?: string | null
           remaining_balance?: number | null
@@ -472,6 +477,7 @@ export type Database = {
           expiration_date?: string | null
           id?: string
           name?: string
+          notes?: string | null
           package_type?: string | null
           phone?: string | null
           remaining_balance?: number | null
