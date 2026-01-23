@@ -1013,8 +1013,17 @@ export function SessionsManager() {
       return;
     }
 
-    // Fetch fresh student data for validation
-    if (selectedStudents.length > 0) {
+    // Determine which students need validation (only NEW students when editing)
+    let studentsToValidate = selectedStudents;
+    
+    if (editingSession) {
+      // When editing, get existing participants and only validate NEW students
+      const existingStudentIds = editingSession.session_participants?.map(p => p.student_id) || [];
+      studentsToValidate = selectedStudents.filter(id => !existingStudentIds.includes(id));
+    }
+
+    // Fetch fresh student data for validation - only for students that need validation
+    if (studentsToValidate.length > 0) {
       try {
         const { data: freshStudents, error: fetchStudentsError } = await supabase
           .from('students')
@@ -1041,7 +1050,7 @@ export function SessionsManager() {
               captured_at
             )
           `)
-          .in('id', selectedStudents);
+          .in('id', studentsToValidate);
 
         if (fetchStudentsError) {
           console.error('Error fetching students for validation:', fetchStudentsError);
@@ -1072,7 +1081,7 @@ export function SessionsManager() {
           };
         });
 
-        // Validate student session limits using accurate data
+        // Validate student session limits using accurate data - only for NEW students
         const invalidStudents = studentsWithAccurateSessions
           .filter(student => {
             const remaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
