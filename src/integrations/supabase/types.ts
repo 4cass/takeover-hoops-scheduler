@@ -392,6 +392,7 @@ export type Database = {
       }
       student_payments: {
         Row: {
+          charge_description: string | null
           created_at: string
           extra_charges: number | null
           id: string
@@ -402,6 +403,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          charge_description?: string | null
           created_at?: string
           extra_charges?: number | null
           id?: string
@@ -412,6 +414,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          charge_description?: string | null
           created_at?: string
           extra_charges?: number | null
           id?: string
