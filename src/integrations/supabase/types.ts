@@ -346,6 +346,50 @@ export type Database = {
           },
         ]
       }
+      student_charges: {
+        Row: {
+          amount: number
+          charge_date: string
+          charge_type: string
+          created_at: string
+          description: string | null
+          id: string
+          notes: string | null
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          charge_date?: string
+          charge_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          notes?: string | null
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          charge_date?: string
+          charge_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          notes?: string | null
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_charges_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_package_history: {
         Row: {
           captured_at: string
