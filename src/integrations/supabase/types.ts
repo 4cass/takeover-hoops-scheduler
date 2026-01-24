@@ -357,6 +357,9 @@ export type Database = {
           notes: string | null
           student_id: string
           updated_at: string
+          is_paid: boolean
+          paid_at: string | null
+          paid_amount: number
         }
         Insert: {
           amount: number
@@ -368,6 +371,9 @@ export type Database = {
           notes?: string | null
           student_id: string
           updated_at?: string
+          is_paid?: boolean
+          paid_at?: string | null
+          paid_amount?: number
         }
         Update: {
           amount?: number
@@ -377,6 +383,9 @@ export type Database = {
           description?: string | null
           id?: string
           notes?: string | null
+          is_paid?: boolean
+          paid_at?: string | null
+          paid_amount?: number
           student_id?: string
           updated_at?: string
         }
@@ -445,6 +454,8 @@ export type Database = {
           payment_date: string
           student_id: string
           updated_at: string
+          payment_for: string
+          charge_id: string | null
         }
         Insert: {
           charge_description?: string | null
@@ -456,6 +467,8 @@ export type Database = {
           payment_date?: string
           student_id: string
           updated_at?: string
+          payment_for?: string
+          charge_id?: string | null
         }
         Update: {
           charge_description?: string | null
@@ -467,6 +480,8 @@ export type Database = {
           payment_date?: string
           student_id?: string
           updated_at?: string
+          payment_for?: string
+          charge_id?: string | null
         }
         Relationships: [
           {
