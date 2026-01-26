@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Mail, Phone, Eye, Download } from "lucide-react";
+import { Plus, Edit, Trash2, Filter, Search, Users, Calendar, Clock, MapPin, User, ChevronLeft, ChevronRight, Mail, Phone, Eye, Download, LogIn, LogOut, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { exportToCSV } from "@/utils/exportUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -44,6 +44,22 @@ interface SessionRecord {
     branches: { name: string } | null;
     session_participants: { students: { name: string } }[];
   };
+}
+
+interface CoachSessionTime {
+  id: string;
+  coach_id: string;
+  session_id: string;
+  time_in: string | null;
+  time_out: string | null;
+}
+
+interface CoachAttendanceRecord {
+  id: string;
+  coach_id: string;
+  session_id: string;
+  status: 'present' | 'absent' | 'pending';
+  marked_at: string | null;
 }
 
 const formatTime12Hour = (timeString: string) => {
@@ -199,6 +215,79 @@ export function CoachesManager() {
       return data as SessionRecord[];
     },
     enabled: !!paginatedCoaches && paginatedCoaches.length > 0,
+  });
+
+  // Fetch coach session times
+  const { data: coachSessionTimes } = useQuery({
+    queryKey: ["coach_session_times", selectedCoach?.id],
+    queryFn: async () => {
+      if (!selectedCoach?.id) return [];
+      const { data, error } = await supabase
+        .from("coach_session_times")
+        .select("id, coach_id, session_id, time_in, time_out")
+        .eq("coach_id", selectedCoach.id);
+      if (error) {
+        console.error("coach_session_times query error:", error);
+        throw error;
+      }
+      return data as CoachSessionTime[];
+    },
+    enabled: !!selectedCoach?.id && isRecordsDialogOpen,
+  });
+
+  // Fetch coach attendance records
+  const { data: coachAttendanceRecords, refetch: refetchAttendance } = useQuery({
+    queryKey: ["coach_attendance_records", selectedCoach?.id],
+    queryFn: async () => {
+      if (!selectedCoach?.id) return [];
+      const { data, error } = await supabase
+        .from("coach_attendance_records")
+        .select("id, coach_id, session_id, status, marked_at")
+        .eq("coach_id", selectedCoach.id);
+      if (error) {
+        console.error("coach_attendance_records query error:", error);
+        throw error;
+      }
+      return data as CoachAttendanceRecord[];
+    },
+    enabled: !!selectedCoach?.id && isRecordsDialogOpen,
+  });
+
+  // Helper functions to get time and attendance data
+  const getCoachTimeData = (sessionId: string) => {
+    return coachSessionTimes?.find(t => t.session_id === sessionId);
+  };
+
+  const getCoachAttendance = (sessionId: string) => {
+    return coachAttendanceRecords?.find(a => a.session_id === sessionId);
+  };
+
+  // Mutation to mark coach as absent
+  const markAbsentMutation = useMutation({
+    mutationFn: async ({ sessionId, coachId }: { sessionId: string; coachId: string }) => {
+      const { data, error } = await supabase
+        .from("coach_attendance_records")
+        .upsert({
+          session_id: sessionId,
+          coach_id: coachId,
+          status: 'absent',
+          marked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, { 
+          onConflict: 'session_id,coach_id'
+        })
+        .select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Coach marked as absent");
+      refetchAttendance();
+      queryClient.invalidateQueries({ queryKey: ["coach_attendance_records"] });
+    },
+    onError: (error: any) => {
+      toast.error("Failed to mark as absent: " + error.message);
+    },
   });
 
   const filteredSessionRecords = sessionRecords?.filter((record) => {
@@ -716,18 +805,26 @@ export function CoachesManager() {
                     {filteredSessionRecords.length > 0 && (
                       <Button
                         onClick={() => {
-                          const headers = ['Date', 'Time', 'Branch', 'Package Type', 'Students'];
+                          const headers = ['Date', 'Time', 'Branch', 'Package Type', 'Time In', 'Time Out', 'Status', 'Students'];
                           exportToCSV(
                             filteredSessionRecords,
                             `${selectedCoach?.name || 'coach'}_sessions`,
                             headers,
-                            (record) => [
-                              record.training_sessions ? format(new Date(record.training_sessions.date), 'yyyy-MM-dd') : '',
-                              record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : '',
-                              record.training_sessions?.branches?.name || '',
-                              record.training_sessions?.package_type || '',
-                              record.training_sessions?.session_participants?.map(p => p.students.name).join(", ") || ''
-                            ]
+                            (record) => {
+                              const sessionId = record.training_sessions?.id;
+                              const timeData = sessionId ? coachSessionTimes?.find(t => t.session_id === sessionId) : null;
+                              const attendanceData = sessionId ? coachAttendanceRecords?.find(a => a.session_id === sessionId) : null;
+                              return [
+                                record.training_sessions ? format(new Date(record.training_sessions.date), 'yyyy-MM-dd') : '',
+                                record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : '',
+                                record.training_sessions?.branches?.name || '',
+                                record.training_sessions?.package_type || '',
+                                timeData?.time_in ? format(new Date(timeData.time_in), 'MM/dd/yyyy hh:mm a') : 'N/A',
+                                timeData?.time_out ? format(new Date(timeData.time_out), 'MM/dd/yyyy hh:mm a') : 'N/A',
+                                attendanceData?.status || 'pending',
+                                record.training_sessions?.session_participants?.map(p => p.students.name).join(", ") || ''
+                              ];
+                            }
                           );
                           toast.success('Session records exported to Excel successfully');
                         }}
@@ -837,53 +934,109 @@ export function CoachesManager() {
                     </div>
                   ) : (
                     <>
-                      {/* Mobile Cards View */}
                       <div className="block md:hidden space-y-3">
-                        {paginatedSessionRecords.map((record) => (
-                          <Card
-                            key={record.training_sessions?.id || record.id}
-                            className="border-2 rounded-xl overflow-hidden"
-                            style={{ borderColor: '#79e58f' }}
-                          >
-                            <CardContent className="p-4 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
-                                  <Calendar className="w-4 h-4 text-gray-500" />
-                                  <span className="text-sm font-medium text-gray-900">
-                                    {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
+                        {paginatedSessionRecords.map((record) => {
+                          const sessionId = record.training_sessions?.id;
+                          const timeData = sessionId ? getCoachTimeData(sessionId) : null;
+                          const attendanceData = sessionId ? getCoachAttendance(sessionId) : null;
+                          const attendanceStatus = attendanceData?.status || 'pending';
+                          
+                          return (
+                            <Card
+                              key={record.training_sessions?.id || record.id}
+                              className="border-2 rounded-xl overflow-hidden"
+                              style={{ borderColor: '#79e58f' }}
+                            >
+                              <CardContent className="p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    <Calendar className="w-4 h-4 text-gray-500" />
+                                    <span className="text-sm font-medium text-gray-900">
+                                      {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
+                                    </span>
+                                  </div>
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
+                                    {record.training_sessions?.package_type || 'N/A'}
                                   </span>
                                 </div>
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
-                                  {record.training_sessions?.package_type || 'N/A'}
-                                </span>
-                              </div>
-                              
-                              <div className="flex items-center space-x-2 text-gray-600">
-                                <Clock className="w-4 h-4" />
-                                <span className="text-xs">
-                                  {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
-                                </span>
-                              </div>
-                              
-                              <div className="flex items-center space-x-2 text-gray-600">
-                                <MapPin className="w-4 h-4" />
-                                <span className="text-xs">{record.training_sessions?.branches?.name || 'N/A'}</span>
-                              </div>
-                              
-                              <div className="border-t border-gray-200 pt-2">
-                                <div className="flex items-start space-x-2">
-                                  <User className="w-4 h-4 text-gray-500 mt-0.5" />
-                                  <div className="text-xs text-gray-600">
-                                    <span className="font-medium">Students:</span>
-                                    <p className="mt-1">
-                                      {record.training_sessions?.session_participants?.map(p => p.students.name).join(", ") || "No students"}
-                                    </p>
+                                
+                                <div className="flex items-center space-x-2 text-gray-600">
+                                  <Clock className="w-4 h-4" />
+                                  <span className="text-xs">
+                                    {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex items-center space-x-2 text-gray-600">
+                                  <MapPin className="w-4 h-4" />
+                                  <span className="text-xs">{record.training_sessions?.branches?.name || 'N/A'}</span>
+                                </div>
+                                
+                                {/* Time In/Out */}
+                                <div className="grid grid-cols-2 gap-2 border-t border-gray-200 pt-2">
+                                  <div className="flex items-center space-x-2 text-gray-600">
+                                    <LogIn className="w-4 h-4 text-green-600" />
+                                    <div className="text-xs">
+                                      <span className="font-medium">Time In:</span>
+                                      <p>{timeData?.time_in ? format(new Date(timeData.time_in), 'hh:mm a') : 'N/A'}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-2 text-gray-600">
+                                    <LogOut className="w-4 h-4 text-red-600" />
+                                    <div className="text-xs">
+                                      <span className="font-medium">Time Out:</span>
+                                      <p>{timeData?.time_out ? format(new Date(timeData.time_out), 'hh:mm a') : 'N/A'}</p>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
+                                
+                                {/* Attendance Status */}
+                                <div className="flex items-center justify-between border-t border-gray-200 pt-2">
+                                  <div className="flex items-center space-x-2">
+                                    {attendanceStatus === 'present' ? (
+                                      <CheckCircle className="w-4 h-4 text-green-600" />
+                                    ) : attendanceStatus === 'absent' ? (
+                                      <XCircle className="w-4 h-4 text-red-600" />
+                                    ) : (
+                                      <AlertCircle className="w-4 h-4 text-yellow-600" />
+                                    )}
+                                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                      attendanceStatus === 'present' ? 'bg-green-100 text-green-700' :
+                                      attendanceStatus === 'absent' ? 'bg-red-100 text-red-700' :
+                                      'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                      {attendanceStatus === 'present' ? 'Present' : attendanceStatus === 'absent' ? 'Absent' : 'Pending'}
+                                    </span>
+                                  </div>
+                                  {attendanceStatus !== 'absent' && sessionId && selectedCoach && (
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => markAbsentMutation.mutate({ sessionId, coachId: selectedCoach.id })}
+                                      disabled={markAbsentMutation.isPending}
+                                      className="text-xs h-7"
+                                    >
+                                      <XCircle className="w-3 h-3 mr-1" />
+                                      Mark Absent
+                                    </Button>
+                                  )}
+                                </div>
+                                
+                                <div className="border-t border-gray-200 pt-2">
+                                  <div className="flex items-start space-x-2">
+                                    <User className="w-4 h-4 text-gray-500 mt-0.5" />
+                                    <div className="text-xs text-gray-600">
+                                      <span className="font-medium">Students:</span>
+                                      <p className="mt-1">
+                                        {record.training_sessions?.session_participants?.map(p => p.students.name).join(", ") || "No students"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
                       </div>
 
                       {/* Desktop Table View */}
@@ -894,35 +1047,84 @@ export function CoachesManager() {
                               <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Calendar className="w-4 h-4 inline mr-2" />Date</th>
                               <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Clock className="w-4 h-4 inline mr-2" />Time</th>
                               <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><MapPin className="w-4 h-4 inline mr-2" />Branch</th>
-                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Users className="w-4 h-4 inline mr-2" />Package Type</th>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Users className="w-4 h-4 inline mr-2" />Package</th>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><LogIn className="w-4 h-4 inline mr-2" />Time In</th>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><LogOut className="w-4 h-4 inline mr-2" />Time Out</th>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><CheckCircle className="w-4 h-4 inline mr-2" />Status</th>
                               <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><User className="w-4 h-4 inline mr-2" />Students</th>
+                              <th className="py-3 px-4 text-center font-semibold text-xs sm:text-sm">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {paginatedSessionRecords.map((record, index) => (
-                              <tr
-                                key={record.training_sessions?.id}
-                                className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                              >
-                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                  {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
-                                </td>
-                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                  {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
-                                </td>
-                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                  {record.training_sessions?.branches?.name || 'N/A'}
-                                </td>
-                                <td className="py-3 px-4 text-xs sm:text-sm min-w-0 truncate">
-                                  <span className={`px-2 py-1 rounded-full font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
-                                    {record.training_sessions?.package_type || 'N/A'}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                  {record.training_sessions?.session_participants?.map(participant => participant.students.name).join(", ") || "No students"}
-                                </td>
-                              </tr>
-                            ))}
+                            {paginatedSessionRecords.map((record, index) => {
+                              const sessionId = record.training_sessions?.id;
+                              const timeData = sessionId ? getCoachTimeData(sessionId) : null;
+                              const attendanceData = sessionId ? getCoachAttendance(sessionId) : null;
+                              const attendanceStatus = attendanceData?.status || 'pending';
+                              
+                              return (
+                                <tr
+                                  key={record.training_sessions?.id}
+                                  className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                                >
+                                  <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                    {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                    {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                    {record.training_sessions?.branches?.name || 'N/A'}
+                                  </td>
+                                  <td className="py-3 px-4 text-xs sm:text-sm min-w-0 truncate">
+                                    <span className={`px-2 py-1 rounded-full font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
+                                      {record.training_sessions?.package_type || 'N/A'}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                    {timeData?.time_in ? format(new Date(timeData.time_in), 'hh:mm a') : 'N/A'}
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                    {timeData?.time_out ? format(new Date(timeData.time_out), 'hh:mm a') : 'N/A'}
+                                  </td>
+                                  <td className="py-3 px-4 text-xs sm:text-sm min-w-0">
+                                    <span className={`px-2 py-1 rounded-full font-medium inline-flex items-center ${
+                                      attendanceStatus === 'present' ? 'bg-green-100 text-green-700' :
+                                      attendanceStatus === 'absent' ? 'bg-red-100 text-red-700' :
+                                      'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                      {attendanceStatus === 'present' ? (
+                                        <><CheckCircle className="w-3 h-3 mr-1" />Present</>
+                                      ) : attendanceStatus === 'absent' ? (
+                                        <><XCircle className="w-3 h-3 mr-1" />Absent</>
+                                      ) : (
+                                        <><AlertCircle className="w-3 h-3 mr-1" />Pending</>
+                                      )}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate max-w-[150px]">
+                                    {record.training_sessions?.session_participants?.map(participant => participant.students.name).join(", ") || "No students"}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    {attendanceStatus !== 'absent' && sessionId && selectedCoach && (
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => markAbsentMutation.mutate({ sessionId, coachId: selectedCoach.id })}
+                                        disabled={markAbsentMutation.isPending}
+                                        className="text-xs h-7"
+                                      >
+                                        <XCircle className="w-3 h-3 mr-1" />
+                                        Mark Absent
+                                      </Button>
+                                    )}
+                                    {attendanceStatus === 'absent' && (
+                                      <span className="text-xs text-red-600 font-medium">Absent</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
