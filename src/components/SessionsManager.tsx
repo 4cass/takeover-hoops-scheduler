@@ -365,10 +365,10 @@ export function SessionsManager() {
       if (!session.package_type) throw new Error('Package type is required');
       if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
 
-      // Validate student session limits
+      // Validate student session limits - only block if they have less than 1 session
       const invalidStudents = selectedStudents
         .map(studentId => students?.find(s => s.id === studentId))
-        .filter(student => student && student.remaining_sessions <= 0);
+        .filter(student => student && student.remaining_sessions < 1);
       
       if (invalidStudents.length > 0) {
         throw new Error(

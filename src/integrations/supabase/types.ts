@@ -354,12 +354,12 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          is_paid: boolean | null
           notes: string | null
+          paid_amount: number | null
+          paid_at: string | null
           student_id: string
           updated_at: string
-          is_paid: boolean
-          paid_at: string | null
-          paid_amount: number
         }
         Insert: {
           amount: number
@@ -368,12 +368,12 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_paid?: boolean | null
           notes?: string | null
+          paid_amount?: number | null
+          paid_at?: string | null
           student_id: string
           updated_at?: string
-          is_paid?: boolean
-          paid_at?: string | null
-          paid_amount?: number
         }
         Update: {
           amount?: number
@@ -382,10 +382,10 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_paid?: boolean | null
           notes?: string | null
-          is_paid?: boolean
+          paid_amount?: number | null
           paid_at?: string | null
-          paid_amount?: number
           student_id?: string
           updated_at?: string
         }
@@ -446,44 +446,51 @@ export type Database = {
       student_payments: {
         Row: {
           charge_description: string | null
+          charge_id: string | null
           created_at: string
           extra_charges: number | null
           id: string
           notes: string | null
           payment_amount: number
           payment_date: string
+          payment_for: string | null
           student_id: string
           updated_at: string
-          payment_for: string
-          charge_id: string | null
         }
         Insert: {
           charge_description?: string | null
+          charge_id?: string | null
           created_at?: string
           extra_charges?: number | null
           id?: string
           notes?: string | null
           payment_amount: number
           payment_date?: string
+          payment_for?: string | null
           student_id: string
           updated_at?: string
-          payment_for?: string
-          charge_id?: string | null
         }
         Update: {
           charge_description?: string | null
+          charge_id?: string | null
           created_at?: string
           extra_charges?: number | null
           id?: string
           notes?: string | null
           payment_amount?: number
           payment_date?: string
+          payment_for?: string | null
           student_id?: string
           updated_at?: string
-          payment_for?: string
-          charge_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "student_payments_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: false
+            referencedRelation: "student_charges"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "student_payments_student_id_fkey"
             columns: ["student_id"]

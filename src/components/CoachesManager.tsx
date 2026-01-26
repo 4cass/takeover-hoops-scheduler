@@ -93,6 +93,8 @@ export function CoachesManager() {
   const [coachPackageTypeFilter, setCoachPackageTypeFilter] = useState<string>("All");
   const [recordsBranchFilter, setRecordsBranchFilter] = useState<string>("All");
   const [recordsPackageTypeFilter, setRecordsPackageTypeFilter] = useState<string>("All");
+  const [recordsStartDate, setRecordsStartDate] = useState<string>("");
+  const [recordsEndDate, setRecordsEndDate] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [recordsCurrentPage, setRecordsCurrentPage] = useState(1);
   const itemsPerPage = 6;
@@ -199,11 +201,27 @@ export function CoachesManager() {
     enabled: !!paginatedCoaches && paginatedCoaches.length > 0,
   });
 
-  const filteredSessionRecords = sessionRecords?.filter((record) =>
-    (recordsBranchFilter === "All" || record.training_sessions?.branch_id === recordsBranchFilter) &&
-    (recordsPackageTypeFilter === "All" || record.training_sessions?.package_type === recordsPackageTypeFilter) &&
-    (selectedCoach ? record.coach_id === selectedCoach.id : true)
-  ) || [];
+  const filteredSessionRecords = sessionRecords?.filter((record) => {
+    const matchesBranch = recordsBranchFilter === "All" || record.training_sessions?.branch_id === recordsBranchFilter;
+    const matchesPackage = recordsPackageTypeFilter === "All" || record.training_sessions?.package_type === recordsPackageTypeFilter;
+    const matchesCoach = selectedCoach ? record.coach_id === selectedCoach.id : true;
+    
+    // Date filtering
+    let matchesDate = true;
+    if (record.training_sessions?.date) {
+      const sessionDate = new Date(record.training_sessions.date);
+      if (recordsStartDate) {
+        const startDate = new Date(recordsStartDate);
+        matchesDate = matchesDate && sessionDate >= startDate;
+      }
+      if (recordsEndDate) {
+        const endDate = new Date(recordsEndDate);
+        matchesDate = matchesDate && sessionDate <= endDate;
+      }
+    }
+    
+    return matchesBranch && matchesPackage && matchesCoach && matchesDate;
+  }) || [];
 
   const recordsTotalPages = Math.ceil(filteredSessionRecords.length / itemsPerPage);
   const recordsStartIndex = (recordsCurrentPage - 1) * itemsPerPage;
@@ -318,6 +336,8 @@ export function CoachesManager() {
     setSelectedCoach(coach);
     setRecordsBranchFilter("All");
     setRecordsPackageTypeFilter("All");
+    setRecordsStartDate("");
+    setRecordsEndDate("");
     setRecordsCurrentPage(1);
     setIsRecordsDialogOpen(true);
   };
@@ -688,11 +708,39 @@ export function CoachesManager() {
                 </div>
 
                 <div>
-                  <div className="flex items-center mb-4">
-                    <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#79e58f' }} />
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">Session Records</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center">
+                      <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#79e58f' }} />
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900">Session Records</h3>
+                    </div>
+                    {filteredSessionRecords.length > 0 && (
+                      <Button
+                        onClick={() => {
+                          const headers = ['Date', 'Time', 'Branch', 'Package Type', 'Students'];
+                          exportToCSV(
+                            filteredSessionRecords,
+                            `${selectedCoach?.name || 'coach'}_sessions`,
+                            headers,
+                            (record) => [
+                              record.training_sessions ? format(new Date(record.training_sessions.date), 'yyyy-MM-dd') : '',
+                              record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : '',
+                              record.training_sessions?.branches?.name || '',
+                              record.training_sessions?.package_type || '',
+                              record.training_sessions?.session_participants?.map(p => p.students.name).join(", ") || ''
+                            ]
+                          );
+                          toast.success('Session records exported to Excel successfully');
+                        }}
+                        className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm transition-all duration-300"
+                      >
+                        <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                        Export Excel
+                      </Button>
+                    )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  
+                  {/* Filters */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                     <div className="space-y-2 flex flex-col min-w-0">
                       <Label htmlFor="filter-records-branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
                         <MapPin className="w-4 h-4 mr-2 text-accent" style={{ color: '#79e58f' }} />
@@ -705,7 +753,7 @@ export function CoachesManager() {
                         <SelectTrigger className="border-2 focus:border-accent rounded-lg py-2 text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                           <SelectValue placeholder="Select Branch" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-white z-50">
                           <SelectItem value="All" className="text-xs sm:text-sm">All Branches</SelectItem>
                           {branches?.map((branch) => (
                             <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
@@ -727,7 +775,7 @@ export function CoachesManager() {
                         <SelectTrigger className="border-2 focus:border-accent rounded-lg py-2 text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
                           <SelectValue placeholder="Select Package Type" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-white z-50">
                           <SelectItem value="All" className="text-xs sm:text-sm">All Packages</SelectItem>
                           {packages?.map((pkg) => (
                             <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
@@ -737,10 +785,40 @@ export function CoachesManager() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2 flex flex-col min-w-0">
+                      <Label htmlFor="filter-start-date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                        <Calendar className="w-4 h-4 mr-2 text-accent" style={{ color: '#79e58f' }} />
+                        Start Date
+                      </Label>
+                      <Input
+                        id="filter-start-date"
+                        type="date"
+                        value={recordsStartDate}
+                        onChange={(e) => setRecordsStartDate(e.target.value)}
+                        className="border-2 focus:border-accent rounded-lg text-xs sm:text-sm"
+                        style={{ borderColor: '#79e58f' }}
+                      />
+                    </div>
+                    <div className="space-y-2 flex flex-col min-w-0">
+                      <Label htmlFor="filter-end-date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                        <Calendar className="w-4 h-4 mr-2 text-accent" style={{ color: '#79e58f' }} />
+                        End Date
+                      </Label>
+                      <Input
+                        id="filter-end-date"
+                        type="date"
+                        value={recordsEndDate}
+                        onChange={(e) => setRecordsEndDate(e.target.value)}
+                        className="border-2 focus:border-accent rounded-lg text-xs sm:text-sm"
+                        style={{ borderColor: '#79e58f' }}
+                      />
+                    </div>
                   </div>
+                  
                   <p className="text-xs sm:text-sm text-gray-600 mb-4">
                     Showing {filteredSessionRecords.length} session{filteredSessionRecords.length === 1 ? '' : 's'}
                   </p>
+                  
                   {recordsLoading ? (
                     <div className="text-center py-12 sm:py-16">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#79e58f' }}></div>
@@ -752,50 +830,103 @@ export function CoachesManager() {
                     <div className="text-center py-12 sm:py-16">
                       <Calendar className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
                       <p className="text-base sm:text-lg text-gray-600 mb-2">
-                        {recordsBranchFilter !== "All" || recordsPackageTypeFilter !== "All" ? 
+                        {recordsBranchFilter !== "All" || recordsPackageTypeFilter !== "All" || recordsStartDate || recordsEndDate ? 
                           "No sessions found with the selected filters." : 
                           "No session records found for this coach."}
                       </p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-2 border-[#242833] rounded-xl min-w-[600px]">
-                        <thead className="bg-[#242833] text-[#efeff1]">
-                          <tr>
-                            <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Calendar className="w-4 h-4 inline mr-2" />Date</th>
-                            <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Clock className="w-4 h-4 inline mr-2" />Time</th>
-                            <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><MapPin className="w-4 h-4 inline mr-2" />Branch</th>
-                            <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Users className="w-4 h-4 inline mr-2" />Package Type</th>
-                            <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><User className="w-4 h-4 inline mr-2" />Students</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {paginatedSessionRecords.map((record, index) => (
-                            <tr
-                              key={record.training_sessions?.id}
-                              className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                            >
-                              <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
-                              </td>
-                              <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
-                              </td>
-                              <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                {record.training_sessions?.branches?.name || 'N/A'}
-                              </td>
-                              <td className="py-3 px-4 text-xs sm:text-sm min-w-0 truncate">
-                                <span className={`px-2 py-1 rounded-full font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
+                    <>
+                      {/* Mobile Cards View */}
+                      <div className="block md:hidden space-y-3">
+                        {paginatedSessionRecords.map((record) => (
+                          <Card
+                            key={record.training_sessions?.id || record.id}
+                            className="border-2 rounded-xl overflow-hidden"
+                            style={{ borderColor: '#79e58f' }}
+                          >
+                            <CardContent className="p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <Calendar className="w-4 h-4 text-gray-500" />
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
+                                  </span>
+                                </div>
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
                                   {record.training_sessions?.package_type || 'N/A'}
                                 </span>
-                              </td>
-                              <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                {record.training_sessions?.session_participants?.map(participant => participant.students.name).join(", ") || "No students"}
-                              </td>
+                              </div>
+                              
+                              <div className="flex items-center space-x-2 text-gray-600">
+                                <Clock className="w-4 h-4" />
+                                <span className="text-xs">
+                                  {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center space-x-2 text-gray-600">
+                                <MapPin className="w-4 h-4" />
+                                <span className="text-xs">{record.training_sessions?.branches?.name || 'N/A'}</span>
+                              </div>
+                              
+                              <div className="border-t border-gray-200 pt-2">
+                                <div className="flex items-start space-x-2">
+                                  <User className="w-4 h-4 text-gray-500 mt-0.5" />
+                                  <div className="text-xs text-gray-600">
+                                    <span className="font-medium">Students:</span>
+                                    <p className="mt-1">
+                                      {record.training_sessions?.session_participants?.map(p => p.students.name).join(", ") || "No students"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+
+                      {/* Desktop Table View */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full border-2 border-[#242833] rounded-xl">
+                          <thead className="bg-[#242833] text-[#efeff1]">
+                            <tr>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Calendar className="w-4 h-4 inline mr-2" />Date</th>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Clock className="w-4 h-4 inline mr-2" />Time</th>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><MapPin className="w-4 h-4 inline mr-2" />Branch</th>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Users className="w-4 h-4 inline mr-2" />Package Type</th>
+                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><User className="w-4 h-4 inline mr-2" />Students</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {paginatedSessionRecords.map((record, index) => (
+                              <tr
+                                key={record.training_sessions?.id}
+                                className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                              >
+                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                  {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
+                                </td>
+                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                  {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
+                                </td>
+                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                  {record.training_sessions?.branches?.name || 'N/A'}
+                                </td>
+                                <td className="py-3 px-4 text-xs sm:text-sm min-w-0 truncate">
+                                  <span className={`px-2 py-1 rounded-full font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
+                                    {record.training_sessions?.package_type || 'N/A'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
+                                  {record.training_sessions?.session_participants?.map(participant => participant.students.name).join(", ") || "No students"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      
                       {recordsTotalPages > 1 && (
                         <div className="flex justify-center items-center mt-6 space-x-2 flex-wrap gap-2">
                           <Button
@@ -837,7 +968,7 @@ export function CoachesManager() {
                           </Button>
                         </div>
                       )}
-                    </div>
+                    </>
                   )}
                 </div>
                 <div className="flex justify-end">
