@@ -922,10 +922,10 @@ export default function StudentPaymentPage() {
                   ...paymentFormData,
                   student_id: student.id,
                 });
-                  }} className="space-y-4 mb-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  }} className="space-y-5 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="payment_type" className="text-muted-foreground font-medium text-xs sm:text-sm truncate">
+                        <Label htmlFor="payment_type" className="text-muted-foreground font-medium text-xs sm:text-sm">
                           Payment For
                         </Label>
                         <Select
@@ -938,20 +938,20 @@ export default function StudentPaymentPage() {
                             payment_amount: 0
                           }))}
                         >
-                          <SelectTrigger className="border-2 border-accent rounded-lg text-xs sm:text-sm">
+                          <SelectTrigger className="h-10 border-2 border-accent/60 rounded-lg text-xs sm:text-sm hover:border-accent transition-colors shadow-sm bg-background">
                             <SelectValue placeholder="Select payment type" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="balance">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 py-1">
                                 <Wallet className="w-4 h-4 text-green-600" />
-                                <span>Training Balance</span>
+                                <span className="font-medium">Training Balance</span>
                               </div>
                             </SelectItem>
                             <SelectItem value="extra_charge">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 py-1">
                                 <FileText className="w-4 h-4 text-amber-600" />
-                                <span>Specific Extra Charge</span>
+                                <span className="font-medium">Specific Extra Charge</span>
                               </div>
                             </SelectItem>
                           </SelectContent>
@@ -962,7 +962,7 @@ export default function StudentPaymentPage() {
                       {paymentFormData.payment_type === "extra_charge" ? (
                         <>
                           <div className="flex flex-col space-y-2 min-w-0">
-                            <Label className="text-muted-foreground font-medium text-xs sm:text-sm truncate">
+                            <Label className="text-muted-foreground font-medium text-xs sm:text-sm">
                               Select Charge to Pay
                             </Label>
                             {studentCharges && studentCharges.filter(c => !c.is_paid).length > 0 ? (
@@ -978,7 +978,7 @@ export default function StudentPaymentPage() {
                                   }));
                                 }}
                               >
-                                <SelectTrigger className="border-2 border-amber-400 rounded-lg text-xs sm:text-sm">
+                                <SelectTrigger className="h-10 border-2 border-amber-400/60 rounded-lg text-xs sm:text-sm hover:border-amber-400 transition-colors shadow-sm bg-background">
                                   <SelectValue placeholder="Select a charge" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1029,19 +1029,23 @@ export default function StudentPaymentPage() {
                           {/* Payment Amount for Extra Charge */}
                           {paymentFormData.selected_charge_id && (
                             <div className="flex flex-col space-y-2 min-w-0">
-                              <Label htmlFor="payment_amount" className="text-muted-foreground font-medium text-xs sm:text-sm truncate">
+                              <Label htmlFor="payment_amount" className="text-muted-foreground font-medium text-xs sm:text-sm">
                                 Payment Amount
                               </Label>
-                              <Input
-                                id="payment_amount"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={paymentFormData.payment_amount}
-                                onChange={(e) => setPaymentFormData((prev) => ({ ...prev, payment_amount: parseFloat(e.target.value) || 0 }))}
-                                required
-                                className="border-2 border-amber-400 rounded-lg focus:border-amber-500 focus:ring-amber-500/20 w-full text-xs sm:text-sm"
-                              />
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs sm:text-sm text-muted-foreground font-medium">₱</span>
+                                <Input
+                                  id="payment_amount"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={paymentFormData.payment_amount}
+                                  onChange={(e) => setPaymentFormData((prev) => ({ ...prev, payment_amount: parseFloat(e.target.value) || 0 }))}
+                                  required
+                                  placeholder="0.00"
+                                  className="h-10 pl-7 pr-3 w-full border-2 border-amber-400/60 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 text-xs sm:text-sm shadow-sm transition-all"
+                                />
+                              </div>
                             </div>
                           )}
                         </>
@@ -1049,7 +1053,7 @@ export default function StudentPaymentPage() {
                         <>
                           {/* Package Selection for Balance Payment */}
                           <div className="flex flex-col space-y-2 min-w-0">
-                            <Label className="text-muted-foreground font-medium text-xs sm:text-sm truncate">
+                            <Label className="text-muted-foreground font-medium text-xs sm:text-sm">
                               Package
                             </Label>
                             {allPackages && allPackages.length > 0 ? (
@@ -1060,7 +1064,7 @@ export default function StudentPaymentPage() {
                                   selected_package_history_id: value
                                 }))}
                               >
-                                <SelectTrigger className="border-2 border-accent rounded-lg text-xs sm:text-sm">
+                                <SelectTrigger className="h-10 border-2 border-accent/60 rounded-lg text-xs sm:text-sm hover:border-accent transition-colors shadow-sm bg-background">
                                   <SelectValue placeholder="Select package" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1105,34 +1109,40 @@ export default function StudentPaymentPage() {
                               </div>
                             )}
                           </div>
-                          <div className="flex flex-col space-y-2 min-w-0">
-                            <Label htmlFor="payment_amount" className="text-muted-foreground font-medium text-xs sm:text-sm truncate">
-                              Payment Amount
-                            </Label>
-                            <Input
-                              id="payment_amount"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={paymentFormData.payment_amount}
-                              onChange={(e) => setPaymentFormData((prev) => ({ ...prev, payment_amount: parseFloat(e.target.value) || 0 }))}
-                              required
-                              className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
-                            />
-                          </div>
                         </>
                       )}
+                      
+                      {/* Payment Amount */}
+                      <div className="flex flex-col space-y-2 min-w-0">
+                        <Label htmlFor="payment_amount" className="text-muted-foreground font-medium text-xs sm:text-sm">
+                          Payment Amount
+                        </Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs sm:text-sm text-muted-foreground font-medium">₱</span>
+                          <Input
+                            id="payment_amount"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={paymentFormData.payment_amount}
+                            onChange={(e) => setPaymentFormData((prev) => ({ ...prev, payment_amount: parseFloat(e.target.value) || 0 }))}
+                            required
+                            placeholder="0.00"
+                            className="h-10 pl-7 pr-3 w-full border-2 border-accent/60 rounded-lg focus:border-accent focus:ring-2 focus:ring-accent/20 text-xs sm:text-sm shadow-sm transition-all"
+                          />
+                        </div>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="flex flex-col space-y-2 min-w-0">
-                        <Label className="text-muted-foreground font-medium text-xs sm:text-sm truncate">Payment Date</Label>
+                        <Label className="text-muted-foreground font-medium text-xs sm:text-sm">Payment Date</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
                           className={cn(
-                                "w-full justify-start text-left font-normal border-2 border-accent rounded-lg text-xs sm:text-sm",
+                                "h-10 w-full justify-start text-left font-normal border-2 border-accent/60 rounded-lg text-xs sm:text-sm hover:border-accent transition-colors shadow-sm",
                             !paymentFormData.payment_date && "text-muted-foreground"
                           )}
                         >
@@ -1152,7 +1162,7 @@ export default function StudentPaymentPage() {
                     </Popover>
                   </div>
                   <div className="flex flex-col space-y-2 min-w-0">
-                        <Label htmlFor="payment_notes" className="text-muted-foreground font-medium text-xs sm:text-sm truncate">
+                        <Label htmlFor="payment_notes" className="text-muted-foreground font-medium text-xs sm:text-sm">
                       Notes (Optional)
                     </Label>
                     <Input
@@ -1160,7 +1170,7 @@ export default function StudentPaymentPage() {
                       value={paymentFormData.notes}
                       onChange={(e) => setPaymentFormData((prev) => ({ ...prev, notes: e.target.value }))}
                           placeholder="Additional notes..."
-                          className="border-2 border-accent rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm"
+                          className="h-10 border-2 border-accent/60 rounded-lg focus:border-accent focus:ring-2 focus:ring-accent/20 w-full text-xs sm:text-sm shadow-sm transition-all"
                     />
                   </div>
                 </div>
@@ -1212,6 +1222,14 @@ export default function StudentPaymentPage() {
                                     <span className="text-xs text-gray-500">Enrolled:</span>
                                     <span className="text-xs text-gray-600">
                                       {format(new Date(selectedPkg.enrollment_date), 'MMM dd, yyyy')}
+                                    </span>
+                                  </div>
+                                )}
+                                {selectedPkg.expiration_date && (
+                                  <div className="flex items-center justify-between mt-1">
+                                    <span className="text-xs text-gray-500">Expires:</span>
+                                    <span className="text-xs text-gray-600">
+                                      {format(new Date(selectedPkg.expiration_date), 'MMM dd, yyyy')}
                                     </span>
                                   </div>
                                 )}
