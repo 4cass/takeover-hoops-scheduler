@@ -131,6 +131,8 @@ export default function StudentPaymentPage() {
   const [selectedChargeForView, setSelectedChargeForView] = useState<StudentCharge | null>(null);
   const [isDeleteChargeOpen, setIsDeleteChargeOpen] = useState(false);
   const [chargeToDelete, setChargeToDelete] = useState<StudentCharge | null>(null);
+  const [paymentHistoryFilter, setPaymentHistoryFilter] = useState<string>("all");
+  const [isFullHistoryReceiptOpen, setIsFullHistoryReceiptOpen] = useState(false);
 
   const { data: student, isLoading: studentLoading } = useQuery({
     queryKey: ["student", studentId],
@@ -1789,13 +1791,47 @@ export default function StudentPaymentPage() {
         {/* Payment History Section - At Bottom */}
         <Card className="border-2 border-border bg-card shadow-xl">
           <CardHeader className="border-b border-border bg-[#242833] p-3 sm:p-4 md:p-5">
-            <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
-              <Receipt className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" />
-              Payment History
-            </CardTitle>
-            <CardDescription className="text-gray-400 text-xs sm:text-sm">
-              All recorded payments for this student
-            </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base sm:text-lg md:text-xl font-bold text-[#efeff1] flex items-center">
+                  <Receipt className="h-4 sm:h-5 w-4 sm:w-5 mr-2 text-accent" />
+                  Payment History
+                </CardTitle>
+                <CardDescription className="text-gray-400 text-xs sm:text-sm">
+                  All recorded payments for this student
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={paymentHistoryFilter}
+                  onValueChange={setPaymentHistoryFilter}
+                >
+                  <SelectTrigger className="w-[180px] bg-background text-foreground border-border h-9 text-xs sm:text-sm">
+                    <SelectValue placeholder="Filter by package" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    <SelectItem value="all">All Packages</SelectItem>
+                    {allPackages.map((pkg, idx) => {
+                      const cycleNumber = currentCycleNumber - idx;
+                      const isCurrent = pkg.id === 'current' || (idx === 0 && currentPackageFromStudent);
+                      return (
+                        <SelectItem key={pkg.id} value={pkg.id}>
+                          {pkg.package_type || 'Package'} {cycleNumber} {isCurrent ? '(Current)' : ''}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  onClick={() => setIsFullHistoryReceiptOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white h-9 text-xs sm:text-sm"
+                >
+                  <Printer className="w-4 h-4 mr-1.5" />
+                  Print All
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-3 sm:p-4 md:p-5">
             {paymentsLoading ? (
@@ -1878,8 +1914,29 @@ export default function StudentPaymentPage() {
                 return dateB - dateA;
               });
 
-              if (allPayments.length === 0) {
-                return <p className="text-muted-foreground text-xs sm:text-sm text-center py-8">No payment records found.</p>;
+              // Apply package filter
+              const filteredPayments = paymentHistoryFilter === 'all' 
+                ? allPayments 
+                : allPayments.filter(payment => {
+                    // For 'current' filter, match package_history_id === 'current' or null (current package payments)
+                    if (paymentHistoryFilter === 'current') {
+                      return payment.package_history_id === 'current' || payment.package_history_id === null;
+                    }
+                    // For historical packages, match exact package_history_id
+                    // Also check for extra charge payments linked to that package
+                    if (payment.package_history_id === paymentHistoryFilter) {
+                      return true;
+                    }
+                    // For extra charge payments, check the charge's package_history_id
+                    if (payment.payment_for === 'extra_charge' && payment.charge_id) {
+                      const charge = studentCharges?.find(c => c.id === payment.charge_id);
+                      return charge?.package_history_id === paymentHistoryFilter;
+                    }
+                    return false;
+                  });
+
+              if (filteredPayments.length === 0) {
+                return <p className="text-muted-foreground text-xs sm:text-sm text-center py-8">No payment records found{paymentHistoryFilter !== 'all' ? ' for this package' : ''}.</p>;
               }
 
               // Get charge description helper
@@ -1906,7 +1963,7 @@ export default function StudentPaymentPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allPayments.map((payment, index) => (
+                    {filteredPayments.map((payment, index) => (
                       <tr
                         key={payment.id}
                             className={cn(
@@ -2126,7 +2183,7 @@ export default function StudentPaymentPage() {
 
                   {/* Mobile Card View */}
                   <div className="md:hidden space-y-3">
-                    {allPayments.map((payment) => (
+                    {filteredPayments.map((payment) => (
                       <div
                         key={payment.id}
                         className={cn(
@@ -2359,10 +2416,12 @@ export default function StudentPaymentPage() {
 
                   {/* Summary */}
                   <div className="mt-4 p-4 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span className="text-green-700 dark:text-green-400 font-medium text-sm">Total Payments:</span>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                      <span className="text-green-700 dark:text-green-400 font-medium text-sm">
+                        Total Payments{paymentHistoryFilter !== 'all' ? ' (Filtered)' : ''}:
+                      </span>
                       <span className="text-green-700 dark:text-green-400 font-bold text-lg">
-                        ₱{allPayments.reduce((sum, p) => sum + p.payment_amount, 0).toFixed(2)}
+                        ₱{filteredPayments.reduce((sum, p) => sum + p.payment_amount, 0).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -2699,6 +2758,81 @@ export default function StudentPaymentPage() {
               setIsReceiptOpen(false);
               setSelectedPaymentForReceipt(null);
             }}
+          />
+        )}
+
+        {/* Full History Receipt Dialog (Print All) */}
+        {student && studentPayments && (
+          <PaymentReceipt
+            student={student}
+            payment={null}
+            allPayments={(() => {
+              // Build all payments including downpayments for print all
+              const allPaymentsForPrint: Array<{
+                id: string;
+                payment_amount: number;
+                payment_date: string;
+                notes: string | null;
+                isDownpayment?: boolean;
+                package_history_id?: string | null;
+              }> = [];
+
+              // Add downpayment from current package
+              if (student.downpayment && student.downpayment > 0) {
+                const dpDate = student.enrollment_date || student.created_at || new Date().toISOString();
+                allPaymentsForPrint.push({
+                  id: 'downpayment-current',
+                  payment_amount: student.downpayment,
+                  payment_date: dpDate,
+                  notes: 'Initial Downpayment',
+                  isDownpayment: true,
+                  package_history_id: 'current',
+                });
+              }
+
+              // Add downpayments from historical packages
+              if (packageHistory && packageHistory.length > 0) {
+                packageHistory.forEach((pkg) => {
+                  if (pkg.downpayment && pkg.downpayment > 0) {
+                    const dpDate = pkg.enrollment_date || pkg.captured_at || new Date().toISOString();
+                    allPaymentsForPrint.push({
+                      id: `downpayment-${pkg.id}`,
+                      payment_amount: pkg.downpayment,
+                      payment_date: dpDate,
+                      notes: `Downpayment - ${pkg.package_type || 'Package'}`,
+                      isDownpayment: true,
+                      package_history_id: pkg.id,
+                    });
+                  }
+                });
+              }
+
+              // Add regular payments
+              studentPayments.forEach(p => {
+                allPaymentsForPrint.push({
+                  id: p.id,
+                  payment_amount: p.payment_amount,
+                  payment_date: p.payment_date,
+                  notes: p.notes,
+                  isDownpayment: false,
+                  package_history_id: p.package_history_id,
+                });
+              });
+
+              // Apply filter if not "all"
+              const filtered = paymentHistoryFilter === 'all' 
+                ? allPaymentsForPrint
+                : allPaymentsForPrint.filter(payment => {
+                    if (paymentHistoryFilter === 'current') {
+                      return payment.package_history_id === 'current' || payment.package_history_id === null;
+                    }
+                    return payment.package_history_id === paymentHistoryFilter;
+                  });
+
+              return filtered;
+            })()}
+            isOpen={isFullHistoryReceiptOpen}
+            onClose={() => setIsFullHistoryReceiptOpen(false)}
           />
         )}
       </div>
