@@ -64,9 +64,9 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
               className="w-full h-full object-contain"
             />
           </div>
-          <div className="flex flex-col min-w-0 flex-1">
-            <h2 className="text-sm sm:text-base md:text-xl font-bold tracking-tight text-white break-words">Takeover Basketball</h2>
-            <p className="text-xs sm:text-sm text-white/80 break-words">Management System</p>
+          <div className="flex flex-col min-w-0">
+            <h2 className="text-sm sm:text-base md:text-xl font-bold tracking-tight text-white truncate">Takeover Basketball</h2>
+            <p className="text-xs sm:text-sm text-white/80 truncate">Management System</p>
           </div>
         </div>
       </SidebarHeader>
@@ -106,8 +106,8 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
                       }
                     }}
                   >
-                    <item.icon className="w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 shrink-0" />
-                    <span className="text-xs sm:text-sm break-words">{item.title}</span>
+                    <item.icon className="w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3" />
+                    <span className="text-xs sm:text-sm">{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -121,7 +121,7 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
           {user && (
             <div className="px-2 py-1">
               <p className="text-xs text-white/60 uppercase tracking-wider">Logged in as</p>
-              <p className="text-xs sm:text-sm text-white font-medium break-words">{user.email}</p>
+              <p className="text-xs sm:text-sm text-white font-medium truncate">{user.email}</p>
               <p className="text-xs capitalize" style={{ color: '#79e58f' }}>{role}</p>
             </div>
           )}
@@ -129,8 +129,8 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
             onClick={handleLogout}
             className="w-full justify-start py-2 px-3 rounded-lg transition-all duration-200 text-white/70 hover:bg-red-600 hover:text-white"
           >
-            <LogOut className="w-4 h-4 mr-2 shrink-0" />
-            <span className="text-xs sm:text-sm break-words">Logout</span>
+            <LogOut className="w-4 h-4 mr-2" />
+            <span className="text-xs sm:text-sm">Logout</span>
           </SidebarMenuButton>
         </div>
       </SidebarFooter>

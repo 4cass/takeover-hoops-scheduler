@@ -356,7 +356,6 @@ export type Database = {
           id: string
           is_paid: boolean | null
           notes: string | null
-          package_history_id: string | null
           paid_amount: number | null
           paid_at: string | null
           student_id: string
@@ -371,7 +370,6 @@ export type Database = {
           id?: string
           is_paid?: boolean | null
           notes?: string | null
-          package_history_id?: string | null
           paid_amount?: number | null
           paid_at?: string | null
           student_id: string
@@ -386,20 +384,12 @@ export type Database = {
           id?: string
           is_paid?: boolean | null
           notes?: string | null
-          package_history_id?: string | null
           paid_amount?: number | null
           paid_at?: string | null
           student_id?: string
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "student_charges_package_history_id_fkey"
-            columns: ["package_history_id"]
-            isOneToOne: false
-            referencedRelation: "student_package_history"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "student_charges_student_id_fkey"
             columns: ["student_id"]
@@ -412,45 +402,36 @@ export type Database = {
       student_package_history: {
         Row: {
           captured_at: string
-          downpayment: number | null
           enrollment_date: string | null
           expiration_date: string | null
           id: string
           package_type: string | null
           reason: string | null
-          remaining_balance: number | null
           remaining_sessions: number | null
           sessions: number | null
           student_id: string | null
-          total_training_fee: number | null
         }
         Insert: {
           captured_at?: string
-          downpayment?: number | null
           enrollment_date?: string | null
           expiration_date?: string | null
           id?: string
           package_type?: string | null
           reason?: string | null
-          remaining_balance?: number | null
           remaining_sessions?: number | null
           sessions?: number | null
           student_id?: string | null
-          total_training_fee?: number | null
         }
         Update: {
           captured_at?: string
-          downpayment?: number | null
           enrollment_date?: string | null
           expiration_date?: string | null
           id?: string
           package_type?: string | null
           reason?: string | null
-          remaining_balance?: number | null
           remaining_sessions?: number | null
           sessions?: number | null
           student_id?: string | null
-          total_training_fee?: number | null
         }
         Relationships: [
           {
@@ -470,7 +451,6 @@ export type Database = {
           extra_charges: number | null
           id: string
           notes: string | null
-          package_history_id: string | null
           payment_amount: number
           payment_date: string
           payment_for: string | null
@@ -484,7 +464,6 @@ export type Database = {
           extra_charges?: number | null
           id?: string
           notes?: string | null
-          package_history_id?: string | null
           payment_amount: number
           payment_date?: string
           payment_for?: string | null
@@ -498,7 +477,6 @@ export type Database = {
           extra_charges?: number | null
           id?: string
           notes?: string | null
-          package_history_id?: string | null
           payment_amount?: number
           payment_date?: string
           payment_for?: string | null
@@ -511,13 +489,6 @@ export type Database = {
             columns: ["charge_id"]
             isOneToOne: false
             referencedRelation: "student_charges"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "student_payments_package_history_id_fkey"
-            columns: ["package_history_id"]
-            isOneToOne: false
-            referencedRelation: "student_package_history"
             referencedColumns: ["id"]
           },
           {
