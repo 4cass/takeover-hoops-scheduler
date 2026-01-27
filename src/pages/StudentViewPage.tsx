@@ -468,7 +468,7 @@ export default function StudentViewPage() {
     mutationFn: async (packageData: typeof newPackageFormData & { student_id: string }) => {
       const { data: currentStudent, error: currentStudentError } = await supabase
         .from("students")
-        .select("package_type, sessions, remaining_sessions, enrollment_date, expiration_date")
+        .select("package_type, sessions, remaining_sessions, enrollment_date, expiration_date, total_training_fee, downpayment, remaining_balance")
         .eq("id", packageData.student_id)
         .single();
 
@@ -502,7 +502,7 @@ export default function StudentViewPage() {
           endReason = "renewal - early";
         }
 
-        const { error: historyError } = await supabase
+        const { data: archivedPackage, error: historyError } = await supabase
           .from("student_package_history")
           .insert([
             {
@@ -513,8 +513,13 @@ export default function StudentViewPage() {
               enrollment_date: currentStudent?.enrollment_date ?? null,
               expiration_date: currentStudent?.expiration_date ?? null,
               reason: endReason,
+              total_training_fee: currentStudent?.total_training_fee ?? 0,
+              downpayment: currentStudent?.downpayment ?? 0,
+              remaining_balance: currentStudent?.remaining_balance ?? 0,
             },
-          ]);
+          ])
+          .select()
+          .single();
 
         if (historyError) {
           const historyStatus = (historyError as any)?.status || (historyError as any)?.statusCode;
@@ -540,9 +545,60 @@ export default function StudentViewPage() {
 
           throw new Error(historyMessage);
         }
+
+        // After archiving, update all payments with package_history_id = null to point to the archived package
+        // This ensures old payments stay linked to their original package even after it expires
+        if (archivedPackage && archivedPackage.id) {
+          const enrollmentDate = currentStudent?.enrollment_date ? new Date(currentStudent.enrollment_date) : null;
+          const expirationDate = currentStudent?.expiration_date ? new Date(currentStudent.expiration_date) : null;
+          
+          // Update payments that have null package_history_id and were made during this package's active period
+          // We use created_at to determine when payment was made (more reliable than payment_date for matching)
+          // Note: Using type assertion because package_history_id may not be in generated types yet
+          let paymentsUpdateQuery = supabase
+            .from("student_payments")
+            .update({ package_history_id: archivedPackage.id } as Record<string, any>)
+            .eq("student_id", packageData.student_id)
+            .is("package_history_id", null);
+          
+          // Only update payments made during the archived package's active period
+          if (enrollmentDate) {
+            paymentsUpdateQuery = paymentsUpdateQuery.gte("created_at", enrollmentDate.toISOString());
+          }
+          if (expirationDate) {
+            // Include payments up to expiration date (or slightly after to catch edge cases)
+            const expirationPlusOneDay = new Date(expirationDate);
+            expirationPlusOneDay.setDate(expirationPlusOneDay.getDate() + 1);
+            paymentsUpdateQuery = paymentsUpdateQuery.lte("created_at", expirationPlusOneDay.toISOString());
+          } else if (enrollmentDate) {
+            // If no expiration date, only update payments made after enrollment
+            // This prevents updating payments from before this package started
+            paymentsUpdateQuery = paymentsUpdateQuery.gte("created_at", enrollmentDate.toISOString());
+          }
+          
+          const { error: paymentsUpdateError } = await paymentsUpdateQuery;
+          if (paymentsUpdateError) {
+            console.error("Failed to update payments with archived package ID:", paymentsUpdateError);
+            // Don't throw - archiving succeeded, payment update is best effort
+          }
+          
+          // Also update all charges with package_history_id = null to point to the archived package
+          // This ensures old charges stay linked to their original package even after it expires
+          // Note: Not using date-based filtering as requested by user
+          const { error: chargesUpdateError } = await supabase
+            .from("student_charges")
+            .update({ package_history_id: archivedPackage.id } as Record<string, any>)
+            .eq("student_id", packageData.student_id)
+            .is("package_history_id", null);
+          
+          if (chargesUpdateError) {
+            console.error("Failed to update charges with archived package ID:", chargesUpdateError);
+            // Don't throw - archiving succeeded, charge update is best effort
+          }
+        }
       }
 
-      // When creating a new package, remaining_sessions equals total_sessions (no sessions used yet)
+      // When creating a new package: remaining_sessions = total_sessions, financials start at 0
       const { data, error } = await supabase
         .from("students")
         .update({
@@ -551,6 +607,9 @@ export default function StudentViewPage() {
           remaining_sessions: packageData.sessions, // New package: all sessions are remaining
           enrollment_date: packageData.enrollment_date ? format(packageData.enrollment_date, 'yyyy-MM-dd') : null,
           expiration_date: packageData.expiration_date ? format(packageData.expiration_date, 'yyyy-MM-dd') : null,
+          total_training_fee: 0,
+          downpayment: 0,
+          remaining_balance: 0,
         })
         .eq("id", packageData.student_id)
         .select()

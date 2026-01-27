@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -86,6 +86,7 @@ interface StudentCharge {
   is_paid: boolean;
   paid_at: string | null;
   paid_amount: number;
+  package_history_id: string | null;
 }
 
 export default function StudentPaymentPage() {
@@ -111,6 +112,8 @@ export default function StudentPaymentPage() {
   });
 
   const [selectedPackageForPaymentInfo, setSelectedPackageForPaymentInfo] = useState<string>("");
+  const latestSelectedPackageRef = useRef<string>(selectedPackageForPaymentInfo);
+  latestSelectedPackageRef.current = selectedPackageForPaymentInfo;
   const [paymentInfoFormData, setPaymentInfoFormData] = useState({
     total_training_fee: 0,
     downpayment: 0,
@@ -222,37 +225,38 @@ export default function StudentPaymentPage() {
       return null;
     }
     
-    // If package_history_id is null, check if charge was created when current package was active
-    // This handles charges created with 'current' that were saved as null
-    if (!pkgHistoryId && !pkgHistory && chargeDate && student && student.package_type) {
-      // Check if the charge date is within the current package's timeframe
-      const chargeDateObj = new Date(chargeDate);
-      const enrollmentDate = student.enrollment_date ? new Date(student.enrollment_date) : null;
-      const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
-      
-      // If charge date is after enrollment and before expiration (or no expiration), it's likely current package
-      if (enrollmentDate && chargeDateObj >= enrollmentDate) {
-        if (!expirationDate || chargeDateObj <= expirationDate) {
-          const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
-          return `${student.package_type} ${cycleNum}`;
-        }
+    // If package_history_id is null, it means it was created for 'current' package
+    // Show current package (no date matching needed)
+    if (!pkgHistoryId && !pkgHistory) {
+      if (student && student.package_type) {
+        const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
+        return `${student.package_type} ${cycleNum}`;
       }
+      return null;
     }
     
     // If we have the package history object directly, use it
     if (pkgHistory && pkgHistory.id) {
-      const pkgIndex = packageHistory?.findIndex(p => p.id === pkgHistory.id) ?? -1;
-      const cycleNumber = pkgIndex >= 0 ? packageHistory!.length - pkgIndex : (allPackages.findIndex(p => p.id === pkgHistory.id) >= 0 ? currentCycleNumber - allPackages.findIndex(p => p.id === pkgHistory.id) : 0);
+      const pkgIndex = allPackages.findIndex(p => p.id === pkgHistory.id);
+      const cycleNumber = pkgIndex >= 0 ? currentCycleNumber - pkgIndex : (packageHistory?.findIndex(p => p.id === pkgHistory.id) ?? -1) >= 0 ? (packageHistory!.length - packageHistory!.findIndex(p => p.id === pkgHistory.id)) : 0;
       return `${pkgHistory.package_type || 'Package'} ${cycleNumber}`;
     }
     
-    // If we only have the ID, look it up
+    // If we only have the ID, look it up in allPackages (includes current and history, including expired)
     if (pkgHistoryId) {
-      const pkg = packageHistory?.find(p => p.id === pkgHistoryId);
+      // First try allPackages (includes current package and all history, including expired)
+      const pkg = allPackages.find(p => p.id === pkgHistoryId);
       if (pkg) {
-        const pkgIndex = packageHistory.findIndex(p => p.id === pkg.id);
-        const cycleNumber = packageHistory.length - pkgIndex;
+        const pkgIndex = allPackages.findIndex(p => p.id === pkg.id);
+        const cycleNumber = currentCycleNumber - pkgIndex;
         return `${pkg.package_type || 'Package'} ${cycleNumber}`;
+      }
+      // Fallback to packageHistory if not found in allPackages
+      const pkgFromHistory = packageHistory?.find(p => p.id === pkgHistoryId);
+      if (pkgFromHistory) {
+        const pkgIndex = packageHistory.findIndex(p => p.id === pkgFromHistory.id);
+        const cycleNumber = packageHistory.length - pkgIndex;
+        return `${pkgFromHistory.package_type || 'Package'} ${cycleNumber}`;
       }
     }
     
@@ -269,75 +273,87 @@ export default function StudentPaymentPage() {
   }, [currentPackageFromStudent, packageHistory]);
 
   // Calculate remaining balance for selected package
+  // Current package: use student only (0 after new package; set via create-new-package).
+  // Old/expired packages: use packageHistory only — never student, never zero out; keep stored values for tracking.
   useEffect(() => {
-    if (student && selectedPackageForPaymentInfo) {
-      const calculateRemainingBalance = async () => {
-        let totalFee = 0;
-        let downpayment = 0;
-        
-        // Get financials from selected package
-        if (selectedPackageForPaymentInfo === 'current') {
-          totalFee = student.total_training_fee || 0;
-          downpayment = student.downpayment || 0;
+    if (!student || !selectedPackageForPaymentInfo) return;
+    const selectedId = selectedPackageForPaymentInfo;
+
+    const calculateRemainingBalance = async () => {
+      let totalFee = 0;
+      let downpayment = 0;
+      let remainingBalance = 0;
+
+      if (selectedId === 'current') {
+        // Use the database's remaining_balance directly (which is updated when payments are made)
+        totalFee = student.total_training_fee ?? 0;
+        downpayment = student.downpayment ?? 0;
+        remainingBalance = student.remaining_balance ?? 0;
+      } else {
+        const historyPkg = packageHistory?.find(p => p.id === selectedId);
+        if (historyPkg) {
+          // Use the database's remaining_balance directly (which is updated when payments are made)
+          totalFee = historyPkg.total_training_fee ?? 0;
+          downpayment = historyPkg.downpayment ?? 0;
+          remainingBalance = historyPkg.remaining_balance ?? 0;
         } else {
-          const selectedPkg = packageHistory?.find(p => p.id === selectedPackageForPaymentInfo);
-          if (selectedPkg) {
-            totalFee = selectedPkg.total_training_fee || 0;
-            downpayment = selectedPkg.downpayment || 0;
+          // Fallback: calculate from payments and charges if package not found
+          let paymentsQuery = supabase
+            .from("student_payments")
+            .select("payment_amount, payment_for, charge_id, package_history_id")
+            .eq("student_id", student.id);
+          if (selectedId === 'current') {
+            paymentsQuery = paymentsQuery.or('package_history_id.is.null,package_history_id.eq.null');
+          } else {
+            paymentsQuery = paymentsQuery.eq("package_history_id", selectedId);
           }
+          const { data: existingPayments } = await paymentsQuery;
+
+          let chargesQuery = supabase
+            .from("student_charges")
+            .select("amount, paid_amount, package_history_id")
+            .eq("student_id", student.id);
+          if (selectedId === 'current') {
+            chargesQuery = chargesQuery.is("package_history_id", null);
+            // Only include charges created on or after the current package's enrollment date
+            // This prevents old charges from expired packages from being included
+            if (student.enrollment_date) {
+              chargesQuery = chargesQuery.gte("created_at", student.enrollment_date);
+            }
+          } else {
+            chargesQuery = chargesQuery.eq("package_history_id", selectedId);
+          }
+          const { data: existingCharges } = await chargesQuery;
+
+          const balancePayments = existingPayments?.filter(p =>
+            p.payment_for === 'balance' &&
+            (p.package_history_id === selectedId || (selectedId === 'current' && !p.package_history_id))
+          ).reduce((sum, p) => sum + (p.payment_amount || 0), 0) || 0;
+
+          // Calculate unpaid charges (charges that haven't been fully paid)
+          // Only unpaid portion of charges should increase remaining balance
+          const unpaidCharges = existingCharges?.filter(c =>
+            c.package_history_id === selectedId || (selectedId === 'current' && !c.package_history_id)
+          ).reduce((sum, c) => {
+            const chargeAmount = c.amount || 0;
+            const paidAmount = c.paid_amount || 0;
+            const unpaidPortion = Math.max(0, chargeAmount - paidAmount);
+            return sum + unpaidPortion;
+          }, 0) || 0;
+
+          remainingBalance = Math.max(0, totalFee - downpayment - balancePayments + unpaidCharges);
         }
-        
-        // Get payments for this specific package
-        let paymentsQuery = supabase
-          .from("student_payments")
-          .select("payment_amount, payment_for, charge_id, package_history_id")
-          .eq("student_id", student.id);
-        
-        if (selectedPackageForPaymentInfo === 'current') {
-          paymentsQuery = paymentsQuery.or('package_history_id.is.null,package_history_id.eq.null');
-        } else {
-          paymentsQuery = paymentsQuery.eq("package_history_id", selectedPackageForPaymentInfo);
-        }
-        
-        const { data: existingPayments } = await paymentsQuery;
-        
-        // Get charges for this specific package
-        let chargesQuery = supabase
-          .from("student_charges")
-          .select("amount, package_history_id")
-          .eq("student_id", student.id);
-        
-        if (selectedPackageForPaymentInfo === 'current') {
-          chargesQuery = chargesQuery.is("package_history_id", null);
-        } else {
-          chargesQuery = chargesQuery.eq("package_history_id", selectedPackageForPaymentInfo);
-        }
-        
-        const { data: existingCharges } = await chargesQuery;
-        
-        // Calculate payments for balance (not extra charges) for this package
-        const balancePayments = existingPayments?.filter(p => 
-          p.payment_for === 'balance' && 
-          (p.package_history_id === selectedPackageForPaymentInfo || 
-           (selectedPackageForPaymentInfo === 'current' && !p.package_history_id))
-        ).reduce((sum, p) => sum + (p.payment_amount || 0), 0) || 0;
-        
-        const totalCharges = existingCharges?.filter(c => 
-          c.package_history_id === selectedPackageForPaymentInfo || 
-          (selectedPackageForPaymentInfo === 'current' && !c.package_history_id)
-        ).reduce((sum, c) => sum + (c.amount || 0), 0) || 0;
-        
-        const remainingBalance = Math.max(0, totalFee - downpayment - balancePayments + totalCharges);
-        
-        setPaymentInfoFormData({
-          total_training_fee: totalFee,
-          downpayment: downpayment,
-          remaining_balance: remainingBalance,
-        });
-      };
-      
-      calculateRemainingBalance();
-    }
+      }
+
+      if (latestSelectedPackageRef.current !== selectedId) return;
+      setPaymentInfoFormData({
+        total_training_fee: totalFee,
+        downpayment: downpayment,
+        remaining_balance: remainingBalance,
+      });
+    };
+
+    calculateRemainingBalance();
   }, [student, studentCharges, selectedPackageForPaymentInfo, packageHistory]);
 
   // Initialize package selection when package history loads
@@ -398,6 +414,18 @@ export default function StudentPaymentPage() {
 
   const addPaymentMutation = useMutation({
     mutationFn: async (payment: typeof paymentFormData & { student_id: string }) => {
+      // Get package_history_id for extra charge payments from the charge
+      let packageHistoryId: string | null = null;
+      if (payment.payment_type === "extra_charge" && payment.selected_charge_id) {
+        const charge = studentCharges?.find(c => c.id === payment.selected_charge_id);
+        if (charge && charge.package_history_id) {
+          packageHistoryId = charge.package_history_id !== 'current' ? charge.package_history_id : null;
+        }
+      } else if (payment.payment_type === "balance" && payment.selected_package_history_id && payment.selected_package_history_id !== 'current') {
+        packageHistoryId = payment.selected_package_history_id;
+      }
+      // For 'current' package, packageHistoryId remains null (which represents current package)
+
       const { data, error } = await supabase
         .from("student_payments")
         .insert([{
@@ -407,7 +435,7 @@ export default function StudentPaymentPage() {
           notes: payment.notes?.trim() || null,
           payment_for: payment.payment_type,
           charge_id: payment.payment_type === "extra_charge" && payment.selected_charge_id ? payment.selected_charge_id : null,
-          package_history_id: payment.payment_type === "balance" && payment.selected_package_history_id && payment.selected_package_history_id !== 'current' ? payment.selected_package_history_id : null,
+          package_history_id: packageHistoryId,
         }])
         .select()
         .single();
@@ -431,27 +459,160 @@ export default function StudentPaymentPage() {
         }
       }
       
+      // Update remaining_balance for the correct package (student for current, package_history for old)
+      if (payment.payment_type === "balance") {
+        const targetPackageId = packageHistoryId; // null for current, UUID for old package
+        
+        if (targetPackageId) {
+          // Update package_history record
+          const { data: pkgHistory } = await supabase
+            .from("student_package_history")
+            .select("total_training_fee, downpayment, remaining_balance")
+            .eq("id", targetPackageId)
+            .single();
+          
+          if (pkgHistory) {
+            // Get balance payments for this package (including the one we just inserted)
+            const { data: pkgPayments } = await supabase
+              .from("student_payments")
+              .select("payment_amount, payment_for")
+              .eq("student_id", payment.student_id)
+              .eq("package_history_id", targetPackageId)
+              .eq("payment_for", "balance");
+            
+            const balancePayments = pkgPayments?.reduce((sum, p) => sum + (p.payment_amount || 0), 0) || 0;
+            
+            // Get charges for this package (need amount and paid_amount to calculate unpaid portion)
+            const { data: pkgCharges } = await supabase
+              .from("student_charges")
+              .select("amount, paid_amount")
+              .eq("student_id", payment.student_id)
+              .eq("package_history_id", targetPackageId);
+            
+            // Calculate unpaid charges (charges that haven't been fully paid)
+            // Only unpaid portion of charges should increase remaining balance
+            const unpaidCharges = pkgCharges?.reduce((sum, c) => {
+              const chargeAmount = c.amount || 0;
+              const paidAmount = c.paid_amount || 0;
+              const unpaidPortion = Math.max(0, chargeAmount - paidAmount);
+              return sum + unpaidPortion;
+            }, 0) || 0;
+            
+            const remainingBalance = Math.max(0, 
+              (pkgHistory.total_training_fee || 0) - 
+              (pkgHistory.downpayment || 0) - 
+              balancePayments + 
+              unpaidCharges
+            );
+            
+            const { error: updateError } = await supabase
+              .from("student_package_history")
+              .update({ remaining_balance: remainingBalance } as Record<string, any>)
+              .eq("id", targetPackageId);
+            
+            if (updateError) {
+              console.error("Failed to update package history remaining balance:", updateError);
+              throw new Error("Payment recorded but failed to update remaining balance: " + updateError.message);
+            }
+          }
+        } else {
+          // Update student record (current package)
+          const { data: currentStudent } = await supabase
+            .from("students")
+            .select("total_training_fee, downpayment, remaining_balance, enrollment_date")
+            .eq("id", payment.student_id)
+            .single();
+          
+          if (currentStudent) {
+            // Get balance payments for current package (package_history_id is null, including the one we just inserted)
+            const { data: currentPayments } = await supabase
+              .from("student_payments")
+              .select("payment_amount, payment_for")
+              .eq("student_id", payment.student_id)
+              .is("package_history_id", null)
+              .eq("payment_for", "balance");
+            
+            const balancePayments = currentPayments?.reduce((sum, p) => sum + (p.payment_amount || 0), 0) || 0;
+            
+            // Get charges for current package (package_history_id is null, need amount and paid_amount)
+            // Filter by enrollment_date to exclude old charges from expired packages
+            let currentChargesQuery = supabase
+              .from("student_charges")
+              .select("amount, paid_amount")
+              .eq("student_id", payment.student_id)
+              .is("package_history_id", null);
+            
+            // Only include charges created on or after the current package's enrollment date
+            // This prevents old charges from expired packages from being included
+            if (currentStudent.enrollment_date) {
+              currentChargesQuery = currentChargesQuery.gte("created_at", currentStudent.enrollment_date);
+            }
+            
+            const { data: currentCharges } = await currentChargesQuery;
+            
+            // Calculate unpaid charges (charges that haven't been fully paid)
+            // Only unpaid portion of charges should increase remaining balance
+            const unpaidCharges = currentCharges?.reduce((sum, c) => {
+              const chargeAmount = c.amount || 0;
+              const paidAmount = c.paid_amount || 0;
+              const unpaidPortion = Math.max(0, chargeAmount - paidAmount);
+              return sum + unpaidPortion;
+            }, 0) || 0;
+            
+            const remainingBalance = Math.max(0,
+              (currentStudent.total_training_fee || 0) -
+              (currentStudent.downpayment || 0) -
+              balancePayments +
+              unpaidCharges
+            );
+            
+            const { error: updateError } = await supabase
+              .from("students")
+              .update({ remaining_balance: remainingBalance })
+              .eq("id", payment.student_id);
+            
+            if (updateError) {
+              console.error("Failed to update student remaining balance:", updateError);
+              throw new Error("Payment recorded but failed to update remaining balance: " + updateError.message);
+            }
+          }
+        }
+      }
+      
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["students"] });
-      queryClient.invalidateQueries({ queryKey: ["student-payments", studentId] });
-      queryClient.invalidateQueries({ queryKey: ["student-charges", studentId] });
-      queryClient.invalidateQueries({ queryKey: ["student", studentId] });
+    onSuccess: async (data) => {
+      // Invalidate and refetch queries to refresh data - this will trigger useEffect to recalculate
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["students"] }),
+        queryClient.invalidateQueries({ queryKey: ["student-payments", studentId] }),
+        queryClient.invalidateQueries({ queryKey: ["student-charges", studentId] }),
+        queryClient.invalidateQueries({ queryKey: ["student", studentId] }),
+        queryClient.invalidateQueries({ queryKey: ["student-package-history", studentId] }),
+      ]);
+      
+      // Explicitly refetch to ensure fresh data
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["student", studentId] }),
+        queryClient.refetchQueries({ queryKey: ["student-package-history", studentId] }),
+        queryClient.refetchQueries({ queryKey: ["student-payments", studentId] }),
+      ]);
+      
       toast.success("Payment recorded successfully");
       
       setSelectedPaymentForReceipt({
         id: data.id,
         student_id: data.student_id,
         payment_amount: data.payment_amount,
-        extra_charges: data.extra_charges,
-        charge_description: data.charge_description,
+        extra_charges: data.extra_charges || 0,
+        charge_description: data.charge_description || null,
         payment_date: data.payment_date,
-        notes: data.notes,
+        notes: data.notes || null,
         created_at: data.created_at,
         updated_at: data.updated_at,
         payment_for: data.payment_for,
-        charge_id: data.charge_id,
+        charge_id: data.charge_id || null,
+        package_history_id: data.package_history_id || null,
       });
       setIsReceiptOpen(true);
       
@@ -544,14 +705,26 @@ export default function StudentPaymentPage() {
       
       const { data: existingPayments } = await paymentsQuery;
       
-      // Get charges for this specific package
+      // Get charges for this specific package (need amount and paid_amount)
+      // Get student enrollment_date for date filtering
+      const { data: studentData } = await supabase
+        .from("students")
+        .select("enrollment_date")
+        .eq("id", paymentInfo.student_id)
+        .single();
+      
       let chargesQuery = supabase
         .from("student_charges")
-        .select("amount, package_history_id")
+        .select("amount, paid_amount, package_history_id")
         .eq("student_id", paymentInfo.student_id);
       
       if (paymentInfo.package_id === 'current') {
         chargesQuery = chargesQuery.is("package_history_id", null);
+        // Only include charges created on or after the current package's enrollment date
+        // This prevents old charges from expired packages from being included
+        if (studentData?.enrollment_date) {
+          chargesQuery = chargesQuery.gte("created_at", studentData.enrollment_date);
+        }
       } else {
         chargesQuery = chargesQuery.eq("package_history_id", paymentInfo.package_id);
       }
@@ -563,9 +736,16 @@ export default function StudentPaymentPage() {
         p.payment_for === 'balance'
       ).reduce((sum, p) => sum + (p.payment_amount || 0), 0) || 0;
       
-      const totalCharges = existingCharges?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0;
+      // Calculate unpaid charges (charges that haven't been fully paid)
+      // Only unpaid portion of charges should increase remaining balance
+      const unpaidCharges = existingCharges?.reduce((sum, c) => {
+        const chargeAmount = c.amount || 0;
+        const paidAmount = c.paid_amount || 0;
+        const unpaidPortion = Math.max(0, chargeAmount - paidAmount);
+        return sum + unpaidPortion;
+      }, 0) || 0;
       
-      const remainingBalance = Math.max(0, totalFee - downpayment - balancePayments + totalCharges);
+      const remainingBalance = Math.max(0, totalFee - downpayment - balancePayments + unpaidCharges);
       
       // Update the appropriate record based on package_id
       if (paymentInfo.package_id === 'current') {
@@ -611,14 +791,28 @@ export default function StudentPaymentPage() {
     },
   });
 
-  // Calculate total charges for selected package
-  const totalChargesForSelectedPackage = selectedPackageForPaymentInfo 
+  // Calculate unpaid charges for selected package (only unpaid portion should affect balance)
+  const unpaidChargesForSelectedPackage = selectedPackageForPaymentInfo 
     ? (studentCharges?.filter(c => {
         if (selectedPackageForPaymentInfo === 'current') {
-          return !c.package_history_id;
+          // For current package, only include charges with null package_history_id
+          // AND created on or after the current package's enrollment date
+          // This prevents old charges from expired packages from being included
+          if (c.package_history_id) return false;
+          if (student?.enrollment_date && c.created_at) {
+            const chargeDate = new Date(c.created_at);
+            const enrollmentDate = new Date(student.enrollment_date);
+            return chargeDate >= enrollmentDate;
+          }
+          return true; // If no enrollment date, include all null charges (fallback)
         }
         return c.package_history_id === selectedPackageForPaymentInfo;
-      }).reduce((sum, c) => sum + (c.amount || 0), 0) || 0)
+      }).reduce((sum, c) => {
+        const chargeAmount = c.amount || 0;
+        const paidAmount = c.paid_amount || 0;
+        const unpaidPortion = Math.max(0, chargeAmount - paidAmount);
+        return sum + unpaidPortion;
+      }, 0) || 0)
     : 0;
 
   if (studentLoading) {
@@ -771,7 +965,7 @@ export default function StudentPaymentPage() {
                       setPaymentInfoFormData((prev) => ({
                         ...prev,
                         total_training_fee: value,
-                        remaining_balance: Math.max(0, value - downpayment + totalChargesForSelectedPackage),
+                        remaining_balance: Math.max(0, value - downpayment + unpaidChargesForSelectedPackage),
                       }));
                     }}
                     disabled={!isEditingPaymentInfo}
@@ -794,7 +988,7 @@ export default function StudentPaymentPage() {
                       setPaymentInfoFormData((prev) => ({
                         ...prev,
                         downpayment: value,
-                        remaining_balance: Math.max(0, totalFee - value + totalChargesForSelectedPackage),
+                        remaining_balance: Math.max(0, totalFee - value + unpaidChargesForSelectedPackage),
                       }));
                     }}
                     disabled={!isEditingPaymentInfo}
@@ -815,11 +1009,11 @@ export default function StudentPaymentPage() {
                     className="border-2 border-accent rounded-lg bg-muted w-full text-xs sm:text-sm"
                   />
                 </div>
-                {totalChargesForSelectedPackage > 0 && (
+                {unpaidChargesForSelectedPackage > 0 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                     <div className="flex items-center gap-2 text-amber-700">
                       <AlertCircle className="w-4 h-4" />
-                      <span className="text-xs font-medium">Extra Charges: ₱{totalChargesForSelectedPackage.toFixed(2)}</span>
+                      <span className="text-xs font-medium">Extra Charges: ₱{unpaidChargesForSelectedPackage.toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -1198,62 +1392,79 @@ export default function StudentPaymentPage() {
                         </span>
                 </div>
                       
-                      {paymentFormData.payment_type === "balance" && (
-                        <div className="space-y-2 text-sm">
-                          {paymentFormData.selected_package_history_id && (() => {
-                            const selectedPkg = allPackages.find(p => p.id === paymentFormData.selected_package_history_id);
-                            const pkgIndex = allPackages.findIndex(p => p.id === paymentFormData.selected_package_history_id);
-                            const cycleNumber = pkgIndex >= 0 ? currentCycleNumber - pkgIndex : 0;
-                            return selectedPkg ? (
-                              <div className="mb-3 p-2 bg-white/50 rounded border border-green-200">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-600">Package:</span>
-                                  <span className="font-semibold text-green-700">
-                                    {selectedPkg.package_type || 'Package'} {cycleNumber}
-                                    {selectedPkg.id === 'current' && (
-                                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
-                                        Current
+                      {paymentFormData.payment_type === "balance" && (() => {
+                        // Calculate remaining balance for the selected package in payment form
+                        const selectedPackageId = paymentFormData.selected_package_history_id;
+                        let previewRemainingBalance = 0;
+                        
+                        if (selectedPackageId === 'current' || !selectedPackageId) {
+                          // Use current package's remaining balance
+                          previewRemainingBalance = student?.remaining_balance ?? 0;
+                        } else {
+                          // Find the package in history
+                          const selectedPkg = packageHistory?.find(p => p.id === selectedPackageId);
+                          if (selectedPkg) {
+                            previewRemainingBalance = selectedPkg.remaining_balance ?? 0;
+                          }
+                        }
+                        
+                        return (
+                          <div className="space-y-2 text-sm">
+                            {selectedPackageId && (() => {
+                              const selectedPkg = allPackages.find(p => p.id === selectedPackageId);
+                              const pkgIndex = allPackages.findIndex(p => p.id === selectedPackageId);
+                              const cycleNumber = pkgIndex >= 0 ? currentCycleNumber - pkgIndex : 0;
+                              return selectedPkg ? (
+                                <div className="mb-3 p-2 bg-white/50 rounded border border-green-200">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs text-gray-600">Package:</span>
+                                    <span className="font-semibold text-green-700">
+                                      {selectedPkg.package_type || 'Package'} {cycleNumber}
+                                      {selectedPkg.id === 'current' && (
+                                        <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
+                                          Current
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  {selectedPkg.enrollment_date && (
+                                    <div className="flex items-center justify-between mt-1">
+                                      <span className="text-xs text-gray-500">Enrolled:</span>
+                                      <span className="text-xs text-gray-600">
+                                        {format(new Date(selectedPkg.enrollment_date), 'MMM dd, yyyy')}
                                       </span>
-                                    )}
-                                  </span>
+                                    </div>
+                                  )}
+                                  {selectedPkg.expiration_date && (
+                                    <div className="flex items-center justify-between mt-1">
+                                      <span className="text-xs text-gray-500">Expires:</span>
+                                      <span className="text-xs text-gray-600">
+                                        {format(new Date(selectedPkg.expiration_date), 'MMM dd, yyyy')}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
-                                {selectedPkg.enrollment_date && (
-                                  <div className="flex items-center justify-between mt-1">
-                                    <span className="text-xs text-gray-500">Enrolled:</span>
-                                    <span className="text-xs text-gray-600">
-                                      {format(new Date(selectedPkg.enrollment_date), 'MMM dd, yyyy')}
-                                    </span>
-                                  </div>
-                                )}
-                                {selectedPkg.expiration_date && (
-                                  <div className="flex items-center justify-between mt-1">
-                                    <span className="text-xs text-gray-500">Expires:</span>
-                                    <span className="text-xs text-gray-600">
-                                      {format(new Date(selectedPkg.expiration_date), 'MMM dd, yyyy')}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : null;
-                          })()}
-                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Current Balance:</span>
-                            <span className="font-medium">₱{paymentInfoFormData.remaining_balance.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-green-600">
-                            <span>Payment Amount:</span>
-                            <span className="font-medium">- ₱{paymentFormData.payment_amount.toFixed(2)}</span>
-                          </div>
-                          <div className="border-t border-green-300 dark:border-green-700 pt-2 mt-2">
+                              ) : null;
+                            })()}
                             <div className="flex justify-between items-center">
-                              <span className="font-semibold text-green-700">After Payment:</span>
-                              <span className="font-bold text-lg text-green-700">
-                                ₱{Math.max(0, paymentInfoFormData.remaining_balance - paymentFormData.payment_amount).toFixed(2)}
-                              </span>
+                              <span className="text-muted-foreground">Current Balance:</span>
+                              <span className="font-medium">₱{previewRemainingBalance.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-green-600">
+                              <span>Payment Amount:</span>
+                              <span className="font-medium">- ₱{paymentFormData.payment_amount.toFixed(2)}</span>
+                            </div>
+                            <div className="border-t border-green-300 dark:border-green-700 pt-2 mt-2">
+                              <div className="flex justify-between items-center">
+                                <span className="font-semibold text-green-700">After Payment:</span>
+                                <span className="font-bold text-lg text-green-700">
+                                  ₱{Math.max(0, previewRemainingBalance - paymentFormData.payment_amount).toFixed(2)}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                       
                       {paymentFormData.payment_type === "extra_charge" && paymentFormData.selected_charge_id && (
                         <div className="space-y-2 text-sm">
@@ -1382,11 +1593,17 @@ export default function StudentPaymentPage() {
                             {studentCharges.map((charge, index) => {
                               const remainingAmount = charge.amount - (charge.paid_amount || 0);
                               const chargeData = charge as any;
-                              const chargePkg = chargeData.package_history && !Array.isArray(chargeData.package_history) 
-                                ? chargeData.package_history 
-                                : (Array.isArray(chargeData.package_history) && chargeData.package_history.length > 0)
-                                  ? chargeData.package_history[0]
-                                  : null;
+                              let chargePkg: PackageHistory | null = null;
+                              
+                              // Get package from relation if available
+                              if (chargeData.package_history) {
+                                if (!Array.isArray(chargeData.package_history)) {
+                                  chargePkg = chargeData.package_history;
+                                } else if (Array.isArray(chargeData.package_history) && chargeData.package_history.length > 0) {
+                                  chargePkg = chargeData.package_history[0];
+                                }
+                              }
+                              
                               const chargePkgId = charge.package_history_id;
                               const pkgDisplay = getPackageDisplay(chargePkg, chargePkgId, charge.charge_date);
                               return (
@@ -1476,7 +1693,14 @@ export default function StudentPaymentPage() {
                             }
                           }
                           const chargePkgId = charge.package_history_id;
-                          const pkgDisplay = getPackageDisplay(chargePkg, chargePkgId, charge.charge_date);
+                          let pkgDisplay = getPackageDisplay(chargePkg, chargePkgId, charge.charge_date);
+                          
+                          // If no display and package_history_id is null, show current package
+                          if (!pkgDisplay && !charge.package_history_id && student && student.package_type) {
+                            const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
+                            pkgDisplay = `${student.package_type} ${cycleNum}`;
+                          }
+                          
                           return (
                             <div
                               key={charge.id}
@@ -1726,15 +1950,25 @@ export default function StudentPaymentPage() {
                               {payment.isDownpayment ? (
                                 (() => {
                                   // For downpayment, get package from package_history_id
-                                  const pkgDisplay = getPackageDisplay(payment.package_history, payment.package_history_id, payment.payment_date);
+                                  // Try getPackageDisplay first, then fallback to direct lookup
+                                  let pkgDisplay = getPackageDisplay(payment.package_history, payment.package_history_id, payment.payment_date);
+                                  
+                                  // If still no display and we have package_history_id, try direct lookup
+                                  if (!pkgDisplay && payment.package_history_id) {
+                                    const pkg = allPackages.find(p => p.id === payment.package_history_id);
+                                    if (pkg) {
+                                      const pkgIndex = allPackages.findIndex(p => p.id === pkg.id);
+                                      const cycleNumber = currentCycleNumber - pkgIndex;
+                                      pkgDisplay = `${pkg.package_type || 'Package'} ${cycleNumber}`;
+                                    }
+                                  }
+                                  
+                                  // Fallback for current package
                                   if (!pkgDisplay && payment.package_history_id === 'current' && student && student.package_type) {
                                     const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
-                                    return (
-                                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                                        {student.package_type} {cycleNum}
-                                      </span>
-                                    );
+                                    pkgDisplay = `${student.package_type} ${cycleNum}`;
                                   }
+                                  
                                   return pkgDisplay ? (
                                     <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 dark:from-purple-900/40 dark:to-purple-800/20 dark:text-purple-300 border border-purple-200 dark:border-purple-700/50">
                                       {pkgDisplay}
@@ -1745,26 +1979,35 @@ export default function StudentPaymentPage() {
                                 })()
                               ) : payment.payment_for === 'balance' && !payment.isDownpayment ? (
                                 (() => {
-                                  const pkgDisplay = getPackageDisplay(payment.package_history, payment.package_history_id, payment.payment_date);
-                                  if (!pkgDisplay && !payment.package_history_id && payment.payment_date) {
-                                    // If no package_history_id but payment date exists, try to infer from date
-                                    // This handles payments created with "current" that were saved as null
-                                    const paymentDate = new Date(payment.payment_date);
-                                    if (student && student.package_type) {
-                                      const enrollmentDate = student.enrollment_date ? new Date(student.enrollment_date) : null;
-                                      const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
-                                      if (enrollmentDate && paymentDate >= enrollmentDate) {
-                                        if (!expirationDate || paymentDate <= expirationDate) {
-                                          const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
-                                          return (
-                                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 dark:from-purple-900/40 dark:to-purple-800/20 dark:text-purple-300 border border-purple-200 dark:border-purple-700/50">
-                                              {student.package_type} {cycleNum}
-                                            </span>
-                                          );
-                                        }
+                                  // Use ONLY stored package_history_id - never infer from date
+                                  // This ensures payments stay linked to their original package even after expiration
+                                  let pkgDisplay = null;
+                                  
+                                  if (payment.package_history_id) {
+                                    // Payment has explicit package_history_id - use it
+                                    const historyPkg = packageHistory?.find(p => p.id === payment.package_history_id);
+                                    if (historyPkg) {
+                                      const pkgIndex = packageHistory.findIndex(p => p.id === historyPkg.id);
+                                      const cycleNumber = packageHistory.length - pkgIndex;
+                                      pkgDisplay = `${historyPkg.package_type || 'Package'} ${cycleNumber}`;
+                                    } else {
+                                      // Try allPackages as fallback (includes current)
+                                      const pkg = allPackages.find(p => p.id === payment.package_history_id);
+                                      if (pkg) {
+                                        const pkgIndex = allPackages.findIndex(p => p.id === pkg.id);
+                                        const cycleNumber = currentCycleNumber - pkgIndex;
+                                        pkgDisplay = `${pkg.package_type || 'Package'} ${cycleNumber}`;
                                       }
                                     }
+                                  } else {
+                                    // package_history_id is null - this should be rare now since we update payments when archiving
+                                    // Show current package as fallback (for payments made very recently before archiving completes)
+                                    if (student && student.package_type) {
+                                      const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
+                                      pkgDisplay = `${student.package_type} ${cycleNum}`;
+                                    }
                                   }
+                                  
                                   return pkgDisplay ? (
                                     <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 dark:from-purple-900/40 dark:to-purple-800/20 dark:text-purple-300 border border-purple-200 dark:border-purple-700/50">
                                       {pkgDisplay}
@@ -1943,15 +2186,24 @@ export default function StudentPaymentPage() {
                           {payment.isDownpayment ? (
                             (() => {
                               // For downpayment, get package from package_history_id
-                              const pkgDisplay = getPackageDisplay(payment.package_history, payment.package_history_id, payment.payment_date);
+                              let pkgDisplay = getPackageDisplay(payment.package_history, payment.package_history_id, payment.payment_date);
+                              
+                              // If still no display and we have package_history_id, try direct lookup
+                              if (!pkgDisplay && payment.package_history_id) {
+                                const pkg = allPackages.find(p => p.id === payment.package_history_id);
+                                if (pkg) {
+                                  const pkgIndex = allPackages.findIndex(p => p.id === pkg.id);
+                                  const cycleNumber = currentCycleNumber - pkgIndex;
+                                  pkgDisplay = `${pkg.package_type || 'Package'} ${cycleNumber}`;
+                                }
+                              }
+                              
+                              // Fallback for current package
                               if (!pkgDisplay && payment.package_history_id === 'current' && student && student.package_type) {
                                 const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
-                                return (
-                                  <p className="text-xs font-medium text-purple-700">
-                                    {student.package_type} {cycleNum}
-                                  </p>
-                                );
+                                pkgDisplay = `${student.package_type} ${cycleNum}`;
                               }
+                              
                               return pkgDisplay ? (
                                 <p className="text-xs font-medium text-purple-700">
                                   {pkgDisplay}
@@ -1962,25 +2214,34 @@ export default function StudentPaymentPage() {
                             })()
                           ) : payment.payment_for === 'balance' && !payment.isDownpayment ? (
                             (() => {
-                              const pkgDisplay = getPackageDisplay(payment.package_history, payment.package_history_id, payment.payment_date);
-                              if (!pkgDisplay && !payment.package_history_id && payment.payment_date) {
-                                // If no package_history_id but payment date exists, try to infer from date
-                                const paymentDate = new Date(payment.payment_date);
-                                if (student && student.package_type) {
-                                  const enrollmentDate = student.enrollment_date ? new Date(student.enrollment_date) : null;
-                                  const expirationDate = student.expiration_date ? new Date(student.expiration_date) : null;
-                                  if (enrollmentDate && paymentDate >= enrollmentDate) {
-                                    if (!expirationDate || paymentDate <= expirationDate) {
-                                      const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
-                                      return (
-                                        <p className="text-xs font-medium text-purple-700">
-                                          {student.package_type} {cycleNum}
-                                        </p>
-                                      );
-                                    }
+                              // Use ONLY stored package_history_id - never infer from date
+                              let pkgDisplay = null;
+                              
+                              if (payment.package_history_id) {
+                                // Payment has explicit package_history_id - use it
+                                const historyPkg = packageHistory?.find(p => p.id === payment.package_history_id);
+                                if (historyPkg) {
+                                  const pkgIndex = packageHistory.findIndex(p => p.id === historyPkg.id);
+                                  const cycleNumber = packageHistory.length - pkgIndex;
+                                  pkgDisplay = `${historyPkg.package_type || 'Package'} ${cycleNumber}`;
+                                } else {
+                                  // Try allPackages as fallback (includes current)
+                                  const pkg = allPackages.find(p => p.id === payment.package_history_id);
+                                  if (pkg) {
+                                    const pkgIndex = allPackages.findIndex(p => p.id === pkg.id);
+                                    const cycleNumber = currentCycleNumber - pkgIndex;
+                                    pkgDisplay = `${pkg.package_type || 'Package'} ${cycleNumber}`;
                                   }
                                 }
+                              } else {
+                                // package_history_id is null - this should be rare now since we update payments when archiving
+                                // Show current package as fallback (for payments made very recently before archiving completes)
+                                if (student && student.package_type) {
+                                  const cycleNum = packageHistory ? packageHistory.length + 1 : 1;
+                                  pkgDisplay = `${student.package_type} ${cycleNum}`;
+                                }
                               }
+                              
                               return pkgDisplay ? (
                                 <p className="text-xs font-medium text-purple-700">
                                   {pkgDisplay}
