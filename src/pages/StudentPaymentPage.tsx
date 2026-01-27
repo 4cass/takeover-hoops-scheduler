@@ -1654,6 +1654,7 @@ export default function StudentPaymentPage() {
                                               payment_amount: remainingAmount,
                                               payment_type: "extra_charge",
                                               selected_charge_id: charge.id,
+                                              selected_package_history_id: "",
                                               payment_date: new Date(),
                                               notes: "",
                                             });
@@ -1746,6 +1747,7 @@ export default function StudentPaymentPage() {
                                         payment_amount: remainingAmount,
                                         payment_type: "extra_charge",
                                         selected_charge_id: charge.id,
+                                        selected_package_history_id: "",
                                         payment_date: new Date(),
                                         notes: "",
                                       });
@@ -2081,7 +2083,6 @@ export default function StudentPaymentPage() {
                                     }
                                     setIsViewPaymentOpen(true);
                                   }}
-                                  className="text-xs"
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Button>
@@ -2089,19 +2090,20 @@ export default function StudentPaymentPage() {
                                   size="sm"
                                   onClick={() => {
                                     if (payment.isDownpayment) {
-                                setSelectedPaymentForReceipt({
-                                  id: 'downpayment',
-                                  student_id: student.id,
-                                  payment_amount: payment.payment_amount,
-                                  extra_charges: 0,
+                                      setSelectedPaymentForReceipt({
+                                        id: 'downpayment',
+                                        student_id: student.id,
+                                        payment_amount: payment.payment_amount,
+                                        extra_charges: 0,
                                         charge_description: null,
-                                  payment_date: payment.payment_date,
-                                  notes: 'Initial Downpayment',
-                                  created_at: payment.payment_date,
-                                  updated_at: payment.payment_date,
+                                        payment_date: payment.payment_date,
+                                        notes: 'Initial Downpayment',
+                                        created_at: payment.payment_date,
+                                        updated_at: payment.payment_date,
                                         payment_for: 'downpayment',
                                         charge_id: null,
-                                });
+                                        package_history_id: payment.package_history_id,
+                                      });
                               } else {
                                 const regularPayment = studentPayments?.find(p => p.id === payment.id);
                                 if (regularPayment) {
