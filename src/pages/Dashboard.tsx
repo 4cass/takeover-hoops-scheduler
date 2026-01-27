@@ -14,6 +14,7 @@ import { BranchesManager } from "@/components/BranchesManager";
 import { PackagesManager } from "@/components/PackagesManager";
 import StudentPaymentPage from "./StudentPaymentPage";
 import StudentViewPage from "./StudentViewPage";
+import CoachViewPage from "./CoachViewPage";
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Settings } from "lucide-react";
@@ -159,6 +160,7 @@ export default function Dashboard() {
               {role === 'admin' && (
                 <>
                   <Route path="coaches" element={<CoachesManager />} />
+                  <Route path="coaches/:coachId/view" element={<CoachViewPage />} />
                   <Route path="branches" element={<BranchesManager />} />
                   <Route path="packages" element={<PackagesManager />} />
                 </>

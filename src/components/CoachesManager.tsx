@@ -1,5 +1,6 @@
 import { useState, Component, ErrorInfo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,22 @@ interface SessionRecord {
   };
 }
 
+interface CoachSessionTime {
+  id: string;
+  coach_id: string;
+  session_id: string;
+  time_in: string | null;
+  time_out: string | null;
+}
+
+interface CoachAttendanceRecord {
+  id: string;
+  coach_id: string;
+  session_id: string;
+  status: 'present' | 'absent' | 'pending';
+  marked_at: string | null;
+}
+
 const formatTime12Hour = (timeString: string) => {
   const [hours, minutes] = timeString.split(":").map(Number);
   const period = hours >= 12 ? "PM" : "AM";
@@ -84,19 +101,13 @@ class CoachesErrorBoundary extends Component<{ children: React.ReactNode }, { ha
 }
 
 export function CoachesManager() {
+  const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isRecordsDialogOpen, setIsRecordsDialogOpen] = useState(false);
   const [editingCoach, setEditingCoach] = useState<Coach | null>(null);
-  const [selectedCoach, setSelectedCoach] = useState<Coach | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [coachPackageTypeFilter, setCoachPackageTypeFilter] = useState<string>("All");
-  const [recordsBranchFilter, setRecordsBranchFilter] = useState<string>("All");
-  const [recordsPackageTypeFilter, setRecordsPackageTypeFilter] = useState<string>("All");
-  const [recordsStartDate, setRecordsStartDate] = useState<string>("");
-  const [recordsEndDate, setRecordsEndDate] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [recordsCurrentPage, setRecordsCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
   const queryClient = useQueryClient();
@@ -201,33 +212,6 @@ export function CoachesManager() {
     enabled: !!paginatedCoaches && paginatedCoaches.length > 0,
   });
 
-  const filteredSessionRecords = sessionRecords?.filter((record) => {
-    const matchesBranch = recordsBranchFilter === "All" || record.training_sessions?.branch_id === recordsBranchFilter;
-    const matchesPackage = recordsPackageTypeFilter === "All" || record.training_sessions?.package_type === recordsPackageTypeFilter;
-    const matchesCoach = selectedCoach ? record.coach_id === selectedCoach.id : true;
-    
-    // Date filtering
-    let matchesDate = true;
-    if (record.training_sessions?.date) {
-      const sessionDate = new Date(record.training_sessions.date);
-      if (recordsStartDate) {
-        const startDate = new Date(recordsStartDate);
-        matchesDate = matchesDate && sessionDate >= startDate;
-      }
-      if (recordsEndDate) {
-        const endDate = new Date(recordsEndDate);
-        matchesDate = matchesDate && sessionDate <= endDate;
-      }
-    }
-    
-    return matchesBranch && matchesPackage && matchesCoach && matchesDate;
-  }) || [];
-
-  const recordsTotalPages = Math.ceil(filteredSessionRecords.length / itemsPerPage);
-  const recordsStartIndex = (recordsCurrentPage - 1) * itemsPerPage;
-  const recordsEndIndex = recordsStartIndex + itemsPerPage;
-  const paginatedSessionRecords = filteredSessionRecords.slice(recordsStartIndex, recordsEndIndex);
-
   const getPaginationRange = (current: number, total: number) => {
     const maxPagesToShow = 3;
     let start = Math.max(1, current - 1);
@@ -240,10 +224,6 @@ export function CoachesManager() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-  };
-
-  const handleRecordsPageChange = (page: number) => {
-    setRecordsCurrentPage(page);
   };
 
   const createMutation = useMutation({
@@ -333,13 +313,7 @@ export function CoachesManager() {
   };
 
   const handleShowRecords = (coach: Coach) => {
-    setSelectedCoach(coach);
-    setRecordsBranchFilter("All");
-    setRecordsPackageTypeFilter("All");
-    setRecordsStartDate("");
-    setRecordsEndDate("");
-    setRecordsCurrentPage(1);
-    setIsRecordsDialogOpen(true);
+    navigate(`/dashboard/coaches/${coach.id}/view`);
   };
 
   const [formData, setFormData] = useState({
@@ -682,307 +656,6 @@ export function CoachesManager() {
             </CardContent>
           </Card>
 
-          <Dialog open={isRecordsDialogOpen} onOpenChange={setIsRecordsDialogOpen}>
-            <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-4xl border-0 shadow-2xl p-0 max-h-[85vh] sm:max-h-[90vh] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
-              <DialogHeader className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex-shrink-0" style={{ background: '#242833' }}>
-                <DialogTitle className="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2 sm:gap-3">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
-                    <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
-                  </div>
-                  <span className="truncate">Session History for {selectedCoach?.name}</span>
-                </DialogTitle>
-                <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
-                  View session details for this coach
-                </DialogDescription>
-              </DialogHeader>
-              <div className="p-3 sm:p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6">
-                <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Coach Details</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs sm:text-sm text-gray-700 truncate"><span className="font-medium">Name:</span> {selectedCoach?.name}</p>
-                      <p className="text-xs sm:text-sm text-gray-700 truncate"><span className="font-medium">Email:</span> {selectedCoach?.email}</p>
-                      <p className="text-xs sm:text-sm text-gray-700 truncate"><span className="font-medium">Phone:</span> {selectedCoach?.phone || "N/A"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center">
-                      <Filter className="h-4 sm:h-5 w-4 sm:w-5 text-accent mr-2" style={{ color: '#79e58f' }} />
-                      <h3 className="text-base sm:text-lg font-semibold text-gray-900">Session Records</h3>
-                    </div>
-                    {filteredSessionRecords.length > 0 && (
-                      <Button
-                        onClick={() => {
-                          const headers = ['Date', 'Time', 'Branch', 'Package Type', 'Students'];
-                          exportToCSV(
-                            filteredSessionRecords,
-                            `${selectedCoach?.name || 'coach'}_sessions`,
-                            headers,
-                            (record) => [
-                              record.training_sessions ? format(new Date(record.training_sessions.date), 'yyyy-MM-dd') : '',
-                              record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : '',
-                              record.training_sessions?.branches?.name || '',
-                              record.training_sessions?.package_type || '',
-                              record.training_sessions?.session_participants?.map(p => p.students.name).join(", ") || ''
-                            ]
-                          );
-                          toast.success('Session records exported to Excel successfully');
-                        }}
-                        className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm transition-all duration-300"
-                      >
-                        <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                        Export Excel
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {/* Filters */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                    <div className="space-y-2 flex flex-col min-w-0">
-                      <Label htmlFor="filter-records-branch" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <MapPin className="w-4 h-4 mr-2 text-accent" style={{ color: '#79e58f' }} />
-                        Branch
-                      </Label>
-                      <Select
-                        value={recordsBranchFilter}
-                        onValueChange={(value) => setRecordsBranchFilter(value)}
-                      >
-                        <SelectTrigger className="border-2 focus:border-accent rounded-lg py-2 text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
-                          <SelectValue placeholder="Select Branch" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white z-50">
-                          <SelectItem value="All" className="text-xs sm:text-sm">All Branches</SelectItem>
-                          {branches?.map((branch) => (
-                            <SelectItem key={branch.id} value={branch.id} className="text-xs sm:text-sm">
-                              {branch.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2 flex flex-col min-w-0">
-                      <Label htmlFor="filter-records-package-type" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <Users className="w-4 h-4 mr-2 text-accent" style={{ color: '#79e58f' }} />
-                        Package Type
-                      </Label>
-                      <Select
-                        value={recordsPackageTypeFilter}
-                        onValueChange={(value) => setRecordsPackageTypeFilter(value)}
-                      >
-                        <SelectTrigger className="border-2 focus:border-accent rounded-lg py-2 text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
-                          <SelectValue placeholder="Select Package Type" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white z-50">
-                          <SelectItem value="All" className="text-xs sm:text-sm">All Packages</SelectItem>
-                          {packages?.map((pkg) => (
-                            <SelectItem key={pkg.id} value={pkg.name} className="text-xs sm:text-sm">
-                              {pkg.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2 flex flex-col min-w-0">
-                      <Label htmlFor="filter-start-date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <Calendar className="w-4 h-4 mr-2 text-accent" style={{ color: '#79e58f' }} />
-                        Start Date
-                      </Label>
-                      <Input
-                        id="filter-start-date"
-                        type="date"
-                        value={recordsStartDate}
-                        onChange={(e) => setRecordsStartDate(e.target.value)}
-                        className="border-2 focus:border-accent rounded-lg text-xs sm:text-sm"
-                        style={{ borderColor: '#79e58f' }}
-                      />
-                    </div>
-                    <div className="space-y-2 flex flex-col min-w-0">
-                      <Label htmlFor="filter-end-date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                        <Calendar className="w-4 h-4 mr-2 text-accent" style={{ color: '#79e58f' }} />
-                        End Date
-                      </Label>
-                      <Input
-                        id="filter-end-date"
-                        type="date"
-                        value={recordsEndDate}
-                        onChange={(e) => setRecordsEndDate(e.target.value)}
-                        className="border-2 focus:border-accent rounded-lg text-xs sm:text-sm"
-                        style={{ borderColor: '#79e58f' }}
-                      />
-                    </div>
-                  </div>
-                  
-                  <p className="text-xs sm:text-sm text-gray-600 mb-4">
-                    Showing {filteredSessionRecords.length} session{filteredSessionRecords.length === 1 ? '' : 's'}
-                  </p>
-                  
-                  {recordsLoading ? (
-                    <div className="text-center py-12 sm:py-16">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto" style={{ borderColor: '#79e58f' }}></div>
-                      <p className="text-gray-600 mt-2 text-xs sm:text-sm">Loading session records...</p>
-                    </div>
-                  ) : recordsError ? (
-                    <p className="text-red-600 text-xs sm:text-sm">Error loading records: {(recordsError as Error).message}</p>
-                  ) : filteredSessionRecords.length === 0 ? (
-                    <div className="text-center py-12 sm:py-16">
-                      <Calendar className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-base sm:text-lg text-gray-600 mb-2">
-                        {recordsBranchFilter !== "All" || recordsPackageTypeFilter !== "All" || recordsStartDate || recordsEndDate ? 
-                          "No sessions found with the selected filters." : 
-                          "No session records found for this coach."}
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Mobile Cards View */}
-                      <div className="block md:hidden space-y-3">
-                        {paginatedSessionRecords.map((record) => (
-                          <Card
-                            key={record.training_sessions?.id || record.id}
-                            className="border-2 rounded-xl overflow-hidden"
-                            style={{ borderColor: '#79e58f' }}
-                          >
-                            <CardContent className="p-4 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
-                                  <Calendar className="w-4 h-4 text-gray-500" />
-                                  <span className="text-sm font-medium text-gray-900">
-                                    {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
-                                  </span>
-                                </div>
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
-                                  {record.training_sessions?.package_type || 'N/A'}
-                                </span>
-                              </div>
-                              
-                              <div className="flex items-center space-x-2 text-gray-600">
-                                <Clock className="w-4 h-4" />
-                                <span className="text-xs">
-                                  {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
-                                </span>
-                              </div>
-                              
-                              <div className="flex items-center space-x-2 text-gray-600">
-                                <MapPin className="w-4 h-4" />
-                                <span className="text-xs">{record.training_sessions?.branches?.name || 'N/A'}</span>
-                              </div>
-                              
-                              <div className="border-t border-gray-200 pt-2">
-                                <div className="flex items-start space-x-2">
-                                  <User className="w-4 h-4 text-gray-500 mt-0.5" />
-                                  <div className="text-xs text-gray-600">
-                                    <span className="font-medium">Students:</span>
-                                    <p className="mt-1">
-                                      {record.training_sessions?.session_participants?.map(p => p.students.name).join(", ") || "No students"}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-
-                      {/* Desktop Table View */}
-                      <div className="hidden md:block overflow-x-auto">
-                        <table className="w-full border-2 border-[#242833] rounded-xl">
-                          <thead className="bg-[#242833] text-[#efeff1]">
-                            <tr>
-                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Calendar className="w-4 h-4 inline mr-2" />Date</th>
-                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Clock className="w-4 h-4 inline mr-2" />Time</th>
-                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><MapPin className="w-4 h-4 inline mr-2" />Branch</th>
-                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><Users className="w-4 h-4 inline mr-2" />Package Type</th>
-                              <th className="py-3 px-4 text-left font-semibold text-xs sm:text-sm"><User className="w-4 h-4 inline mr-2" />Students</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {paginatedSessionRecords.map((record, index) => (
-                              <tr
-                                key={record.training_sessions?.id}
-                                className={`transition-all duration-300 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-                              >
-                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                  {record.training_sessions ? format(new Date(record.training_sessions.date), 'MMM dd, yyyy') : 'N/A'}
-                                </td>
-                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                  {record.training_sessions ? `${formatTime12Hour(record.training_sessions.start_time)} - ${formatTime12Hour(record.training_sessions.end_time)}` : 'N/A'}
-                                </td>
-                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                  {record.training_sessions?.branches?.name || 'N/A'}
-                                </td>
-                                <td className="py-3 px-4 text-xs sm:text-sm min-w-0 truncate">
-                                  <span className={`px-2 py-1 rounded-full font-medium ${getPackageBadgeColor(record.training_sessions?.package_type)}`}>
-                                    {record.training_sessions?.package_type || 'N/A'}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-gray-600 text-xs sm:text-sm min-w-0 truncate">
-                                  {record.training_sessions?.session_participants?.map(participant => participant.students.name).join(", ") || "No students"}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      
-                      {recordsTotalPages > 1 && (
-                        <div className="flex justify-center items-center mt-6 space-x-2 flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => handleRecordsPageChange(recordsCurrentPage - 1)}
-                            disabled={recordsCurrentPage === 1}
-                            className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                            style={{ borderColor: '#79e58f', color: '#79e58f' }}
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                          </Button>
-                          {getPaginationRange(recordsCurrentPage, recordsTotalPages).map((page) => (
-                            <Button
-                              key={page}
-                              variant={recordsCurrentPage === page ? "default" : "outline"}
-                              onClick={() => handleRecordsPageChange(page)}
-                              className={`border-2 w-10 h-10 p-0 flex items-center justify-center text-xs sm:text-sm ${
-                                recordsCurrentPage === page
-                                  ? 'bg-accent text-white'
-                                  : 'border-accent text-accent hover:bg-accent hover:text-white'
-                              }`}
-                              style={{
-                                backgroundColor: recordsCurrentPage === page ? '#79e58f' : 'transparent',
-                                borderColor: '#79e58f',
-                                color: recordsCurrentPage === page ? 'white' : '#79e58f'
-                              }}
-                            >
-                              {page}
-                            </Button>
-                          ))}
-                          <Button
-                            variant="outline"
-                            onClick={() => handleRecordsPageChange(recordsCurrentPage + 1)}
-                            disabled={recordsCurrentPage === recordsTotalPages}
-                            className="border-2 border-accent text-accent hover:bg-accent hover:text-white w-10 h-10 p-0 flex items-center justify-center"
-                            style={{ borderColor: '#79e58f', color: '#79e58f' }}
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsRecordsDialogOpen(false)}
-                    className="border-2 border-gray-300 text-gray-700 hover:bg-gray-100 transition-all duration-300 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
-                  >
-                    Close
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
     </CoachesErrorBoundary>
