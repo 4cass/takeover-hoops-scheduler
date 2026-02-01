@@ -512,29 +512,29 @@ export function SessionsManager() {
           });
         }
 
-        // Get student emails
-        const studentEmails: Array<{ email: string; name: string }> = [];
+        // Get student data with remaining sessions
+        const studentData: Array<{ email: string; name: string; remaining_sessions: number }> = [];
         const studentIds = createdSession.session_participants.map(sp => sp.student_id);
         
         if (studentIds.length > 0) {
-          const { data: studentData } = await supabase
+          const { data: studentsInfo } = await supabase
             .from('students')
-            .select('id, email, name')
+            .select('id, email, name, remaining_sessions')
             .in('id', studentIds);
 
-          studentData?.forEach(student => {
+          studentsInfo?.forEach(student => {
             if (student.email) {
-              const sessionParticipant = createdSession.session_participants.find(sp => sp.student_id === student.id);
-              studentEmails.push({ 
+              studentData.push({ 
                 email: student.email, 
-                name: student.name || sessionParticipant?.students?.name || 'Student'
+                name: student.name || 'Student',
+                remaining_sessions: student.remaining_sessions || 0
               });
             }
           });
         }
 
         // Send email notifications if we have recipients
-        if (coachEmails.length > 0 || studentEmails.length > 0) {
+        if (coachEmails.length > 0 || studentData.length > 0) {
           const { data: functionData, error: functionError } = await supabase.functions.invoke(
             'send-session-notification',
             {
@@ -546,9 +546,8 @@ export function SessionsManager() {
                 branchName: createdSession.branches?.name || 'Unknown Branch',
                 packageType: createdSession.package_type,
                 coachEmails: coachEmails.map(c => c.email),
-                studentEmails: studentEmails.map(s => s.email),
                 coachNames: coachEmails.map(c => c.name),
-                studentNames: studentEmails.map(s => s.name),
+                students: studentData,
               },
             }
           );
