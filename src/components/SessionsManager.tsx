@@ -491,36 +491,33 @@ export function SessionsManager() {
 
       // Send email notifications to coaches and students
       try {
-        // Get coach emails
+        // Get coach emails using selectedCoaches (not from createdSession which is empty at this point)
         const coachEmails: Array<{ email: string; name: string }> = [];
-        const coachIds = createdSession.session_coaches.map(sc => sc.coach_id);
         
-        if (coachIds.length > 0) {
+        if (selectedCoaches.length > 0) {
           const { data: coachData } = await supabase
             .from('coaches')
             .select('id, email, name')
-            .in('id', coachIds);
+            .in('id', selectedCoaches);
 
           coachData?.forEach(coach => {
             if (coach.email) {
-              const sessionCoach = createdSession.session_coaches.find(sc => sc.coach_id === coach.id);
               coachEmails.push({ 
                 email: coach.email, 
-                name: coach.name || sessionCoach?.coaches?.name || 'Coach'
+                name: coach.name || 'Coach'
               });
             }
           });
         }
 
-        // Get student data with remaining sessions
+        // Get student data with remaining sessions using selectedStudents
         const studentData: Array<{ email: string; name: string; remaining_sessions: number }> = [];
-        const studentIds = createdSession.session_participants.map(sp => sp.student_id);
         
-        if (studentIds.length > 0) {
+        if (selectedStudents.length > 0) {
           const { data: studentsInfo } = await supabase
             .from('students')
             .select('id, email, name, remaining_sessions')
-            .in('id', studentIds);
+            .in('id', selectedStudents);
 
           studentsInfo?.forEach(student => {
             if (student.email) {
@@ -532,6 +529,8 @@ export function SessionsManager() {
             }
           });
         }
+
+        console.log('Sending notifications to:', { coachEmails, studentData });
 
         // Send email notifications if we have recipients
         if (coachEmails.length > 0 || studentData.length > 0) {
