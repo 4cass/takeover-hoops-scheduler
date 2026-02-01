@@ -7,6 +7,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+interface StudentInfo {
+  email: string;
+  name: string;
+  remaining_sessions: number;
+}
+
 interface SessionNotificationRequest {
   sessionId: string;
   date: string;
@@ -15,9 +21,8 @@ interface SessionNotificationRequest {
   branchName: string;
   packageType: string | null;
   coachEmails: string[];
-  studentEmails: string[];
   coachNames: string[];
-  studentNames: string[];
+  students: StudentInfo[];
 }
 
 const formatDate = (dateString: string) => {
@@ -203,9 +208,8 @@ const handler = async (req: Request): Promise<Response> => {
       branchName,
       packageType,
       coachEmails,
-      studentEmails,
       coachNames,
-      studentNames,
+      students,
     }: SessionNotificationRequest = await req.json();
 
     const formattedDate = formatDate(date);
@@ -254,8 +258,8 @@ const handler = async (req: Request): Promise<Response> => {
       </html>
     `;
 
-    // Email template for students
-    const studentEmailHtml = `
+    // Function to generate personalized student email
+    const generateStudentEmailHtml = (studentName: string, remainingSessions: number) => `
       <!DOCTYPE html>
       <html>
       <head>
@@ -265,6 +269,8 @@ const handler = async (req: Request): Promise<Response> => {
           .header { background: #242833; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
           .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 8px 8px; }
           .info-box { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #79e58f; }
+          .sessions-box { background: #fff3cd; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #ffc107; }
+          .sessions-low { background: #f8d7da; border-left: 4px solid #dc3545; }
           .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
         </style>
       </head>
@@ -274,7 +280,7 @@ const handler = async (req: Request): Promise<Response> => {
             <h1>Training Session Scheduled</h1>
           </div>
           <div class="content">
-            <p>Hello,</p>
+            <p>Hello ${studentName},</p>
             <p>You have been scheduled for a training session. Here are the details:</p>
             
             <div class="info-box">
@@ -283,6 +289,11 @@ const handler = async (req: Request): Promise<Response> => {
               <strong>Branch:</strong> ${branchName}<br>
               <strong>Package Type:</strong> ${packageType || 'Not specified'}<br>
               <strong>Coaches:</strong> ${coachNames.join(', ')}
+            </div>
+
+            <div class="sessions-box${remainingSessions <= 3 ? ' sessions-low' : ''}">
+              <strong>Your Remaining Sessions:</strong> ${remainingSessions}
+              ${remainingSessions <= 3 ? '<br><em>⚠️ You are running low on sessions. Please consider renewing your package soon.</em>' : ''}
             </div>
 
             <p>We look forward to seeing you at the session!</p>
@@ -317,19 +328,20 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send emails to students
-    for (const email of studentEmails) {
+    // Send personalized emails to students
+    for (const student of students || []) {
       try {
+        const studentEmailHtml = generateStudentEmailHtml(student.name, student.remaining_sessions);
         await sendEmail(
-          email,
+          student.email,
           `Training Session Scheduled - ${formattedDate}`,
           studentEmailHtml,
           supabaseAdmin
         );
-        results.students.push({ email, success: true });
+        results.students.push({ email: student.email, success: true });
       } catch (error: any) {
-        console.error(`Error sending email to student ${email}:`, error);
-        results.students.push({ email, success: false, error: error.message });
+        console.error(`Error sending email to student ${student.email}:`, error);
+        results.students.push({ email: student.email, success: false, error: error.message });
       }
     }
 
