@@ -366,9 +366,10 @@ export function SessionsManager() {
       if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
 
       // Validate student session limits - only block if they have less than 1 session
+      // Use current_remaining_sessions (cycle-aware) if available, fallback to remaining_sessions
       const invalidStudents = selectedStudents
         .map(studentId => students?.find(s => s.id === studentId))
-        .filter(student => student && student.remaining_sessions < 1);
+        .filter(student => student && (student.current_remaining_sessions ?? student.remaining_sessions) < 1);
       
       if (invalidStudents.length > 0) {
         throw new Error(
