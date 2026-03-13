@@ -1580,6 +1580,7 @@ export function SessionsManager() {
                     </div>
                 </DialogContent>
               </Dialog>
+                </div>
               )}
             </div>
           </CardHeader>
