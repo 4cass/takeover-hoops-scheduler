@@ -1755,10 +1755,10 @@ export function SessionsManager() {
               <div className="text-center py-10 sm:py-12 md:py-16">
                 <Calendar className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 mx-auto mb-4 text-gray-400" />
                 <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 mb-2">
-                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? 'No sessions found' : "No Training Sessions"}
+                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" || statusFilter !== "All" ? 'No sessions found' : "No Training Sessions"}
                 </h3>
                 <p className="text-gray-600 text-xs sm:text-sm md:text-base mb-4">
-                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? "Try adjusting your search or filter." : "Get started by scheduling your first training session"}
+                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" || statusFilter !== "All" ? "Try adjusting your search or filter." : "Get started by scheduling your first training session"}
                 </p>
                 <Button 
                   onClick={() => setIsDialogOpen(true)}
