@@ -1180,7 +1180,9 @@ export function SessionsManager() {
        session.branches.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterPackageType === "All" || session.package_type === filterPackageType) &&
       (branchFilter === "All" || session.branch_id === branchFilter) &&
-      (coachFilter === "All" || session.session_coaches.some(sc => sc.coach_id === coachFilter))
+      (coachFilter === "All" || session.session_coaches.some(sc => sc.coach_id === coachFilter)) &&
+      (statusFilter === "All" || session.status === statusFilter) &&
+      (statusFilter !== "pre-planned" || (session.session_participants?.length === 0 && session.session_coaches?.length === 0))
     )
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
