@@ -141,8 +141,10 @@ export function SessionsManager() {
   const [filterPackageType, setFilterPackageType] = useState<string>("All");
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [coachFilter, setCoachFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [sortOrder, setSortOrder] = useState<"Newest to Oldest" | "Oldest to Newest">("Newest to Oldest");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isPrePlan, setIsPrePlan] = useState(false);
   const itemsPerPage = 6;
 
   const [formData, setFormData] = useState({
@@ -362,21 +364,25 @@ export function SessionsManager() {
 
   const createMutation = useMutation({
     mutationFn: async (session: typeof formData) => {
-      if (!session.package_type) throw new Error('Package type is required');
-      if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
+      if (!isPrePlan) {
+        if (!session.package_type) throw new Error('Package type is required');
+        if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
+      }
 
       // Validate student session limits - only block if they have less than 1 session
       // Use current_remaining_sessions (cycle-aware) if available, fallback to remaining_sessions
-      const invalidStudents = selectedStudents
-        .map(studentId => students?.find(s => s.id === studentId))
-        .filter(student => student && (student.current_remaining_sessions ?? student.remaining_sessions) < 1);
-      
-      if (invalidStudents.length > 0) {
-        throw new Error(
-          `The following students have no remaining sessions: ${invalidStudents
-            .map(s => s!.name)
-            .join(', ')}. Please increase their session count.`
-        );
+      if (!isPrePlan && selectedStudents.length > 0) {
+        const invalidStudents = selectedStudents
+          .map(studentId => students?.find(s => s.id === studentId))
+          .filter(student => student && (student.current_remaining_sessions ?? student.remaining_sessions) < 1);
+        
+        if (invalidStudents.length > 0) {
+          throw new Error(
+            `The following students have no remaining sessions: ${invalidStudents
+              .map(s => s!.name)
+              .join(', ')}. Please increase their session count.`
+          );
+        }
       }
 
       // Check for conflicts for all selected coaches
@@ -979,6 +985,7 @@ export function SessionsManager() {
     setSelectedStudents([]);
     setSelectedCoaches([]);
     setEditingSession(null);
+    setIsPrePlan(false);
     setIsDialogOpen(false);
     setIsParticipantsDialogOpen(false);
     setIsViewDialogOpen(false);
@@ -992,12 +999,12 @@ export function SessionsManager() {
       return;
     }
 
-    if (!formData.package_type) {
+    if (!isPrePlan && !formData.package_type) {
       toast.error('Please select a package type');
       return;
     }
 
-    if (selectedCoaches.length === 0) {
+    if (!isPrePlan && selectedCoaches.length === 0) {
       toast.error('Please select at least one coach');
       return;
     }
@@ -1168,13 +1175,22 @@ export function SessionsManager() {
   };
 
   const filteredSessions = sessions
-    ?.filter((session) =>
-      (session.session_coaches.some(sc => sc.coaches.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-       session.branches.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (filterPackageType === "All" || session.package_type === filterPackageType) &&
-      (branchFilter === "All" || session.branch_id === branchFilter) &&
-      (coachFilter === "All" || session.session_coaches.some(sc => sc.coach_id === coachFilter))
-    )
+    ?.filter((session) => {
+      const matchesSearch = session.session_coaches.some(sc => sc.coaches.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        session.branches.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesPackage = filterPackageType === "All" || session.package_type === filterPackageType;
+      const matchesBranch = branchFilter === "All" || session.branch_id === branchFilter;
+      const matchesCoach = coachFilter === "All" || session.session_coaches.some(sc => sc.coach_id === coachFilter);
+      
+      let matchesStatus = true;
+      if (statusFilter === "pre-planned") {
+        matchesStatus = (session.session_participants?.length === 0 || session.session_coaches?.length === 0);
+      } else if (statusFilter !== "All") {
+        matchesStatus = session.status === statusFilter;
+      }
+      
+      return matchesSearch && matchesPackage && matchesBranch && matchesCoach && matchesStatus;
+    })
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
@@ -1221,10 +1237,22 @@ export function SessionsManager() {
                 </CardDescription>
               </div>
               {role === 'admin' && (
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <Button 
+                    onClick={() => {
+                      resetForm();
+                      setIsPrePlan(true);
+                      setIsDialogOpen(true);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                  >
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Pre-plan Session
+                  </Button>
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                   <DialogTrigger asChild>
                     <Button 
-                      onClick={() => resetForm()}
+                      onClick={() => { resetForm(); setIsPrePlan(false); }}
                       className="bg-accent hover:bg-[#5bc46d] text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
                       style={{ backgroundColor: '#79e58f' }}
                     >
@@ -1238,10 +1266,10 @@ export function SessionsManager() {
                         <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
                           <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
                         </div>
-                        <span className="truncate">{editingSession ? 'Edit Training Session' : 'Schedule New Session'}</span>
+                        <span className="truncate">{editingSession ? 'Edit Training Session' : isPrePlan ? 'Pre-plan Session' : 'Schedule New Session'}</span>
                       </DialogTitle>
                       <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
-                        {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
+                        {editingSession ? 'Update session details and participants' : isPrePlan ? 'Reserve a time slot — add coaches and players later' : 'Create a new training session for your players'}
                       </DialogDescription>
                     </DialogHeader>
                     <div className="p-3 sm:p-4 md:p-5 overflow-y-auto flex-1 custom-scrollbar">
@@ -1536,8 +1564,8 @@ export function SessionsManager() {
                               createMutation.isPending || 
                               updateMutation.isPending || 
                               !formData.branch_id || 
-                              !formData.package_type || 
-                              selectedCoaches.length === 0 ||
+                              (!isPrePlan && !formData.package_type) || 
+                              (!isPrePlan && selectedCoaches.length === 0) ||
                               !formData.date ||
                               !formData.start_time ||
                               !formData.end_time
@@ -1552,6 +1580,7 @@ export function SessionsManager() {
                     </div>
                 </DialogContent>
               </Dialog>
+                </div>
               )}
             </div>
           </CardHeader>
@@ -1666,6 +1695,27 @@ export function SessionsManager() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="flex flex-col space-y-2 min-w-0">
+                  <Label htmlFor="filter-status" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                    <Filter className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
+                    Status
+                  </Label>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value)}
+                  >
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All" className="text-xs sm:text-sm">All Statuses</SelectItem>
+                      <SelectItem value="scheduled" className="text-xs sm:text-sm">Scheduled</SelectItem>
+                      <SelectItem value="completed" className="text-xs sm:text-sm">Completed</SelectItem>
+                      <SelectItem value="cancelled" className="text-xs sm:text-sm">Cancelled</SelectItem>
+                      <SelectItem value="pre-planned" className="text-xs sm:text-sm">Pre-planned</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex items-center justify-between mt-3">
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -1705,10 +1755,10 @@ export function SessionsManager() {
               <div className="text-center py-10 sm:py-12 md:py-16">
                 <Calendar className="w-12 sm:w-14 md:w-16 h-12 sm:h-14 md:h-16 mx-auto mb-4 text-gray-400" />
                 <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 mb-2">
-                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? 'No sessions found' : "No Training Sessions"}
+                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" || statusFilter !== "All" ? 'No sessions found' : "No Training Sessions"}
                 </h3>
                 <p className="text-gray-600 text-xs sm:text-sm md:text-base mb-4">
-                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" ? "Try adjusting your search or filter." : "Get started by scheduling your first training session"}
+                  {searchTerm || filterPackageType !== "All" || branchFilter !== "All" || coachFilter !== "All" || statusFilter !== "All" ? "Try adjusting your search or filter." : "Get started by scheduling your first training session"}
                 </p>
                 <Button 
                   onClick={() => setIsDialogOpen(true)}
@@ -1744,15 +1794,22 @@ export function SessionsManager() {
                               </p>
                             </div>
                           </div>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 capitalize ${
-                            session.status === 'scheduled' 
-                              ? 'bg-emerald-500 text-white' 
-                              : session.status === 'cancelled' 
-                                ? 'bg-red-500 text-white' 
-                                : 'bg-blue-500 text-white'
-                          }`}>
-                            {session.status}
-                          </span>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold capitalize ${
+                              session.status === 'scheduled' 
+                                ? 'bg-emerald-500 text-white' 
+                                : session.status === 'cancelled' 
+                                  ? 'bg-red-500 text-white' 
+                                  : 'bg-blue-500 text-white'
+                            }`}>
+                              {session.status}
+                            </span>
+                            {(session.session_coaches?.length === 0 || session.session_participants?.length === 0) && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 text-white">
+                                Pre-planned
+                              </span>
+                            )}
+                          </div>
                         </div>
                         
                         {/* Package & Branch */}
