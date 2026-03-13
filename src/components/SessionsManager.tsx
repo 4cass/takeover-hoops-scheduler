@@ -985,6 +985,7 @@ export function SessionsManager() {
     setSelectedStudents([]);
     setSelectedCoaches([]);
     setEditingSession(null);
+    setIsPrePlan(false);
     setIsDialogOpen(false);
     setIsParticipantsDialogOpen(false);
     setIsViewDialogOpen(false);
