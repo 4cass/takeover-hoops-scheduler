@@ -380,6 +380,7 @@ export function SessionsManager() {
               .map(s => s!.name)
               .join(', ')}. Please increase their session count.`
           );
+        }
       }
 
       // Check for conflicts for all selected coaches
