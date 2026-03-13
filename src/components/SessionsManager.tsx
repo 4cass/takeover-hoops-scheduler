@@ -141,8 +141,10 @@ export function SessionsManager() {
   const [filterPackageType, setFilterPackageType] = useState<string>("All");
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [coachFilter, setCoachFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [sortOrder, setSortOrder] = useState<"Newest to Oldest" | "Oldest to Newest">("Newest to Oldest");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isPrePlan, setIsPrePlan] = useState(false);
   const itemsPerPage = 6;
 
   const [formData, setFormData] = useState({
