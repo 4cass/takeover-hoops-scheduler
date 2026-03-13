@@ -364,8 +364,10 @@ export function SessionsManager() {
 
   const createMutation = useMutation({
     mutationFn: async (session: typeof formData) => {
-      if (!session.package_type) throw new Error('Package type is required');
-      if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
+      if (!isPrePlan) {
+        if (!session.package_type) throw new Error('Package type is required');
+        if (selectedCoaches.length === 0) throw new Error('At least one coach must be selected');
+      }
 
       // Validate student session limits - only block if they have less than 1 session
       // Use current_remaining_sessions (cycle-aware) if available, fallback to remaining_sessions
