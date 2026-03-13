@@ -1175,15 +1175,22 @@ export function SessionsManager() {
   };
 
   const filteredSessions = sessions
-    ?.filter((session) =>
-      (session.session_coaches.some(sc => sc.coaches.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-       session.branches.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (filterPackageType === "All" || session.package_type === filterPackageType) &&
-      (branchFilter === "All" || session.branch_id === branchFilter) &&
-      (coachFilter === "All" || session.session_coaches.some(sc => sc.coach_id === coachFilter)) &&
-      (statusFilter === "All" || session.status === statusFilter) &&
-      (statusFilter !== "pre-planned" || (session.session_participants?.length === 0 && session.session_coaches?.length === 0))
-    )
+    ?.filter((session) => {
+      const matchesSearch = session.session_coaches.some(sc => sc.coaches.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        session.branches.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesPackage = filterPackageType === "All" || session.package_type === filterPackageType;
+      const matchesBranch = branchFilter === "All" || session.branch_id === branchFilter;
+      const matchesCoach = coachFilter === "All" || session.session_coaches.some(sc => sc.coach_id === coachFilter);
+      
+      let matchesStatus = true;
+      if (statusFilter === "pre-planned") {
+        matchesStatus = (session.session_participants?.length === 0 || session.session_coaches?.length === 0);
+      } else if (statusFilter !== "All") {
+        matchesStatus = session.status === statusFilter;
+      }
+      
+      return matchesSearch && matchesPackage && matchesBranch && matchesCoach && matchesStatus;
+    })
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
