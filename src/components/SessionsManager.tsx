@@ -1695,6 +1695,27 @@ export function SessionsManager() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="flex flex-col space-y-2 min-w-0">
+                  <Label htmlFor="filter-status" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                    <Filter className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
+                    Status
+                  </Label>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value)}
+                  >
+                    <SelectTrigger className="border-2 border-gray-200 rounded-lg focus:border-accent focus:ring-accent/20 w-full text-xs sm:text-sm" style={{ borderColor: '#79e58f' }}>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All" className="text-xs sm:text-sm">All Statuses</SelectItem>
+                      <SelectItem value="scheduled" className="text-xs sm:text-sm">Scheduled</SelectItem>
+                      <SelectItem value="completed" className="text-xs sm:text-sm">Completed</SelectItem>
+                      <SelectItem value="cancelled" className="text-xs sm:text-sm">Cancelled</SelectItem>
+                      <SelectItem value="pre-planned" className="text-xs sm:text-sm">Pre-planned</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex items-center justify-between mt-3">
                 <p className="text-xs sm:text-sm text-gray-600">
