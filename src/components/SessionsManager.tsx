@@ -1266,7 +1266,7 @@ export function SessionsManager() {
                         <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(121, 229, 143, 0.2)' }}>
                           <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" style={{ color: '#79e58f' }} />
                         </div>
-                        <span className="truncate">{editingSession ? 'Edit Training Session' : 'Schedule New Session'}</span>
+                        <span className="truncate">{editingSession ? 'Edit Training Session' : isPrePlan ? 'Pre-plan Session' : 'Schedule New Session'}</span>
                       </DialogTitle>
                       <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
                         {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
