@@ -1269,7 +1269,7 @@ export function SessionsManager() {
                         <span className="truncate">{editingSession ? 'Edit Training Session' : isPrePlan ? 'Pre-plan Session' : 'Schedule New Session'}</span>
                       </DialogTitle>
                       <DialogDescription className="text-gray-300 text-xs sm:text-sm mt-1 ml-9 sm:ml-11 md:ml-13 hidden sm:block">
-                        {editingSession ? 'Update session details and participants' : 'Create a new training session for your players'}
+                        {editingSession ? 'Update session details and participants' : isPrePlan ? 'Reserve a time slot — add coaches and players later' : 'Create a new training session for your players'}
                       </DialogDescription>
                     </DialogHeader>
                     <div className="p-3 sm:p-4 md:p-5 overflow-y-auto flex-1 custom-scrollbar">
