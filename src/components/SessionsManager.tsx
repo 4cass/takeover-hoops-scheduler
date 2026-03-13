@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -130,6 +131,7 @@ const getStatusStyles = (status: string) => {
 };
 
 export function SessionsManager() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isParticipantsDialogOpen, setIsParticipantsDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -349,6 +351,35 @@ export function SessionsManager() {
     refetchOnReconnect: true,
     refetchOnMount: true,
   });
+
+  // Open edit dialog when navigating from calendar with ?sessionId=xxx
+  useEffect(() => {
+    const sessionIdFromUrl = searchParams.get('sessionId');
+    if (!sessionIdFromUrl || !sessions || sessions.length === 0) return;
+    const session = sessions.find(s => s.id === sessionIdFromUrl);
+    if (session) {
+      setEditingSession(session);
+      setFormData({
+        date: session.date,
+        start_time: session.start_time,
+        end_time: session.end_time,
+        branch_id: session.branch_id,
+        notes: session.notes || "",
+        status: session.status,
+        package_type: session.package_type || "",
+      });
+      setSelectedStudents(session.session_participants?.map(p => p.student_id) || []);
+      setSelectedCoaches(session.session_coaches?.map(sc => sc.coach_id) || []);
+      setIsDialogOpen(true);
+      setIsPrePlan(false);
+      // Clear sessionId from URL so refreshing doesn't re-open the dialog
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('sessionId');
+        return next;
+      });
+    }
+  }, [searchParams, sessions, setSearchParams]);
 
   // Force-refresh student list when dialog opens or filters change
   useEffect(() => {
@@ -1330,46 +1361,48 @@ export function SessionsManager() {
                             )}
                           </div>
                         </div>
-                        <div className="flex flex-col space-y-2 min-w-0">
-                          <Label htmlFor="coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                            <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
-                            Select Coaches
-                          </Label>
-                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-white shadow-sm" style={{ borderColor: '#242833' }}>
-                            {coachesLoading ? (
-                              <p className="text-xs sm:text-sm text-gray-600">Loading coaches...</p>
-                            ) : coachesError ? (
-                              <p className="text-xs sm:text-sm text-red-600">Error loading coaches: {(coachesError as Error).message}</p>
-                            ) : coaches?.length === 0 ? (
-                              <p className="text-xs sm:text-sm text-gray-600">No coaches available.</p>
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {coaches?.map(coach => (
-                                  <div key={coach.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
-                                    <input
-                                      type="checkbox"
-                                      id={`coach-${coach.id}`}
-                                      checked={selectedCoaches.includes(coach.id)}
-                                      onChange={() => handleCoachToggle(coach.id)}
-                                      className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                      style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
-                                      disabled={formData.package_type === "Personal Training" && selectedCoaches.length === 1 && !selectedCoaches.includes(coach.id)}
-                                    />
-                                    <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
-                                      {coach.name}
-                                    </Label>
-                                  </div>
-                                ))}
-                              </div>
+                        {!isPrePlan && (
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label htmlFor="coach" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                              <User className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
+                              Select Coaches
+                            </Label>
+                            <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-white shadow-sm" style={{ borderColor: '#242833' }}>
+                              {coachesLoading ? (
+                                <p className="text-xs sm:text-sm text-gray-600">Loading coaches...</p>
+                              ) : coachesError ? (
+                                <p className="text-xs sm:text-sm text-red-600">Error loading coaches: {(coachesError as Error).message}</p>
+                              ) : coaches?.length === 0 ? (
+                                <p className="text-xs sm:text-sm text-gray-600">No coaches available.</p>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {coaches?.map(coach => (
+                                    <div key={coach.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        id={`coach-${coach.id}`}
+                                        checked={selectedCoaches.includes(coach.id)}
+                                        onChange={() => handleCoachToggle(coach.id)}
+                                        className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                        style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
+                                        disabled={formData.package_type === "Personal Training" && selectedCoaches.length === 1 && !selectedCoaches.includes(coach.id)}
+                                      />
+                                      <Label htmlFor={`coach-${coach.id}`} className="flex-1 text-xs sm:text-sm cursor-pointer truncate">
+                                        {coach.name}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <p className="text-xs text-gray-600 mt-2">
+                                Selected: {selectedCoaches.length} coach{selectedCoaches.length === 1 ? '' : 'es'}
+                              </p>
+                            </div>
+                            {coachesError && (
+                              <p className="text-xs sm:text-sm text-red-600 mt-1">Error loading coaches: {(coachesError as Error).message}</p>
                             )}
-                            <p className="text-xs text-gray-600 mt-2">
-                              Selected: {selectedCoaches.length} coach{selectedCoaches.length === 1 ? '' : 'es'}
-                            </p>
                           </div>
-                          {coachesError && (
-                            <p className="text-xs sm:text-sm text-red-600 mt-1">Error loading coaches: {(coachesError as Error).message}</p>
-                          )}
-                        </div>
+                        )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="flex flex-col space-y-2 min-w-0">
                             <Label htmlFor="date" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
@@ -1442,82 +1475,84 @@ export function SessionsManager() {
                             />
                           </div>
                         </div>
-                        <div className="flex flex-col space-y-2 min-w-0">
-                          <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
-                            <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
-                            Select Players ({selectedStudents.length} selected)
-                          </Label>
-                          <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-white shadow-sm" style={{ borderColor: '#242833' }}>
-                            {formData.branch_id && formData.package_type ? (
-                              studentsLoading ? (
-                                <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
-                              ) : studentsError ? (
-                                <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
-                              ) : students?.length === 0 ? (
-                                <p className="text-xs sm:text-sm text-gray-600">
-                                  No students found for branch "{branches?.find(b => b.id === formData.branch_id)?.name}" and package "{formData.package_type}".
-                                </p>
+                        {!isPrePlan && (
+                          <div className="flex flex-col space-y-2 min-w-0">
+                            <Label className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
+                              <Users className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
+                              Select Players ({selectedStudents.length} selected)
+                            </Label>
+                            <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-white shadow-sm" style={{ borderColor: '#242833' }}>
+                              {formData.branch_id && formData.package_type ? (
+                                studentsLoading ? (
+                                  <p className="text-xs sm:text-sm text-gray-600">Loading students...</p>
+                                ) : studentsError ? (
+                                  <p className="text-xs sm:text-sm text-red-600">Error loading students: {(studentsError as Error).message}</p>
+                                ) : students?.length === 0 ? (
+                                  <p className="text-xs sm:text-sm text-gray-600">
+                                    No students found for branch "{branches?.find(b => b.id === formData.branch_id)?.name}" and package "{formData.package_type}".
+                                  </p>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center space-x-2 mb-2 p-2 rounded-md hover:bg-white transition-colors">
+                                      <input
+                                        type="checkbox"
+                                        id="select-all-students"
+                                        checked={
+                                          students.filter(s => (s.current_remaining_sessions ?? s.remaining_sessions) > 0).every(s => selectedStudents.includes(s.id)) &&
+                                          students.filter(s => (s.current_remaining_sessions ?? s.remaining_sessions) > 0).length > 0
+                                        }
+                                        onChange={(e) => handleSelectAllStudents(e.target.checked)}
+                                        className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                        style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
+                                      />
+                                      <Label htmlFor="select-all-students" className="text-xs sm:text-sm cursor-pointer">
+                                        Select All Players
+                                      </Label>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {students.map(student => (
+                                        <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
+                                          <input
+                                            type="checkbox"
+                                            id={student.id}
+                                            checked={selectedStudents.includes(student.id)}
+                                            onChange={(e) => {
+                                              const currentRemaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
+                                              if (currentRemaining <= 0) {
+                                                toast.error(
+                                                  `${student.name} has no remaining sessions in their current package. Please renew their package or increase their session count.`
+                                                );
+                                                return;
+                                              }
+                                              if (e.target.checked) {
+                                                setSelectedStudents(prev => [...prev, student.id]);
+                                              } else {
+                                                setSelectedStudents(prev => prev.filter(id => id !== student.id));
+                                              }
+                                            }}
+                                            className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
+                                            style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
+                                            disabled={(student.current_remaining_sessions ?? student.remaining_sessions ?? 0) <= 0}
+                                          />
+                                          <Label
+                                            htmlFor={student.id}
+                                            className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
+                                              (student.current_remaining_sessions ?? student.remaining_sessions ?? 0) <= 0 ? 'text-gray-400' : ''
+                                            }`}
+                                          >
+                                            {student.name} ({student.current_remaining_sessions ?? student.remaining_sessions ?? 0} sessions left)
+                                          </Label>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </>
+                                )
                               ) : (
-                                <>
-                                  <div className="flex items-center space-x-2 mb-2 p-2 rounded-md hover:bg-white transition-colors">
-                                    <input
-                                      type="checkbox"
-                                      id="select-all-students"
-                                      checked={
-                                        students.filter(s => (s.current_remaining_sessions ?? s.remaining_sessions) > 0).every(s => selectedStudents.includes(s.id)) &&
-                                        students.filter(s => (s.current_remaining_sessions ?? s.remaining_sessions) > 0).length > 0
-                                      }
-                                      onChange={(e) => handleSelectAllStudents(e.target.checked)}
-                                      className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                      style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
-                                    />
-                                    <Label htmlFor="select-all-students" className="text-xs sm:text-sm cursor-pointer">
-                                      Select All Players
-                                    </Label>
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {students.map(student => (
-                                      <div key={student.id} className="flex items-center space-x-2 p-2 rounded-md hover:bg-white transition-colors min-w-0">
-                                        <input
-                                          type="checkbox"
-                                          id={student.id}
-                                          checked={selectedStudents.includes(student.id)}
-                                          onChange={(e) => {
-                                            const currentRemaining = student.current_remaining_sessions ?? student.remaining_sessions ?? 0;
-                                            if (currentRemaining <= 0) {
-                                              toast.error(
-                                                `${student.name} has no remaining sessions in their current package. Please renew their package or increase their session count.`
-                                              );
-                                              return;
-                                            }
-                                            if (e.target.checked) {
-                                              setSelectedStudents(prev => [...prev, student.id]);
-                                            } else {
-                                              setSelectedStudents(prev => prev.filter(id => id !== student.id));
-                                            }
-                                          }}
-                                          className="w-4 h-4 rounded border-2 border-accent text-accent focus:ring-accent flex-shrink-0"
-                                          style={{ borderColor: '#79e58f', accentColor: '#79e58f' }}
-                                          disabled={(student.current_remaining_sessions ?? student.remaining_sessions ?? 0) <= 0}
-                                        />
-                                        <Label
-                                          htmlFor={student.id}
-                                          className={`flex-1 text-xs sm:text-sm cursor-pointer truncate ${
-                                            (student.current_remaining_sessions ?? student.remaining_sessions ?? 0) <= 0 ? 'text-gray-400' : ''
-                                          }`}
-                                        >
-                                          {student.name} ({student.current_remaining_sessions ?? student.remaining_sessions ?? 0} sessions left)
-                                        </Label>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )
-                            ) : (
-                              <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
-                            )}
+                                <p className="text-xs sm:text-sm text-gray-600">Select a branch and package type to view available students.</p>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        )}
                         <div className="flex flex-col space-y-2 min-w-0">
                           <Label htmlFor="notes" className="flex items-center text-xs sm:text-sm font-medium text-gray-700 truncate">
                             <Eye className="w-4 h-4 mr-2 text-accent flex-shrink-0" style={{ color: '#79e58f' }} />
@@ -1824,37 +1859,41 @@ export function SessionsManager() {
                         </div>
                       </div>
                       
-                      {/* Stats Section */}
+                      {/* Stats Section - hide players & coaches for pre-planned sessions */}
                       <div className="p-4 flex-1 flex flex-col">
-                        {/* Session Stats Grid */}
-                        <div className="grid grid-cols-2 gap-2 mb-3">
-                          <div className="text-center p-2.5 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-100">
-                            <p className="text-[10px] text-slate-500 uppercase font-medium">Coaches</p>
-                            <p className="text-lg font-bold text-slate-700">{session.session_coaches.length}</p>
-                          </div>
-                          <div className="text-center p-2.5 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-100">
-                            <p className="text-[10px] text-emerald-600 uppercase font-medium">Players</p>
-                            <p className="text-lg font-bold text-emerald-600">{session.session_participants?.length || 0}</p>
-                          </div>
-                        </div>
+                        {!(session.session_coaches?.length === 0 || session.session_participants?.length === 0) && (
+                          <>
+                            {/* Session Stats Grid */}
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                              <div className="text-center p-2.5 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-100">
+                                <p className="text-[10px] text-slate-500 uppercase font-medium">Coaches</p>
+                                <p className="text-lg font-bold text-slate-700">{session.session_coaches.length}</p>
+                              </div>
+                              <div className="text-center p-2.5 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-100">
+                                <p className="text-[10px] text-emerald-600 uppercase font-medium">Players</p>
+                                <p className="text-lg font-bold text-emerald-600">{session.session_participants?.length || 0}</p>
+                              </div>
+                            </div>
+                            
+                            {/* Info Grid - Coaches */}
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                              <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                                <p className="text-slate-400 text-[10px] uppercase font-medium mb-1 flex items-center gap-1">
+                                  <User className="w-3 h-3" />
+                                  Coaches
+                                </p>
+                                <p className="font-medium text-slate-700 text-xs line-clamp-2">
+                                  {session.session_coaches.length > 0 
+                                    ? session.session_coaches.map(sc => sc.coaches.name).join(', ') 
+                                    : <span className="text-slate-400">None</span>}
+                                </p>
+                              </div>
+                            </div>
+                          </>
+                        )}
                         
-                        {/* Info Grid */}
-                        <div className="grid grid-cols-2 gap-2 mb-3">
-                          {/* Coaches Info */}
-                          <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
-                            <p className="text-slate-400 text-[10px] uppercase font-medium mb-1 flex items-center gap-1">
-                              <User className="w-3 h-3" />
-                              Coaches
-                            </p>
-                            <p className="font-medium text-slate-700 text-xs line-clamp-2">
-                              {session.session_coaches.length > 0 
-                                ? session.session_coaches.map(sc => sc.coaches.name).join(', ') 
-                                : <span className="text-slate-400">None</span>}
-                            </p>
-                          </div>
-                          
-                          {/* Notes - Always show area for consistent height */}
-                          <div className={`rounded-lg p-2.5 border ${session.notes ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+                        {/* Notes - Always show area for consistent height */}
+                        <div className={`rounded-lg p-2.5 border mb-3 ${session.notes ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
                             <p className={`text-[10px] uppercase font-medium mb-1 flex items-center gap-1 ${session.notes ? 'text-amber-500' : 'text-slate-400'}`}>
                               <Eye className="w-3 h-3" />
                               Notes
@@ -1862,7 +1901,6 @@ export function SessionsManager() {
                             <p className={`text-xs line-clamp-2 ${session.notes ? 'text-amber-700' : 'text-slate-400 italic'}`}>
                               {session.notes || 'No notes'}
                             </p>
-                          </div>
                         </div>
                         
                         {/* Spacer to push buttons to bottom */}
@@ -1987,12 +2025,14 @@ export function SessionsManager() {
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
                     <span className="font-medium">Branch:</span> {selectedSession?.branches.name || 'N/A'}
                   </p>
-                  <p className="text-xs sm:text-sm text-gray-700 truncate">
-                    <span className="font-medium">Coaches:</span>{' '}
-                    {selectedSession?.session_coaches.length > 0
-                      ? selectedSession.session_coaches.map(sc => sc.coaches.name).join(', ')
-                      : 'No coaches assigned'}
-                  </p>
+                  {!(selectedSession?.session_coaches?.length === 0 || selectedSession?.session_participants?.length === 0) && (
+                    <p className="text-xs sm:text-sm text-gray-700 truncate">
+                      <span className="font-medium">Coaches:</span>{' '}
+                      {selectedSession?.session_coaches?.length > 0
+                        ? selectedSession.session_coaches.map(sc => sc.coaches.name).join(', ')
+                        : 'No coaches assigned'}
+                    </p>
+                  )}
                   <p className="text-xs sm:text-sm text-gray-700 truncate">
                     <span className="font-medium">Package Type:</span> {selectedSession?.package_type || 'Not specified'}
                   </p>
@@ -2001,53 +2041,57 @@ export function SessionsManager() {
                   </p>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs sm:text-sm font-medium text-gray-700">Participants</Label>
-                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50" style={{ borderColor: '#242833' }}>
-                  {selectedSession?.session_participants?.length === 0 ? (
-                    <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {selectedSession?.session_participants?.map(participant => (
-                        <li key={participant.id} className="text-xs sm:text-sm text-gray-700 truncate">
-                          {participant.students.name}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs sm:text-sm font-medium text-gray-700">Coach Attendance Records</Label>
-                <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50" style={{ borderColor: '#242833' }}>
-                  {selectedSession?.session_coaches?.length === 0 ? (
-                    <p className="text-xs sm:text-sm text-gray-600">No coaches assigned.</p>
-                  ) : (
-                    selectedSession?.session_coaches?.map((sc) => {
-                      const coachTime = selectedSession.coach_session_times?.find((cst) => cst.coach_id === sc.coach_id);
-                      return (
-                        <div key={sc.id} className="bg-white rounded-lg p-3 border border-gray-200 mb-2 last:mb-0">
-                          <div className="flex flex-col space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs sm:text-sm font-medium text-gray-700">{sc.coaches.name}</span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2 bg-gray-50 rounded-lg">
-                              <div>
-                                <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time In:</span>
-                                <span className="text-xs sm:text-sm font-medium">{formatDateTime(coachTime?.time_in)}</span>
+              {!(selectedSession?.session_coaches?.length === 0 || selectedSession?.session_participants?.length === 0) && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-xs sm:text-sm font-medium text-gray-700">Participants</Label>
+                    <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50" style={{ borderColor: '#242833' }}>
+                      {selectedSession?.session_participants?.length === 0 ? (
+                        <p className="text-xs sm:text-sm text-gray-600">No participants assigned.</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {selectedSession?.session_participants?.map(participant => (
+                            <li key={participant.id} className="text-xs sm:text-sm text-gray-700 truncate">
+                              {participant.students.name}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs sm:text-sm font-medium text-gray-700">Coach Attendance Records</Label>
+                    <div className="border-2 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50" style={{ borderColor: '#242833' }}>
+                      {selectedSession?.session_coaches?.length === 0 ? (
+                        <p className="text-xs sm:text-sm text-gray-600">No coaches assigned.</p>
+                      ) : (
+                        selectedSession?.session_coaches?.map((sc) => {
+                          const coachTime = selectedSession.coach_session_times?.find((cst) => cst.coach_id === sc.coach_id);
+                          return (
+                            <div key={sc.id} className="bg-white rounded-lg p-3 border border-gray-200 mb-2 last:mb-0">
+                              <div className="flex flex-col space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs sm:text-sm font-medium text-gray-700">{sc.coaches.name}</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2 bg-gray-50 rounded-lg">
+                                  <div>
+                                    <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time In:</span>
+                                    <span className="text-xs sm:text-sm font-medium">{formatDateTime(coachTime?.time_in)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time Out:</span>
+                                    <span className="text-xs sm:text-sm font-medium">{formatDateTime(coachTime?.time_out)}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <span className="text-xs sm:text-sm text-gray-600 block mb-1">Time Out:</span>
-                                <span className="text-xs sm:text-sm font-medium">{formatDateTime(coachTime?.time_out)}</span>
-                              </div>
                             </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
               {selectedSession?.notes && (
                 <div className="space-y-2">
                   <Label className="text-xs sm:text-sm font-medium text-gray-700">Session Notes</Label>

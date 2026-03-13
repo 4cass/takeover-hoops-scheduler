@@ -233,11 +233,15 @@ export function CoachCalendarManager() {
   const firstDayWeekday = getDay(firstDayOfMonth); // 0 = Sunday, 1 = Monday, etc.
   const paddingDays = Array(firstDayWeekday).fill(null); // Padding for days before the 1st
 
+  const isPrePlannedSession = (session: TrainingSession) =>
+    (session.session_coaches?.length === 0 || session.session_participants?.length === 0);
+
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'scheduled': return 'default';
       case 'completed': return 'secondary';
       case 'cancelled': return 'destructive';
+      case 'pre-planned': return 'secondary';
       default: return 'secondary';
     }
   };
@@ -282,8 +286,11 @@ export function CoachCalendarManager() {
   }) || [];
 
   const handleAttendanceRedirect = (sessionId: string) => {
-    console.log("Navigating to attendance for session:", sessionId);
     navigate(`/dashboard/attendance?sessionId=${sessionId}`);
+  };
+
+  const handleManageSessionRedirect = (sessionId: string) => {
+    navigate(`/dashboard/sessions?sessionId=${sessionId}`);
   };
 
   if (sessionsError || coachIdError || branchesError || packagesError) {
@@ -434,9 +441,10 @@ export function CoachCalendarManager() {
                   ))}
                   {daysInMonth.map(day => {
                     const daySessions = filteredSessions.filter(session => isSameDay(parseISO(session.date), day)) || [];
-                    const hasScheduled = daySessions.some(s => s.status === 'scheduled');
+                    const hasScheduled = daySessions.some(s => s.status === 'scheduled' && !isPrePlannedSession(s));
                     const hasCompleted = daySessions.some(s => s.status === 'completed');
                     const hasCancelled = daySessions.some(s => s.status === 'cancelled');
+                    const hasPrePlanned = daySessions.some(s => isPrePlannedSession(s));
                     const isSelected = selectedDate && isSameDay(day, selectedDate);
                     const isToday = isSameDay(day, today);
                     
@@ -468,6 +476,7 @@ export function CoachCalendarManager() {
                             </div>
                             <div className="flex space-x-1 justify-center sm:justify-start">
                               {hasScheduled && <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>}
+                              {hasPrePlanned && <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-yellow-500 rounded-full"></div>}
                               {hasCompleted && <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-500 rounded-full"></div>}
                               {hasCancelled && <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-500 rounded-full"></div>}
                             </div>
@@ -481,6 +490,10 @@ export function CoachCalendarManager() {
                   <div className="flex items-center gap-1 sm:gap-2">
                     <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full"></div>
                     <span className="text-gray-600">Scheduled</span>
+                  </div>
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="w-2 h-2 sm:w-3 sm:h-3 bg-yellow-500 rounded-full"></div>
+                    <span className="text-gray-600">Pre-planned</span>
                   </div>
                   <div className="flex items-center gap-1 sm:gap-2">
                     <div className="w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full"></div>
@@ -554,16 +567,22 @@ export function CoachCalendarManager() {
                               </div>
                             </div>
                             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-fit flex-shrink-0">
-                              <Badge variant={getStatusBadgeVariant(session.status)} className="font-medium px-2 py-1 text-xs sm:text-sm w-fit">
-                                {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
-                              </Badge>
+                              {isPrePlannedSession(session) ? (
+                                <Badge className="font-medium px-2 py-1 text-xs sm:text-sm w-fit bg-yellow-500 hover:bg-yellow-600 text-white border-0">
+                                  Pre-planned
+                                </Badge>
+                              ) : (
+                                <Badge variant={getStatusBadgeVariant(session.status)} className="font-medium px-2 py-1 text-xs sm:text-sm w-fit">
+                                  {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+                                </Badge>
+                              )}
                               <Button
-                                onClick={() => handleAttendanceRedirect(session.id)}
+                                onClick={() => isPrePlannedSession(session) ? handleManageSessionRedirect(session.id) : handleAttendanceRedirect(session.id)}
                                 size="sm"
                                 className="bg-accent hover:bg-accent/90 text-white font-medium transition-all duration-300 text-xs sm:text-sm min-w-fit w-full sm:w-auto"
-                                style={{ backgroundColor: '#79e58f' }}
+                                style={{ backgroundColor: isPrePlannedSession(session) ? '#eab308' : '#79e58f' }}
                               >
-                                Attendance
+                                {isPrePlannedSession(session) ? 'Manage Session' : 'Attendance'}
                               </Button>
                             </div>
                           </div>
@@ -631,12 +650,13 @@ export function CoachCalendarManager() {
                               <Button
                                 onClick={() => {
                                   setShowUpcomingSessions(false);
-                                  handleAttendanceRedirect(session.id);
+                                  isPrePlannedSession(session) ? handleManageSessionRedirect(session.id) : handleAttendanceRedirect(session.id);
                                 }}
                                 size="sm"
-                                className="bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm min-w-fit w-full sm:w-auto"
+                                className={`text-white text-xs sm:text-sm min-w-fit w-full sm:w-auto ${!isPrePlannedSession(session) ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                                style={isPrePlannedSession(session) ? { backgroundColor: '#eab308' } : undefined}
                               >
-                                Attendance
+                                {isPrePlannedSession(session) ? 'Manage Session' : 'Attendance'}
                               </Button>
                             </div>
                           </div>
@@ -700,12 +720,13 @@ export function CoachCalendarManager() {
                               <Button
                                 onClick={() => {
                                   setShowPastSessions(false);
-                                  handleAttendanceRedirect(session.id);
+                                  isPrePlannedSession(session) ? handleManageSessionRedirect(session.id) : handleAttendanceRedirect(session.id);
                                 }}
                                 size="sm"
-                                className="bg-gray-600 hover:bg-gray-700 text-white text-xs sm:text-sm min-w-fit w-full sm:w-auto"
+                                className={`text-white text-xs sm:text-sm min-w-fit w-full sm:w-auto ${!isPrePlannedSession(session) ? 'bg-gray-600 hover:bg-gray-700' : ''}`}
+                                style={isPrePlannedSession(session) ? { backgroundColor: '#eab308' } : undefined}
                               >
-                                View Details
+                                {isPrePlannedSession(session) ? 'Manage Session' : 'View Details'}
                               </Button>
                             </div>
                           </div>
