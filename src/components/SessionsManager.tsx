@@ -999,12 +999,12 @@ export function SessionsManager() {
       return;
     }
 
-    if (!formData.package_type) {
+    if (!isPrePlan && !formData.package_type) {
       toast.error('Please select a package type');
       return;
     }
 
-    if (selectedCoaches.length === 0) {
+    if (!isPrePlan && selectedCoaches.length === 0) {
       toast.error('Please select at least one coach');
       return;
     }
