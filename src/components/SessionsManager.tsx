@@ -1237,10 +1237,22 @@ export function SessionsManager() {
                 </CardDescription>
               </div>
               {role === 'admin' && (
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <Button 
+                    onClick={() => {
+                      resetForm();
+                      setIsPrePlan(true);
+                      setIsDialogOpen(true);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
+                  >
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Pre-plan Session
+                  </Button>
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                   <DialogTrigger asChild>
                     <Button 
-                      onClick={() => resetForm()}
+                      onClick={() => { resetForm(); setIsPrePlan(false); }}
                       className="bg-accent hover:bg-[#5bc46d] text-white transition-all duration-300 hover:scale-105 w-full sm:w-auto min-w-fit text-xs sm:text-sm"
                       style={{ backgroundColor: '#79e58f' }}
                     >
