@@ -1564,8 +1564,8 @@ export function SessionsManager() {
                               createMutation.isPending || 
                               updateMutation.isPending || 
                               !formData.branch_id || 
-                              !formData.package_type || 
-                              selectedCoaches.length === 0 ||
+                              (!isPrePlan && !formData.package_type) || 
+                              (!isPrePlan && selectedCoaches.length === 0) ||
                               !formData.date ||
                               !formData.start_time ||
                               !formData.end_time
