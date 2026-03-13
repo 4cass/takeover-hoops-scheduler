@@ -1794,15 +1794,22 @@ export function SessionsManager() {
                               </p>
                             </div>
                           </div>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 capitalize ${
-                            session.status === 'scheduled' 
-                              ? 'bg-emerald-500 text-white' 
-                              : session.status === 'cancelled' 
-                                ? 'bg-red-500 text-white' 
-                                : 'bg-blue-500 text-white'
-                          }`}>
-                            {session.status}
-                          </span>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold capitalize ${
+                              session.status === 'scheduled' 
+                                ? 'bg-emerald-500 text-white' 
+                                : session.status === 'cancelled' 
+                                  ? 'bg-red-500 text-white' 
+                                  : 'bg-blue-500 text-white'
+                            }`}>
+                              {session.status}
+                            </span>
+                            {(session.session_coaches?.length === 0 || session.session_participants?.length === 0) && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 text-white">
+                                Pre-planned
+                              </span>
+                            )}
+                          </div>
                         </div>
                         
                         {/* Package & Branch */}
